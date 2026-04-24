@@ -1,5 +1,5 @@
 # AxonOS
-
+(scrapped)
 AxonOS is a privacy-conscious, modular, and modern Android-based operating system designed for flexibility and interoperability. Built on Android 11 (Lineage), AxonOS is built with in mind, ideas of heavy compabilty and performance towards all devices.
 
 ## Features (What we aim to build)
