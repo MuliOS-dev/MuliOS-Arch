@@ -9,7 +9,7 @@ Instead of being focused on one purpose, MuliOS is designed to optimize itself b
 MuliOS is currently built using:
 
 * Xubuntu
-* GNOME
+* KDE Plasma
 
 ## Goals
 
