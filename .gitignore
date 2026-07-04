@@ -1,0 +1,15 @@
+# ISO builds
+*.iso
+*.img
+build/
+out/
+
+# logs
+*.log
+
+# temp files
+*.tmp
+
+# OS junk
+.DS_Store
+Thumbs.db
