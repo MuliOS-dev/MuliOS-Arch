@@ -13,3 +13,8 @@ out/
 # OS junk
 .DS_Store
 Thumbs.db
+
+# Editor/IDE junk
+.vscode/
+.idea/
+*.swp
