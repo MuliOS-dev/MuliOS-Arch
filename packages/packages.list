@@ -1,0 +1,11 @@
+# ==========================================
+# MuliOS Core Packages - KDE Plasma Desktop
+# ==========================================
+
+# Core Desktop Environment
+kde-plasma-desktop
+plasma-desktop
+plasma-workspace-wallpapers
+
+# Display Manager (Login Screen)
+sddm
