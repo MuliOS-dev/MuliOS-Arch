@@ -438,6 +438,25 @@ apply_service_policy() {
   done
 }
 
+apply_boot_branding() {
+  log "Applying boot menu branding"
+
+  local boot_files=(
+    "$ISO_DIR/boot/grub/grub.cfg"
+    "$ISO_DIR/boot/grub/loopback.cfg"
+  )
+
+  for file in "${boot_files[@]}"; do
+    [ -f "$file" ] || continue
+
+    sed -i \
+      -e 's/Try or Install Xubuntu/Try or Install MuliOS/g' \
+      -e 's/Xubuntu (safe graphics)/MuliOS (safe graphics)/g' \
+      -e 's/Xubuntu/MuliOS/g' \
+      "$file"
+  done
+}
+
 # ------------------------------------------------------------------------------
 # Static audit gates
 # ------------------------------------------------------------------------------
@@ -730,6 +749,7 @@ main() {
   provision_chroot
 
   apply_service_policy
+  apply_boot_branding
 
   run_static_audits
 
