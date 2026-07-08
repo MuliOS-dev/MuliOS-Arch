@@ -234,13 +234,23 @@ extract_iso() {
 detect_primary_squashfs() {
   log "Detecting primary SquashFS"
 
-  local squashfs
-  squashfs="$(
-    find "$ISO_DIR/casper" -maxdepth 1 -type f -name "*.squashfs" -printf '%s %p\n' \
-      | sort -nr \
-      | head -n1 \
-      | cut -d' ' -f2-
-  )"
+  local preferred_squashfs="${ISO_DIR}/casper/minimal.squashfs"
+  local squashfs=""
+
+  # Ubuntu/Xubuntu 26.04 can ship multiple Casper SquashFS layers.
+  # minimal.squashfs is the base root filesystem and contains core system tools
+  # such as /usr/bin/env. The larger minimal.standard.squashfs layer is additive
+  # and is not a complete chroot by itself.
+  if [ -f "$preferred_squashfs" ]; then
+    squashfs="$preferred_squashfs"
+  else
+    squashfs="$(
+      find "$ISO_DIR/casper" -maxdepth 1 -type f -name "*.squashfs" -printf '%s %p\n' \
+        | sort -nr \
+        | head -n1 \
+        | cut -d' ' -f2-
+    )"
+  fi
 
   [ -n "$squashfs" ] || die "No SquashFS file found in $ISO_DIR/casper"
 
@@ -248,7 +258,6 @@ detect_primary_squashfs() {
 
   log "Selected SquashFS: $squashfs"
 }
-
 extract_squashfs() {
   log "Extracting SquashFS root filesystem"
 
