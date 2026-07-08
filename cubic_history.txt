@@ -1,0 +1,26 @@
+apt update
+apt install kde-plasma-desktop sddm -y
+apt install plasma-desktop plasma-workspace-wallpapers -y
+apt purge xubuntu-icon-theme xubuntu-wallpapers -y
+mkdir -p /usr/share/backgrounds/muliOS
+cp /host/home/usr/Downloads/wallpaper.png /usr/share/backgrounds/muliOS/
+ls /home
+cp /home/usr/Downloads/wallpaper.png /usr/share/backgrounds/muliOS/
+ls /media
+ls /mnt
+cp /media/<something>/home/usr/Downloads/wallpaper.png .
+mkdir -p /usr/share/backgrounds/muliOS
+echo "MuliOS 26.04.01E" > /etc/hostname
+cat > /etc/os-release << 'EOF'
+PRETTY_NAME="MuliOS 26.04.01E"
+NAME="MuliOS"
+VERSION="26.04.01E"
+ID=muliOS
+ID_LIKE=ubuntu
+EOF
+
+apt clean
+apt autoremove -y
+apt install kde-plasma-desktop sddm -y
+systemctl enable sddm
+apt purge xubuntu-wallpapers xubuntu-icon-theme -y
