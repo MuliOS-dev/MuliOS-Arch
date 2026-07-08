@@ -29,7 +29,11 @@ set -euo pipefail
 
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-BUILD_DIR="${BASE_DIR}/build_workspace"
+# The build workspace must live on a Linux-native filesystem.
+# On macOS Docker bind mounts, SquashFS extraction can fail because xattrs/case-sensitive
+# filesystem semantics do not fully match Linux. Override with MULIOS_BUILD_DIR=/build_workspace
+# or another path inside the container / Docker volume.
+BUILD_DIR="${MULIOS_BUILD_DIR:-${BASE_DIR}/build_workspace}"
 ISO_DIR="${BUILD_DIR}/iso_structure"
 CHROOT_DIR="${BUILD_DIR}/chroot"
 OUT_DIR="${BASE_DIR}/dist"
@@ -253,7 +257,7 @@ extract_squashfs() {
   local squashfs
   squashfs="$(cat "$ACTIVE_SQUASHFS_PATH_FILE")"
 
-  unsquashfs -d "$CHROOT_DIR" "$squashfs"
+  unsquashfs -no-xattrs -d "$CHROOT_DIR" "$squashfs"
 }
 
 # ------------------------------------------------------------------------------
@@ -681,6 +685,7 @@ release_checksums() {
 main() {
   log "Starting MuliOS Build System"
   log "Build type: $BUILD_TYPE"
+  log "Build workspace: $BUILD_DIR"
 
   require_linux
   require_root
