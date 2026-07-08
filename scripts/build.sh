@@ -299,10 +299,15 @@ prepare_chroot_dns() {
   log "Preparing DNS inside chroot"
 
   if [ -e "$CHROOT_DIR/etc/resolv.conf" ] || [ -L "$CHROOT_DIR/etc/resolv.conf" ]; then
-    cp -a "$CHROOT_DIR/etc/resolv.conf" "$CHROOT_DIR/etc/resolv.conf.mulios.bak"
+    rm -f "$CHROOT_DIR/etc/resolv.conf.mulios.bak"
+    cp -a "$CHROOT_DIR/etc/resolv.conf" "$CHROOT_DIR/etc/resolv.conf.mulios.bak" || true
   fi
 
-  cp /etc/resolv.conf "$CHROOT_DIR/etc/resolv.conf"
+  # Ubuntu rootfs images often ship /etc/resolv.conf as a symlink to a runtime
+  # resolver path that does not exist inside the build chroot yet. Remove the
+  # symlink first so cp does not try to write through a dangling target.
+  rm -f "$CHROOT_DIR/etc/resolv.conf"
+  install -m 0644 /etc/resolv.conf "$CHROOT_DIR/etc/resolv.conf"
 }
 
 install_policy_rc_d() {
