@@ -351,6 +351,16 @@ provision_chroot() {
     PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     DEBIAN_FRONTEND=noninteractive \
     /bin/bash -euxo pipefail <<'CHROOT_EOF'
+# The extracted live ISO can include a cdrom APT source pointing to /cdrom.
+# Inside the build chroot that path is not mounted, so apt-get update fails.
+# Disable cdrom sources before using network repositories.
+rm -f /etc/apt/sources.list.d/cdrom.sources
+
+if [ -f /etc/apt/sources.list ]; then
+  sed -i -E 's|^deb cdrom:|# deb cdrom:|' /etc/apt/sources.list
+  sed -i -E 's|^deb file:/cdrom|# deb file:/cdrom|' /etc/apt/sources.list
+fi
+
 apt-get update
 
 if [ -f /tmp/mulios-build/packages-remove.txt ]; then
