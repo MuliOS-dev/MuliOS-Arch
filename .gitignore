@@ -18,3 +18,8 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Build artifacts
+*.iso
+build_workspace/
+dist/
