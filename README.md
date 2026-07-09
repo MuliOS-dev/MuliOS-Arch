@@ -10,6 +10,7 @@ MuliOS is currently built using:
 
 * Xubuntu
 * KDE Plasma
+* Hyprland
 
 ## Goals
 
