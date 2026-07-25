@@ -1,6 +1,6 @@
-# MuliOS
+# MuliOS Arch Linux
 
-MuliOS (Multi Usage Linux Interface) is a custom Linux distribution built to adapt to different use cases.
+MuliOS (Multi Usage Linux Interface) is a custom Linux distribution built on xubuntu and arch, providing both of best worlds.
 
 Instead of being focused on one purpose, MuliOS is designed to optimize itself based on what the user needs, such as gaming, development, productivity, or everyday use.
 
@@ -8,7 +8,7 @@ Instead of being focused on one purpose, MuliOS is designed to optimize itself b
 
 MuliOS is currently built using:
 
-* Xubuntu
+* Arch Linux
 * KDE Plasma
 * Hyprland
 
