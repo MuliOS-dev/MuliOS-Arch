@@ -89,10 +89,10 @@ For major changes, discuss them with the development team before implementation.
 ## Related Projects to MuliOS Arch
 
 
-* core — Base system components
-* installer — Installation tools
+* core-arch — Base system components
+* installer-arch — Installation tools
 * update — Update management
-* kernel — Kernel development
+* kernel-arch — Kernel development
 * profiles — custom linux adaptative system
 
 You can find more projects under the "MuliOS-dev" Organisation.
