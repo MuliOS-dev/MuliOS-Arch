@@ -1,5 +1,5 @@
 <p align="left">
-  <img width="150" height="150" alt="MuliOS Arch Logo" src="https://github.com/user-attachments/assets/655f0539-8a58-4b51-b2cf-953861b150f4">
+  <img width="150" height="150" alt="MuliOS Arch Logo" src="https://github.com/user-attachments/assets/47400f57-be23-4a2a-be01-9e26ac0c9a1d">
 </p>
 
 # MuliOS Arch
