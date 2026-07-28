@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "MuliOS Project"
+            }
+        ],
+        "Name": "MuliOS Wallpaper",
+        "Description": "Default MuliOS Plasma wallpaper",
+        "Id": "MuliOS",
+        "Version": "1.0"
+    }
+}

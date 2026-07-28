@@ -27,7 +27,7 @@ airootfs_image_tool_options=(
   '-comp' 'xz'
   '-Xbcj' 'x86'
   '-b' '1M'
-  '-Xdict-size' '1M'
+  '-Xdict-size' '100%'
 )
 
 bootstrap_tarball_compression=(
@@ -47,9 +47,4 @@ file_permissions=(
   ["/root/.gnupg"]="0:0:700"
 
   ["/usr/local/bin/livecd-sound"]="0:0:755"
-
-  ["/opt/mulios"]="0:0:755"
-  ["/usr/share/backgrounds/mulios"]="0:0:755"
-  ["/usr/share/fastfetch"]="0:0:755"
-  [ "/usr/local/bin/mupdate" ]="0:0:755"
 )
