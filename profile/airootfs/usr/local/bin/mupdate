@@ -1,0 +1,402 @@
+#!/usr/bin/env bash
+#
+# mupdate - kernel/profile update tool for mulios-based systems
+# Repo: https://github.com/AxonShell/MuliOS-Update
+#
+# Usage:
+#   sudo mupdate install               Base/global install: fetches global/release.zip, runs its sh script(s)
+#   sudo mupdate <profile>             Install/update to <profile> (e.g. gaming, code, generic)
+#   sudo mupdate <profile> -r          Allow switching away from your current locked profile (reset)
+#   sudo mupdate <profile> -y          Auto-confirm prompts
+#   sudo mupdate <profile> -s          Safe mode: mandatory checksum, preview script, confirm every step
+#   sudo mupdate <profile> -f          Force mode: skip checksum + confirmations + the profile lock (dangerous)
+#   mupdate --version                  Print version (no root required)
+#
+# Profile lock rules:
+#   - current kernel profile "generic"  -> may install/switch to ANY profile
+#   - current kernel profile "code"     -> may re-run "code" (update), or go to "generic" if -r is passed
+#                                           may NOT jump straight to another specific profile (e.g. "gaming")
+#                                           without -r
+#   - -f bypasses the lock entirely (with a loud warning)
+#
+# No local profile database is used: mupdate always looks up
+# https://github.com/AxonShell/MuliOS-Update/tree/main/profiles/<profile>/ live.
+#
+# Expected package layout inside each downloaded zip:
+#   sh/dependencies.sh                                  (optional, run first)
+#   sh/package.sh, sh/package1.sh, sh/package2.sh, ...   (run next, in order)
+#   sh/install.sh                                        (run last: installs the kernel
+#                                                          pacman package via `pacman -U`,
+#                                                          keeps the old kernel as a fallback boot
+#                                                          entry, makes the new one boot by default)
+#   linux-mulios-<profile>-<version>-<rev>-x86_64.pkg.tar.zst
+#   README.md
+#
+set -o pipefail
+
+VERSION="a1.0.3"
+CONF_FILE="/etc/mupdate.conf"
+LOG_FILE="/var/log/mupdate.log"
+WORKDIR="$(mktemp -d /tmp/mupdate.XXXXXX)"
+
+C_RED=$'\033[0;31m'; C_GRN=$'\033[0;32m'; C_YEL=$'\033[0;33m'; C_BLU=$'\033[0;34m'; C_RST=$'\033[0m'
+
+write_default_conf() {
+    cat > "$CONF_FILE" <<'EOF'
+# mupdate configuration
+GITHUB_OWNER="AxonShell"
+GITHUB_REPO="MuliOS-Update"
+GITHUB_BRANCH="main"
+# Optional: personal access token to raise GitHub API rate limits (leave empty for public/anonymous)
+GITHUB_TOKEN=""
+EOF
+    chmod 644 "$CONF_FILE"
+}
+
+log()  { echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "$LOG_FILE" 2>/dev/null; }
+info() { echo "${C_BLU}==>${C_RST} $*"; log "INFO: $*"; }
+ok()   { echo "${C_GRN}==>${C_RST} $*"; log "OK: $*"; }
+warn() { echo "${C_YEL}==>${C_RST} $*"; log "WARN: $*"; }
+err()  { echo "${C_RED}==>${C_RST} $*" >&2; log "ERROR: $*"; }
+die()  { err "$*"; cleanup; exit 1; }
+cleanup() { [ -d "$WORKDIR" ] && rm -rf "$WORKDIR"; }
+trap cleanup EXIT
+
+require_root() { [ "$(id -u)" -eq 0 ] || die "mupdate must be run with sudo/root (except --version)."; }
+require_cmd() { for c in "$@"; do command -v "$c" >/dev/null 2>&1 || die "Required command '$c' not found. Install it first (e.g. sudo pacman -S $c)."; done; }
+
+confirm() {
+    [ "$ASSUME_YES" = "1" ] && return 0
+    read -r -p "${C_YEL}?${C_RST} $1 [y/N] " reply
+    case "$reply" in [yY][eE][sS]|[yY]) return 0 ;; *) return 1 ;; esac
+}
+
+print_version() { echo "mupdate version $VERSION"; }
+
+# ---------- GitHub API helper ----------
+# gh_api <path>  ->  prints raw JSON from the contents API for that path
+gh_api() {
+    local path="$1"
+    local url="https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${path}?ref=${GITHUB_BRANCH}"
+    if [ -n "$GITHUB_TOKEN" ]; then
+        curl -fsSL -H "Authorization: token ${GITHUB_TOKEN}" "$url"
+    else
+        curl -fsSL "$url"
+    fi
+}
+
+raw_url() {
+    # raw_url <path-within-repo>
+    echo "https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${GITHUB_BRANCH}/$1"
+}
+
+# ---------- step 1: kernel detection ----------
+detect_kernel() {
+    KERNEL_STRING="$(uname -r)"
+    info "Detected running kernel: $KERNEL_STRING"
+
+    if [[ "$KERNEL_STRING" =~ ^([0-9]+(\.[0-9]+)*)-([A-Za-z0-9]+)-([A-Za-z0-9_-]+)$ ]]; then
+        KERNEL_VERSION="${BASH_REMATCH[1]}"
+        OS_TAG="${BASH_REMATCH[3]}"
+        CURRENT_PROFILE="$(echo "${BASH_REMATCH[4]}" | tr '[:upper:]' '[:lower:]')"
+        info "Parsed kernel version: $KERNEL_VERSION, OS: $OS_TAG, current profile: $CURRENT_PROFILE"
+    else
+        warn "Kernel string doesn't match expected '<version>-mulios-<profile>' pattern."
+        KERNEL_VERSION="unknown"; OS_TAG="unknown"; CURRENT_PROFILE=""
+    fi
+}
+
+# ---------- step 2: enforce the profile lock ----------
+check_profile_lock() {
+    local target="$1"
+    target="$(echo "$target" | tr '[:upper:]' '[:lower:]')"
+
+    if [ "$FORCE" = "1" ]; then
+        warn "Force mode: bypassing profile lock (current='$CURRENT_PROFILE', target='$target')."
+        return 0
+    fi
+
+    if [ -z "$CURRENT_PROFILE" ]; then
+        warn "Could not determine current profile from kernel string."
+        confirm "Proceed anyway and install '$target'?" || die "Aborted."
+        return 0
+    fi
+
+    if [ "$CURRENT_PROFILE" = "generic" ]; then
+        return 0   # generic -> anything
+    fi
+
+    if [ "$target" = "$CURRENT_PROFILE" ]; then
+        return 0   # same profile -> update/reinstall, always fine
+    fi
+
+    if [ "$target" = "generic" ]; then
+        if [ "$RESET" = "1" ]; then
+            return 0   # code -> generic with -r
+        else
+            die "Currently on profile '$CURRENT_PROFILE'. Switching to 'generic' requires -r (reset), e.g.: sudo mupdate generic -r"
+        fi
+    fi
+
+    # target is a different specific profile
+    if [ "$RESET" = "1" ]; then
+        warn "Switching directly from '$CURRENT_PROFILE' to '$target' via -r."
+        return 0
+    fi
+
+    die "Currently locked to profile '$CURRENT_PROFILE'. You can only reinstall '$CURRENT_PROFILE', or reset to 'generic' first with -r. Use -f to override entirely."
+}
+
+# ---------- step 3: dynamic profile lookup ----------
+find_profile_dir() {
+    local target="$1"
+    info "Looking up profiles in ${GITHUB_OWNER}/${GITHUB_REPO}/profiles ..."
+    local listing
+    listing="$(gh_api "profiles")" || die "Could not reach GitHub API for profiles listing. Check network/repo config."
+
+    # exact (case-insensitive) match first, then substring fallback
+    PROFILE_DIR="$(echo "$listing" | jq -r '.[] | select(.type=="dir") | .name' \
+                   | grep -ix "$target" | head -n1)"
+    if [ -z "$PROFILE_DIR" ]; then
+        PROFILE_DIR="$(echo "$listing" | jq -r '.[] | select(.type=="dir") | .name' \
+                       | grep -i "$target" | head -n1)"
+    fi
+    [ -n "$PROFILE_DIR" ] || die "No profile matching '$target' found under /profiles in the repo."
+    ok "Matched remote profile directory: $PROFILE_DIR"
+}
+
+find_profile_zip() {
+    local target="$1"
+    local listing
+    listing="$(gh_api "profiles/${PROFILE_DIR}")" || die "Could not list contents of profiles/${PROFILE_DIR}."
+
+    # any .zip filename that contains the target profile name, case-insensitive
+    ZIP_NAME="$(echo "$listing" | jq -r '.[] | select(.type=="file") | .name' \
+                | grep -i '\.zip$' | grep -i "$target" | head -n1)"
+    [ -n "$ZIP_NAME" ] || die "No .zip file matching '*${target}*.zip' found in profiles/${PROFILE_DIR}."
+    ok "Matched package: $ZIP_NAME"
+
+    ZIP_URL="$(raw_url "profiles/${PROFILE_DIR}/${ZIP_NAME}")"
+
+    # look for a same-named checksum file, e.g. update-gaming.zip -> update-gaming.sha256
+    local base="${ZIP_NAME%.zip}"
+    CHECKSUM_NAME="$(echo "$listing" | jq -r '.[] | select(.type=="file") | .name' \
+                     | grep -i "^${base}\.sha256$" | head -n1)"
+    if [ -n "$CHECKSUM_NAME" ]; then
+        CHECKSUM_URL="$(raw_url "profiles/${PROFILE_DIR}/${CHECKSUM_NAME}")"
+    else
+        CHECKSUM_URL=""
+    fi
+}
+
+find_global_release() {
+    info "Looking up global release in ${GITHUB_OWNER}/${GITHUB_REPO}/global ..."
+    local listing
+    listing="$(gh_api "global")" || die "Could not reach GitHub API for /global listing."
+
+    ZIP_NAME="$(echo "$listing" | jq -r '.[] | select(.type=="file") | .name' \
+                | grep -ix "release.zip" | head -n1)"
+    [ -n "$ZIP_NAME" ] || die "No release.zip found in /global."
+    ZIP_URL="$(raw_url "global/${ZIP_NAME}")"
+
+    CHECKSUM_NAME="$(echo "$listing" | jq -r '.[] | select(.type=="file") | .name' \
+                     | grep -ix "release.sha256" | head -n1)"
+    if [ -n "$CHECKSUM_NAME" ]; then
+        CHECKSUM_URL="$(raw_url "global/${CHECKSUM_NAME}")"
+    else
+        CHECKSUM_URL=""
+    fi
+    ok "Matched package: $ZIP_NAME"
+}
+
+# ---------- step 4: download + verify ----------
+download_package() {
+    ZIP_PATH="$WORKDIR/$(basename "$ZIP_NAME")"
+    info "Downloading $ZIP_URL ..."
+    curl -fsSL -o "$ZIP_PATH" "$ZIP_URL" || die "Download failed."
+    ok "Downloaded to $ZIP_PATH"
+
+    if [ "$FORCE" = "1" ]; then
+        warn "Force mode: skipping checksum verification."
+        return
+    fi
+
+    if [ -n "$CHECKSUM_URL" ]; then
+        info "Verifying checksum..."
+        local checksum_path="$WORKDIR/checksum.sha256"
+        curl -fsSL -o "$checksum_path" "$CHECKSUM_URL" || die "Failed to download checksum file."
+        local expected actual
+        expected="$(awk '{print $1}' "$checksum_path")"
+        actual="$(sha256sum "$ZIP_PATH" | awk '{print $1}')"
+        [ "$expected" = "$actual" ] || die "Checksum mismatch! Expected $expected, got $actual. Aborting."
+        ok "Checksum verified."
+    elif [ "$SAFE_MODE" = "1" ]; then
+        die "Safe mode requires a checksum file (*.sha256) alongside the package, but none was found."
+    else
+        warn "No checksum file found for this package; skipping verification."
+    fi
+}
+
+# ---------- step 5: extract ----------
+extract_package() {
+    EXTRACT_DIR="$WORKDIR/extracted"
+    mkdir -p "$EXTRACT_DIR"
+    info "Extracting package..."
+    unzip -q "$ZIP_PATH" -d "$EXTRACT_DIR" || die "Extraction failed."
+}
+
+# ---------- step 6: run install script(s) ----------
+# Expected package layout (as produced by AxonShell/MuliOS-Update):
+#   sh/dependencies.sh          (optional, runs first)
+#   sh/package.sh                (or package1.sh, package2.sh, ... run in order)
+#   sh/install.sh                 (runs last, installs the kernel pacman package
+#                                   via `pacman -U`)
+#   linux-mulios-*.pkg.tar.zst    (kernel package(s), sit next to sh/, installed by install.sh)
+#   README.md
+run_scripts() {
+    local sh_dir
+    sh_dir="$(find "$EXTRACT_DIR" -maxdepth 3 -type d -iname 'sh' | head -n1)"
+    [ -n "$sh_dir" ] || die "No 'sh' folder found in the downloaded package."
+    info "Found scripts folder: $sh_dir"
+
+    # informational: list any pacman packages found alongside sh/ (install.sh handles these)
+    local pkgs=()
+    while IFS= read -r -d '' f; do pkgs+=("$f"); done \
+        < <(find "$EXTRACT_DIR" -maxdepth 3 \( -iname '*.pkg.tar.zst' -o -iname '*.pkg.tar.xz' \) -print0)
+    if [ "${#pkgs[@]}" -gt 0 ]; then
+        info "Kernel package(s) detected (to be installed by install.sh via pacman -U):"
+        for p in "${pkgs[@]}"; do echo "    - $(basename "$p")"; done
+    else
+        warn "No pacman kernel package (*.pkg.tar.zst) found in this bundle."
+    fi
+
+    local dep_script
+    dep_script="$(find "$sh_dir" -maxdepth 1 -iname 'dependencies.sh' | head -n1)"
+
+    local pkg_scripts=()
+    while IFS= read -r -d '' f; do pkg_scripts+=("$f"); done \
+        < <(find "$sh_dir" -maxdepth 1 -iname 'package*.sh' -print0 | sort -zV)
+
+    [ "${#pkg_scripts[@]}" -gt 0 ] || die "No package*.sh scripts found in $sh_dir."
+
+    local install_script
+    install_script="$(find "$sh_dir" -maxdepth 1 -iname 'install.sh' | head -n1)"
+    if [ -z "$install_script" ]; then
+        warn "No install.sh found in $sh_dir; the kernel pacman package (if any) will not be installed."
+    fi
+
+    local scripts=()
+    if [ -n "$dep_script" ]; then
+        scripts+=("$dep_script")
+    else
+        warn "No dependencies.sh found; skipping dependency step."
+    fi
+    scripts+=("${pkg_scripts[@]}")
+    [ -n "$install_script" ] && scripts+=("$install_script")
+
+    if [ "$SAFE_MODE" = "1" ]; then
+        for s in "${scripts[@]}"; do
+            echo "${C_YEL}--- preview: $(basename "$s") (first 40 lines) ---${C_RST}"
+            head -n 40 "$s"
+            echo "${C_YEL}--------------------------------------------${C_RST}"
+        done
+    fi
+
+    info "Run order: $(for s in "${scripts[@]}"; do basename "$s"; done | tr '\n' ' ')"
+    confirm "Proceed with running ${#scripts[@]} script(s) and installing?" || die "Aborted by user."
+
+    for s in "${scripts[@]}"; do
+        chmod +x "$s"
+        info "Running $(basename "$s") ..."
+        if ! ( cd "$(dirname "$s")" && "./$(basename "$s")" ); then
+            die "$(basename "$s") exited with an error. Stopping."
+        fi
+        ok "$(basename "$s") completed."
+    done
+}
+
+# ---------- arg parsing ----------
+ASSUME_YES=0
+SAFE_MODE=0
+FORCE=0
+RESET=0
+COMMAND=""
+TARGET_PROFILE=""
+
+if [ $# -eq 0 ]; then
+    echo "Usage: sudo mupdate install [-y|-s|-f]"
+    echo "       sudo mupdate <profile> [-r] [-y|-s|-f]"
+    echo "       mupdate --version"
+    exit 1
+fi
+
+for arg in "$@"; do
+    case "$arg" in
+        --version) print_version; exit 0 ;;
+    esac
+done
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -y|--yes) ASSUME_YES=1 ;;
+        -s|--safe) SAFE_MODE=1 ;;
+        -f|--force) FORCE=1; ASSUME_YES=1 ;;
+        -r|--reset) RESET=1 ;;
+        -h|--help)
+            sed -n '2,20p' "$0" | sed 's/^#//'
+            exit 0
+            ;;
+        install)
+            COMMAND="install"
+            ;;
+        -*)
+            err "Unknown flag: $1"; exit 1
+            ;;
+        *)
+            if [ -n "$COMMAND" ]; then
+                err "Unexpected extra argument: $1"; exit 1
+            fi
+            COMMAND="profile"
+            TARGET_PROFILE="$1"
+            ;;
+    esac
+    shift
+done
+
+[ -n "$COMMAND" ] || die "No command given. Use 'install' or a profile name."
+if [ "$SAFE_MODE" = "1" ] && [ "$FORCE" = "1" ]; then
+    die "-s (safe mode) and -f (force) are mutually exclusive."
+fi
+
+# ---------- main ----------
+require_root
+require_cmd curl unzip sha256sum jq uname grep sed awk
+
+[ -f "$CONF_FILE" ] || { write_default_conf; info "Created config at $CONF_FILE (defaults point at AxonShell/MuliOS-Update)."; }
+# shellcheck disable=SC1090
+source "$CONF_FILE"
+
+mkdir -p /var/log; touch "$LOG_FILE" 2>/dev/null
+
+if [ "$COMMAND" = "install" ]; then
+    find_global_release
+    download_package
+    extract_package
+    run_scripts
+    ok "mupdate: base/global install complete."
+    exit 0
+fi
+
+# COMMAND = "profile"
+detect_kernel
+check_profile_lock "$TARGET_PROFILE"
+find_profile_dir "$TARGET_PROFILE"
+find_profile_zip "$TARGET_PROFILE"
+download_package
+extract_package
+run_scripts
+
+mkdir -p /etc/mupdate
+echo "$TARGET_PROFILE" | tr '[:upper:]' '[:lower:]' > /etc/mupdate/profile
+ok "mupdate: profile '$TARGET_PROFILE' installed."
+warn "A reboot is likely required for the new kernel to take effect."

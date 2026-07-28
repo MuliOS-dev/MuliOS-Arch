@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034
 
+# MuliOS Version
+version="26.07.02C"
+
 iso_name="MuliOS"
-iso_label="MULIOS_$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y%m)"
+iso_label="MULIOS_${version}"
 iso_publisher="MuliOS Project"
 iso_application="MuliOS Arch Linux Live ISO"
-iso_version="$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y.%m.%d)"
+iso_version="${version}"
 
 install_dir="arch"
 
@@ -48,4 +51,5 @@ file_permissions=(
   ["/opt/mulios"]="0:0:755"
   ["/usr/share/backgrounds/mulios"]="0:0:755"
   ["/usr/share/fastfetch"]="0:0:755"
+  [ "/usr/local/bin/mupdate" ]="0:0:755"
 )
