@@ -1,6 +1,6 @@
 # MuliOS Developpement Team
 #
-# Notice To Developers. iso_label and iso_version "version" is a placeholder. replace with your own version's name
+# Notice To Developers. iso_label and iso_version "_version" is a placeholder. replace with your own version's name
 # make sure it is easy to remember, and is based of the version you are using.
 #
 
