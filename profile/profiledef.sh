@@ -2,7 +2,7 @@
 # shellcheck disable=SC2034
 
 # MuliOS Version
-version="26.07.02C"
+version="$(cat version)"
 
 iso_name="MuliOS"
 iso_label="MULIOS_${version}"
