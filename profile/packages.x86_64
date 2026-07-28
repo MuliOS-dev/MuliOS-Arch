@@ -66,7 +66,6 @@ sddm-kcm
 
 # KDE apps
 dolphin
-konsole
 
 # Audio
 pipewire
