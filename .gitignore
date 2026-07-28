@@ -1,0 +1,28 @@
+# ArchISO generated filesystem
+profile/airootfs/proc/
+profile/airootfs/sys/
+profile/airootfs/run/
+profile/airootfs/tmp/
+profile/airootfs/mnt/
+profile/airootfs/root/
+
+# Generated caches
+profile/airootfs/etc/ld.so.cache
+profile/airootfs/etc/.pwd.lock
+
+# Runtime files
+profile/airootfs/etc/mtab
+profile/airootfs/etc/resolv.conf
+
+# Certificates
+profile/airootfs/etc/ssl/certs/
+profile/airootfs/etc/ssl/private/
+
+# Build output
+out/
+work/
+
+# ISO files
+*.iso
+*.iso.md5
+*.iso.sig

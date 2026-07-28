@@ -1,0 +1,16 @@
+base
+linux
+linux-firmware
+mkinitcpio
+systemd
+bash
+coreutils
+nano
+networkmanager
+openssh
+sudo
+vim
+zsh
+git
+wget
+curl
