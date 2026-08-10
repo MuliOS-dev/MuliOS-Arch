@@ -54,6 +54,12 @@ git clone https://github.com/MuliOS-dev/MuliOS-Arch.git
 cd MuliOS-Arch
 ```
 
+Prepare for build:
+
+```bash
+mv /script/build.sh ../
+```
+
 Build the ISO:
 
 ```bash
