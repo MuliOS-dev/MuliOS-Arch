@@ -1,4 +1,5 @@
-﻿from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QProgressBar, QTextEdit
+from pathlib import Path
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QProgressBar, QTextEdit
 from PySide6.QtCore import Signal
 
 from backend.native_installer_worker import InstallWorker
@@ -35,6 +36,27 @@ class InstallPage(QWidget):
     def start(self, state: dict):
         self.log_view.clear()
         self.progress_bar.setValue(0)
+
+        # The installer is always elevated by main.py before this page
+        # can be reached. Create the persistent log up front so failures
+        # during worker startup are still visible to the user.
+        try:
+            log_path = Path(INSTALL_LOG)
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path.write_text(
+                "=" * 80 + "\\n"
+                "MuliOS Installer\\n"
+                "=" * 80 + "\\n",
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            message = (
+                "Could not create the installer log: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            self._append_log(message)
+            self.install_finished.emit(False)
+            return
 
         self.worker = InstallWorker(state)
         self.worker.log_line.connect(self._append_log)
