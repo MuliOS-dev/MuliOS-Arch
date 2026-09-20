@@ -18,8 +18,8 @@ class NetworkPage(QWidget):
         layout.addWidget(title)
 
         subtitle = QLabel(
-            "An internet connection allows MuliOS to download additional packages during installation."
-            "lets mupdate download your MuliOS profile after install."
+            "An internet connection allows MuliOS to download additional packages during installation "
+            "and lets MUpdate download your MuliOS profile after install."
         )
         subtitle.setObjectName("SubtitleLabel")
         subtitle.setWordWrap(True)
