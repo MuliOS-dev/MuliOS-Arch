@@ -2661,10 +2661,18 @@ class InstallWorker(QThread):
             ["systemd"]
         )
 
-        self.chroot(
+        # Install systemd-boot from the live UEFI environment rather than
+        # inside arch-chroot. bootctl must be able to access the live
+        # efivarfs so it can register the firmware boot entry.
+        self.run_command(
             [
                 "bootctl",
-                "--path=/boot",
+                "--esp-path",
+                str(self.target / "boot"),
+                "--boot-path",
+                str(self.target / "boot"),
+                "--root",
+                str(self.target),
                 "install",
             ]
         )
