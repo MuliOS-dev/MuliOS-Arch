@@ -1800,65 +1800,56 @@ class InstallWorker(QThread):
                 ]
             )
 
-            keyring_check = self.chroot(
-                [
-                    "pacman-key",
-                    "--list-keys",
-                ],
-                check=False,
+            self.log(
+                "Initializing target pacman keyring..."
             )
 
-            if not keyring_check.strip():
-                self.log(
-                    "Initializing target pacman keyring..."
-                )
+            self.chroot(
+                [
+                    "rm",
+                    "-rf",
+                    "/etc/pacman.d/gnupg",
+                ]
+            )
 
-                self.chroot(
-                    [
-                        "rm",
-                        "-rf",
-                        "/etc/pacman.d/gnupg",
-                    ]
-                )
+            self.chroot(
+                [
+                    "mkdir",
+                    "-p",
+                    "/etc/pacman.d/gnupg",
+                ]
+            )
 
-                self.chroot(
-                    [
-                        "mkdir",
-                        "-p",
-                        "/etc/pacman.d/gnupg",
-                    ]
-                )
+            self.chroot(
+                [
+                    "chmod",
+                    "700",
+                    "/etc/pacman.d/gnupg",
+                ]
+            )
 
-                self.chroot(
-                    [
-                        "chmod",
-                        "700",
-                        "/etc/pacman.d/gnupg",
-                    ]
-                )
+            self.chroot(
+                [
+                    "chown",
+                    "root:root",
+                    "/etc/pacman.d/gnupg",
+                ]
+            )
 
-                self.chroot(
-                    [
-                        "chown",
-                        "root:root",
-                        "/etc/pacman.d/gnupg",
-                    ]
-                )
+            self.chroot(
+                [
+                    "pacman-key",
+                    "--init",
+                ]
+            )
 
-                self.chroot(
-                    [
-                        "pacman-key",
-                        "--init",
-                    ]
-                )
-
-                self.chroot(
-                    [
-                        "pacman-key",
-                        "--populate",
-                        "archlinux",
-                    ]
-                )
+            self.chroot(
+                [
+                    "pacman-key",
+                    "--populate",
+                    "archlinux",
+                ]
+            )
 
             self.chroot(
                 [
@@ -3034,13 +3025,41 @@ class InstallWorker(QThread):
 
     def generate_initramfs(self):
         self.log(
-            "Generating initramfs..."
+            "Preparing installed-system mkinitcpio configuration..."
+        )
+
+        # The live ISO needs the ArchISO mkinitcpio preset and
+        # archiso.conf to boot the installer environment. Those
+        # files must not be used by the installed MuliOS system.
+        self.chroot(
+            [
+                "rm",
+                "-f",
+                "/etc/mkinitcpio.conf.d/archiso.conf",
+            ]
+        )
+
+        self.chroot(
+            [
+                "rm",
+                "-f",
+                "/etc/mkinitcpio.d/linux-mulios-generic.preset",
+            ]
+        )
+
+        self.log(
+            "Generating installed-system initramfs..."
         )
 
         self.chroot(
             [
                 "mkinitcpio",
-                "-P",
+                "-c",
+                "/etc/mkinitcpio.conf",
+                "-k",
+                "/usr/lib/modules/7.2.3-mulios-generic/vmlinuz",
+                "-g",
+                "/boot/initramfs-linux.img",
             ]
         )
 
