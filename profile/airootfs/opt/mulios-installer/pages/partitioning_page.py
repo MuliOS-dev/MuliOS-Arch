@@ -18,8 +18,8 @@ class PartitioningPage(QWidget):
         layout.addWidget(title)
 
         subtitle = QLabel(
-            "MuliOS automatically creates an EFI system partition and a root partition using the selected filesystem."
-            "partition plus a single root partition on the whole disk."
+            "MuliOS automatically creates an EFI system partition plus a single root partition "
+            "on the whole disk using the selected filesystem."
         )
         subtitle.setObjectName("SubtitleLabel")
         subtitle.setWordWrap(True)
