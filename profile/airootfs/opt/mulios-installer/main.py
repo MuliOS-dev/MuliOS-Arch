@@ -18,6 +18,29 @@ from PySide6.QtCore import Qt
 from theme import stylesheet
 from config.settings import LOGO_PATH, APP_NAME, DISTRO_NAME, DEFAULT_PROFILE_SLUG
 
+
+def ensure_root():
+    """Re-exec the installer as root when launched by the live user."""
+    if os.geteuid() == 0:
+        return
+
+    sudo = "/usr/bin/sudo"
+
+    if not os.path.exists(sudo):
+        raise RuntimeError(
+            "The MuliOS Installer must run as root, but sudo is not available."
+        )
+
+    command = [
+        sudo,
+        "-n",
+        sys.executable,
+        os.path.abspath(__file__),
+        *sys.argv[1:],
+    ]
+
+    os.execv(sudo, command)
+
 from pages.welcome_page import WelcomePage
 from pages.language_page import LanguagePage
 from pages.keyboard_page import KeyboardPage
@@ -263,6 +286,7 @@ class MuliOSInstaller(QMainWindow):
 
 
 def main():
+    ensure_root()
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     window = MuliOSInstaller()
