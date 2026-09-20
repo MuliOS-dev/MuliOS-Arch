@@ -3,7 +3,12 @@ import subprocess
 import webbrowser
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QTextEdit,
 )
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
@@ -14,16 +19,20 @@ from config.settings import LOGO_PATH, INSTALL_LOG, RELEASE_NOTES_URL
 class FinishedPage(QWidget):
     def __init__(self, on_reboot, on_exit, parent=None):
         super().__init__(parent)
+
         self._on_exit = on_exit
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(48, 40, 48, 40)
-        layout.setSpacing(18)
+        layout.setSpacing(14)
 
         logo_label = QLabel()
+
         if os.path.exists(LOGO_PATH):
             pixmap = QPixmap(LOGO_PATH)
-            logo_label.setPixmap(pixmap.scaledToHeight(56, Qt.SmoothTransformation))
+            logo_label.setPixmap(
+                pixmap.scaledToHeight(56, Qt.SmoothTransformation)
+            )
             layout.addWidget(logo_label)
 
         self.title = QLabel("Installation completed successfully.")
@@ -37,47 +46,94 @@ class FinishedPage(QWidget):
         self.subtitle.setWordWrap(True)
         layout.addWidget(self.subtitle)
 
-        layout.addSpacing(10)
+        self.log_path_label = QLabel(
+            f"Install log: {INSTALL_LOG}"
+        )
+        self.log_path_label.setObjectName("SubtitleLabel")
+        self.log_path_label.setWordWrap(True)
+        layout.addWidget(self.log_path_label)
+
+        self.log_view = QTextEdit()
+        self.log_view.setReadOnly(True)
+        self.log_view.setLineWrapMode(QTextEdit.NoWrap)
+        self.log_view.setVisible(False)
+        layout.addWidget(self.log_view, stretch=1)
 
         button_row = QHBoxLayout()
 
-        restart_btn = QPushButton("Restart")
-        restart_btn.setObjectName("PrimaryButton")
-        restart_btn.clicked.connect(on_reboot)
-        button_row.addWidget(restart_btn)
+        self.restart_button = QPushButton("Restart")
+        self.restart_button.setObjectName("PrimaryButton")
+        self.restart_button.clicked.connect(on_reboot)
+        button_row.addWidget(self.restart_button)
 
-        logs_btn = QPushButton("View logs")
-        logs_btn.setObjectName("SecondaryButton")
-        logs_btn.clicked.connect(self._view_logs)
-        button_row.addWidget(logs_btn)
+        self.logs_button = QPushButton("View logs")
+        self.logs_button.setObjectName("SecondaryButton")
+        self.logs_button.clicked.connect(self._view_logs)
+        button_row.addWidget(self.logs_button)
 
-        notes_btn = QPushButton("Release notes")
-        notes_btn.setObjectName("SecondaryButton")
-        notes_btn.clicked.connect(lambda: webbrowser.open(RELEASE_NOTES_URL))
-        button_row.addWidget(notes_btn)
+        self.notes_button = QPushButton("Release notes")
+        self.notes_button.setObjectName("SecondaryButton")
+        self.notes_button.clicked.connect(
+            lambda: webbrowser.open(RELEASE_NOTES_URL)
+        )
+        button_row.addWidget(self.notes_button)
 
-        exit_btn = QPushButton("Exit")
-        exit_btn.setObjectName("SecondaryButton")
-        exit_btn.clicked.connect(self._on_exit)
-        button_row.addWidget(exit_btn)
+        self.exit_button = QPushButton("Exit")
+        self.exit_button.setObjectName("SecondaryButton")
+        self.exit_button.clicked.connect(self._on_exit)
+        button_row.addWidget(self.exit_button)
 
         layout.addLayout(button_row)
-        layout.addStretch()
+
+        self._showing_failure = False
 
     def show_failure(self, error_message: str):
+        self._showing_failure = True
+
         self.title.setText("Installation failed")
+
         self.subtitle.setText(
-            f"Something went wrong:\n\n{error_message}\n\n"
-            f"Check the log for details, or use 'View logs' below."
+            "MuliOS could not be installed.\n\n"
+            "The installer output below contains the failure details."
         )
 
+        self.log_path_label.setText(
+            f"Install log: {INSTALL_LOG}"
+        )
+
+        # Always show the captured installer output immediately.
+        # This avoids losing the diagnostic information when the
+        # filesystem log is unavailable after cleanup.
+        self.log_view.setVisible(True)
+        self.log_view.setPlainText(
+            error_message or
+            "No installer output was available."
+        )
+
+        scrollbar = self.log_view.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
     def _view_logs(self):
-        if not os.path.exists(INSTALL_LOG):
-            QMessageBox.information(self, "No log yet", f"No log file found at {INSTALL_LOG}.")
-            return
+        self.log_view.setVisible(True)
+
         try:
-            subprocess.Popen(["xdg-open", INSTALL_LOG])
-        except Exception:
-            with open(INSTALL_LOG) as f:
-                content = f.read()[-4000:]
-            QMessageBox.information(self, "Install log (tail)", content)
+            with open(
+                INSTALL_LOG,
+                "r",
+                encoding="utf-8",
+                errors="replace",
+            ) as f:
+                content = f.read()
+
+            if not content:
+                content = "The install log is empty."
+
+            self.log_view.setPlainText(content)
+
+        except Exception as exc:
+            self.log_view.setPlainText(
+                f"Unable to read install log:\n\n{exc}"
+            )
+
+        scrollbar = self.log_view.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())

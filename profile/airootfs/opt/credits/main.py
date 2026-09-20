@@ -216,7 +216,23 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("MuliOS Credits and Support")
-        self.setFixedSize(1325, 765)
+
+        # Start at a comfortable size, but never larger than the
+        # available screen. The window remains fully resizable.
+        screen = QApplication.primaryScreen().availableGeometry()
+
+        default_width = min(1100, max(760, screen.width() - 80))
+        default_height = min(700, max(520, screen.height() - 100))
+
+        self.resize(
+            default_width,
+            default_height,
+        )
+
+        self.setMinimumSize(
+            700,
+            480,
+        )
 
         self.theme = DARK_THEME
         self.chips = []

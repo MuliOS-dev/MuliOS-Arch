@@ -11,24 +11,44 @@ import subprocess
 
 
 def list_disks() -> list[dict]:
-    """Returns [{path, size, model}] for whole disks only (via lsblk)."""
+    """Return whole disks with enough metadata for safe selection."""
     try:
         out = subprocess.run(
-            ["lsblk", "-J", "-o", "NAME,SIZE,MODEL,TYPE"],
-            capture_output=True, text=True, check=True,
+            [
+                "lsblk",
+                "-J",
+                "-o",
+                "NAME,SIZE,MODEL,TYPE,RM,TRAN,MOUNTPOINTS",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
         )
         data = json.loads(out.stdout)
     except Exception:
         return []
 
     disks = []
+
     for dev in data.get("blockdevices", []):
-        if dev.get("type") == "disk":
-            disks.append({
-                "path": f"/dev/{dev['name']}",
-                "size": dev.get("size", ""),
-                "model": dev.get("model") or "Unknown",
-            })
+        if dev.get("type") != "disk":
+            continue
+
+        mountpoints = [
+            point
+            for point in (dev.get("mountpoints") or [])
+            if point
+        ]
+
+        disks.append({
+            "path": f"/dev/{dev['name']}",
+            "size": dev.get("size", ""),
+            "model": dev.get("model") or "Unknown",
+            "removable": bool(dev.get("rm", False)),
+            "transport": dev.get("tran") or "",
+            "mountpoints": mountpoints,
+        })
+
     return disks
 
 

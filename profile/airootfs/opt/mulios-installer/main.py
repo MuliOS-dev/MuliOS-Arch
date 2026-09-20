@@ -7,6 +7,8 @@ Run with:
 
 import os
 import sys
+import traceback
+from pathlib import Path
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
@@ -160,6 +162,22 @@ class MuliOSInstaller(QMainWindow):
         QApplication.instance().setStyleSheet(stylesheet())
         self._goto_step(0)
 
+    def keyPressEvent(self, event):
+        # Development/testing shortcut:
+        # Ctrl+H skips the current wizard step without running its
+        # normal validation. It never skips the installation itself.
+        if (
+            event.modifiers() == Qt.ControlModifier
+            and event.key() == Qt.Key_H
+        ):
+            idx = self.stack.currentIndex()
+
+            if idx < IDX_INSTALL:
+                self._goto_step(idx + 1)
+                return
+
+        super().keyPressEvent(event)
+
     # -- navigation ----------------------------------------------------------
 
     def _goto_step(self, index: int):
@@ -248,9 +266,74 @@ class MuliOSInstaller(QMainWindow):
         self.install_page.start(state)
 
     def _on_install_finished(self, success: bool):
+        # Capture the installer output before changing pages.
+        # The QTextEdit remains available even if the filesystem
+        # log becomes inaccessible during cleanup.
+        live_log = ""
+
+        try:
+            live_log = self.install_page.log_view.toPlainText()
+        except Exception:
+            live_log = ""
+
+        if success:
+            self._goto_step(IDX_FINISHED)
+            return
+
         self._goto_step(IDX_FINISHED)
-        if not success:
-            self.finished_page.show_failure("See the install log on the previous screen for details.")
+
+        failure_text = ""
+        log_text = live_log
+
+        # Prefer the live in-memory log, then fall back to the
+        # persistent filesystem log.
+        if log_text.strip():
+            marker = "=== INSTALLATION FAILED ==="
+
+            if marker in log_text:
+                failure_text = log_text.split(
+                    marker,
+                    1,
+                )[1].strip()
+
+            if not failure_text:
+                failure_text = log_text.strip()
+
+        if not failure_text:
+            try:
+                log_path = Path("/var/log/mulios/install.log")
+
+                if log_path.exists():
+                    log_text = log_path.read_text(
+                        encoding="utf-8",
+                        errors="replace",
+                    )
+
+                    marker = "=== INSTALLATION FAILED ==="
+
+                    if marker in log_text:
+                        failure_text = log_text.split(
+                            marker,
+                            1,
+                        )[1].strip()
+                    else:
+                        failure_text = log_text.strip()
+
+            except Exception as exc:
+                failure_text = (
+                    "The installation failed. "
+                    f"Could not read the failure log: {exc}"
+                )
+
+        if not failure_text:
+            failure_text = (
+                "The installation failed, but no installer "
+                "output was available."
+            )
+
+        self.finished_page.show_failure(
+            failure_text
+        )
 
     def reboot_system(self):
         reply = QMessageBox.question(
@@ -265,9 +348,64 @@ class MuliOSInstaller(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
+
+    def handle_exception(exc_type, exc_value, exc_traceback):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(
+                exc_type,
+                exc_value,
+                exc_traceback,
+            )
+            return
+
+        try:
+            log_path = Path(
+                "/var/log/mulios/install.log"
+            )
+
+            log_path.parent.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+
+            with log_path.open(
+                "a",
+                encoding="utf-8",
+            ) as f:
+                f.write("\n")
+                f.write("=" * 80 + "\n")
+                f.write("=== UNHANDLED INSTALLER EXCEPTION ===\n")
+                f.write(
+                    "".join(
+                        traceback.format_exception(
+                            exc_type,
+                            exc_value,
+                            exc_traceback,
+                        )
+                    )
+                )
+                f.write("=" * 80 + "\n")
+
+        except Exception:
+            pass
+
+        QMessageBox.critical(
+            None,
+            "MuliOS Installer Error",
+            "An unexpected error occurred.\n\n"
+            "The full Python traceback was written to:\n"
+            "/var/log/mulios/install.log",
+        )
+
+    sys.excepthook = handle_exception
+
     window = MuliOSInstaller()
     window.show()
     sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()
 
 
 if __name__ == "__main__":

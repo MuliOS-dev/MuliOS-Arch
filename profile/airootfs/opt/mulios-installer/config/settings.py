@@ -1,4 +1,4 @@
-﻿"""
+"""
 config/settings.py
 
 Central constants for the native MuliOS installer.
@@ -8,7 +8,7 @@ import os
 
 APP_NAME = "MuliOS Installer"
 DISTRO_NAME = "MuliOS"
-VERSION_STRING = "1.0.0"
+VERSION_STRING = "1.0.1"
 
 INSTALLER_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BRANDING_DIR = os.path.join(INSTALLER_ROOT, "branding")

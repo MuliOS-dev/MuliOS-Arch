@@ -1,10 +1,11 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 import re
 import shlex
 import shutil
 import subprocess
+import traceback
 from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
@@ -44,6 +45,41 @@ class InstallWorker(QThread):
     # Logging
     # ------------------------------------------------------------------
 
+    def initialize_log(self):
+        try:
+            LOG_PATH.parent.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+
+            with LOG_PATH.open(
+                "a",
+                encoding="utf-8",
+            ) as f:
+                f.write("\n")
+                f.write("=" * 80 + "\n")
+                f.write("MuliOS Native Installer\n")
+                f.write("=" * 80 + "\n")
+                f.write(f"PID: {os.getpid()}\n")
+                f.write(f"UID: {os.geteuid()}\n")
+                f.write("=" * 80 + "\n")
+                f.flush()
+
+            return True
+
+        except Exception as exc:
+            message = (
+                "CRITICAL: Could not initialize installer log: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+            try:
+                self.log_line.emit(message)
+            except Exception:
+                pass
+
+            raise InstallError(message) from exc
+
     def log(self, message: str):
         message = str(message)
 
@@ -52,10 +88,20 @@ class InstallWorker(QThread):
 
             with LOG_PATH.open("a", encoding="utf-8") as f:
                 f.write(message + "\n")
+                f.flush()
+
+        except Exception as exc:
+            try:
+                self.log_line.emit(
+                    f"LOGGING ERROR: {exc}"
+                )
+            except Exception:
+                pass
+
+        try:
+            self.log_line.emit(message)
         except Exception:
             pass
-
-        self.log_line.emit(message)
 
     # ------------------------------------------------------------------
     # Command execution
@@ -71,35 +117,49 @@ class InstallWorker(QThread):
     ):
         command = [str(x) for x in command]
 
-        self.log(
-            "$ " +
-            " ".join(
-                shlex.quote(x)
-                for x in command
-            )
+        display_command = " ".join(
+            shlex.quote(x)
+            for x in command
         )
 
-        process = subprocess.Popen(
-            command,
-            stdin=(
-                subprocess.PIPE
-                if input_text is not None
-                else None
-            ),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=env,
-            bufsize=1,
-        )
+        self.log(f"$ {display_command}")
+
+        try:
+            process = subprocess.Popen(
+                command,
+                stdin=(
+                    subprocess.PIPE
+                    if input_text is not None
+                    else None
+                ),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env=env,
+                bufsize=1,
+            )
+
+        except Exception as exc:
+            self.log(
+                f"FAILED TO START COMMAND: {display_command}"
+            )
+            self.log(
+                f"Exception: {type(exc).__name__}: {exc}"
+            )
+            raise InstallError(
+                f"Could not start command: {display_command}: {exc}"
+            ) from exc
 
         if input_text is not None and process.stdin is not None:
             try:
                 process.stdin.write(input_text)
                 process.stdin.close()
-            except Exception:
+            except Exception as exc:
+                self.log(
+                    f"WARNING: Could not write command input: {exc}"
+                )
                 try:
                     process.stdin.close()
                 except Exception:
@@ -107,21 +167,36 @@ class InstallWorker(QThread):
 
         output = []
 
-        if process.stdout is not None:
-            for line in process.stdout:
-                line = line.rstrip()
-                output.append(line)
-                self.log(line)
+        try:
+            if process.stdout is not None:
+                for line in process.stdout:
+                    line = line.rstrip("\n")
+                    output.append(line)
+                    self.log(line)
+
+        except Exception as exc:
+            self.log(
+                f"ERROR while reading command output: "
+                f"{type(exc).__name__}: {exc}"
+            )
 
         process.wait()
+
+        self.log(
+            f"[exit code: {process.returncode}]"
+        )
 
         result = "\n".join(output)
 
         if check and process.returncode != 0:
+            self.log(
+                f"COMMAND FAILED: {display_command}"
+            )
+
             raise InstallError(
                 "Command failed with exit code "
                 f"{process.returncode}: "
-                + " ".join(command)
+                f"{display_command}"
             )
 
         return result
@@ -211,6 +286,88 @@ class InstallWorker(QThread):
         self.selected_disk = disk
 
         self.check_live_media(disk)
+
+        # Never allow a disk with active mountpoints to be erased.
+        # This protects against accidentally selecting the live system,
+        # WSL storage, or another disk currently in use.
+        mounted_result = subprocess.run(
+            [
+                "lsblk",
+                "-nrpo",
+                "NAME,MOUNTPOINTS",
+                disk,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if mounted_result.returncode != 0:
+            raise InstallError(
+                f"Could not inspect mountpoints on installation disk: {disk}"
+            )
+
+        mounted_paths = []
+
+        for line in mounted_result.stdout.splitlines():
+            parts = line.split(None, 1)
+
+            if len(parts) != 2:
+                continue
+
+            mountpoint = parts[1].strip()
+
+            if mountpoint and mountpoint != "-":
+                mounted_paths.append(
+                    mountpoint
+                )
+
+        if mounted_paths:
+            raise InstallError(
+                "The selected disk has mounted filesystems and "
+                "cannot be erased: " +
+                ", ".join(mounted_paths)
+            )
+
+        # Require enough space for the 1 GiB EFI partition,
+        # the MuliOS installation, swap, and normal system data.
+        size_result = subprocess.run(
+            [
+                "blockdev",
+                "--getsize64",
+                disk,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if size_result.returncode != 0:
+            raise InstallError(
+                f"Could not determine installation disk size: {disk}"
+            )
+
+        try:
+            disk_size = int(
+                size_result.stdout.strip()
+            )
+        except ValueError:
+            raise InstallError(
+                f"Could not parse installation disk size: {disk}"
+            )
+
+        minimum_size = 20 * 1024 * 1024 * 1024
+
+        if disk_size < minimum_size:
+            raise InstallError(
+                "The selected disk is too small. "
+                "MuliOS requires at least 20 GiB."
+            )
+
+        self.log(
+            f"Installation disk size: "
+            f"{disk_size / (1024 ** 3):.1f} GiB"
+        )
 
         return disk
 
@@ -435,8 +592,8 @@ class InstallWorker(QThread):
 
         sfdisk_script = (
             "label: gpt\n"
-            "size=1G, type=uefi\n"
-            "type=linux\n"
+            "size=1G, type=uefi, name=\"MuliOS EFI\"\n"
+            "type=linux, name=\"MuliOS Root\"\n"
         )
 
         self.run_command(
@@ -609,6 +766,33 @@ class InstallWorker(QThread):
             mapped_root or root
         )
 
+        if not os.path.exists(boot):
+            raise InstallError(
+                f"EFI partition does not exist: {boot}"
+            )
+
+        if not os.path.exists(root):
+            raise InstallError(
+                f"Root partition does not exist: {root}"
+            )
+
+        if filesystem_root != root and not os.path.exists(
+            filesystem_root
+        ):
+            raise InstallError(
+                "Encrypted root device does not exist: "
+                f"{filesystem_root}"
+            )
+
+        if filesystem not in {
+            "ext4",
+            "btrfs",
+            "xfs",
+        }:
+            raise InstallError(
+                f"Unsupported filesystem: {filesystem}"
+            )
+
         self.log(
             "Formatting EFI system partition..."
         )
@@ -618,6 +802,8 @@ class InstallWorker(QThread):
                 "mkfs.fat",
                 "-F",
                 "32",
+                "-n",
+                "MULIOS_EFI",
                 boot,
             ]
         )
@@ -631,6 +817,8 @@ class InstallWorker(QThread):
                 [
                     "mkfs.ext4",
                     "-F",
+                    "-L",
+                    "MULIOS_ROOT",
                     filesystem_root,
                 ]
             )
@@ -640,6 +828,8 @@ class InstallWorker(QThread):
                 [
                     "mkfs.btrfs",
                     "-f",
+                    "-L",
+                    "MULIOS_ROOT",
                     filesystem_root,
                 ]
             )
@@ -649,16 +839,17 @@ class InstallWorker(QThread):
                 [
                     "mkfs.xfs",
                     "-f",
+                    "-L",
+                    "MULIOS_ROOT",
                     filesystem_root,
                 ]
             )
 
-        else:
-            raise InstallError(
-                f"Unsupported filesystem: {filesystem}"
-            )
-
         self.progress.emit(15)
+
+    # ------------------------------------------------------------------
+    # Filesystem mounting
+    # ------------------------------------------------------------------
 
     def mount_filesystems(
         self,
@@ -687,6 +878,11 @@ class InstallWorker(QThread):
             ]
         )
 
+        # Root is mounted even if the EFI mount fails afterwards.
+        # Mark cleanup as active immediately so failures cannot leave
+        # /mnt mounted.
+        self.mounts_active = True
+
         boot_mount = (
             self.target / "boot"
         )
@@ -707,8 +903,6 @@ class InstallWorker(QThread):
                 str(boot_mount),
             ]
         )
-
-        self.mounts_active = True
 
         self.progress.emit(20)
 
@@ -985,8 +1179,89 @@ class InstallWorker(QThread):
             )
         ).strip()
 
+        # --------------------------------------------------------------
+        # Validate hostname
+        # --------------------------------------------------------------
+
         if not hostname:
             hostname = "mulios"
+
+        if len(hostname) > 253:
+            raise InstallError(
+                "Hostname is too long."
+            )
+
+        if not re.fullmatch(
+            r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?",
+            hostname,
+        ):
+            raise InstallError(
+                f"Invalid hostname: {hostname}"
+            )
+
+        # --------------------------------------------------------------
+        # Validate locale
+        # --------------------------------------------------------------
+
+        if not locale:
+            raise InstallError(
+                "No locale was selected."
+            )
+
+        if not re.fullmatch(
+            r"[A-Za-z0-9_.@+-]+",
+            locale,
+        ):
+            raise InstallError(
+                f"Invalid locale: {locale}"
+            )
+
+        # --------------------------------------------------------------
+        # Validate keyboard layout
+        # --------------------------------------------------------------
+
+        if not keyboard:
+            keyboard = "us"
+
+        if not re.fullmatch(
+            r"[A-Za-z0-9_-]+",
+            keyboard,
+        ):
+            raise InstallError(
+                f"Invalid keyboard layout: {keyboard}"
+            )
+
+        # --------------------------------------------------------------
+        # Validate timezone
+        # --------------------------------------------------------------
+
+        if not timezone:
+            timezone = "UTC"
+
+        if timezone.startswith("/") or ".." in Path(timezone).parts:
+            raise InstallError(
+                f"Invalid timezone: {timezone}"
+            )
+
+        zoneinfo_root = (
+            self.target /
+            "usr/share/zoneinfo"
+        )
+
+        zoneinfo = (
+            zoneinfo_root /
+            timezone
+        )
+
+        if not zoneinfo.is_file():
+            raise InstallError(
+                f"Timezone is not available in the target system: "
+                f"{timezone}"
+            )
+
+        # --------------------------------------------------------------
+        # Host identity
+        # --------------------------------------------------------------
 
         self.write_file(
             self.target / "etc/hostname",
@@ -1004,14 +1279,17 @@ class InstallWorker(QThread):
             hosts,
         )
 
-        self.write_file(
-            self.target / "etc/locale.conf",
-            f"LANG={locale}\n",
+        # --------------------------------------------------------------
+        # Locale configuration
+        # --------------------------------------------------------------
+
+        locale_conf = (
+            f"LANG={locale}\n"
         )
 
         self.write_file(
-            self.target / "etc/vconsole.conf",
-            f"KEYMAP={keyboard}\n",
+            self.target / "etc/locale.conf",
+            locale_conf,
         )
 
         locale_gen = (
@@ -1019,40 +1297,53 @@ class InstallWorker(QThread):
             "etc/locale.gen"
         )
 
-        if locale_gen.exists():
-            text = locale_gen.read_text(
-                encoding="utf-8",
-                errors="replace",
+        if not locale_gen.exists():
+            raise InstallError(
+                "Target system is missing /etc/locale.gen."
             )
 
-            output = []
-
-            for line in text.splitlines():
-                stripped = line.lstrip(
-                    "#"
-                ).strip()
-
-                if stripped.startswith(
-                    locale + " "
-                ):
-                    output.append(
-                        stripped
-                    )
-                else:
-                    output.append(
-                        line
-                    )
-
-            locale_gen.write_text(
-                "\n".join(output) + "\n",
-                encoding="utf-8",
-            )
-
-        zoneinfo = (
-            self.target /
-            "usr/share/zoneinfo" /
-            timezone
+        text = locale_gen.read_text(
+            encoding="utf-8",
+            errors="replace",
         )
+
+        locale_found = False
+        output = []
+
+        locale_pattern = re.compile(
+            rf"^\s*#?\s*{re.escape(locale)}(?:\s|$)"
+        )
+
+        for line in text.splitlines():
+            if locale_pattern.match(line):
+                output.append(locale)
+                locale_found = True
+            else:
+                output.append(line)
+
+        if not locale_found:
+            raise InstallError(
+                f"Locale {locale} is not available "
+                "in /etc/locale.gen."
+            )
+
+        locale_gen.write_text(
+            "\n".join(output) + "\n",
+            encoding="utf-8",
+        )
+
+        # --------------------------------------------------------------
+        # Keyboard configuration
+        # --------------------------------------------------------------
+
+        self.write_file(
+            self.target / "etc/vconsole.conf",
+            f"KEYMAP={keyboard}\n",
+        )
+
+        # --------------------------------------------------------------
+        # Timezone
+        # --------------------------------------------------------------
 
         localtime = (
             self.target /
@@ -1062,15 +1353,26 @@ class InstallWorker(QThread):
         if localtime.exists() or localtime.is_symlink():
             localtime.unlink()
 
-        if zoneinfo.exists():
-            localtime.symlink_to(
-                Path(
-                    "/usr/share/zoneinfo"
-                ) / timezone
-            )
+        localtime.symlink_to(
+            Path(
+                "/usr/share/zoneinfo"
+            ) / timezone
+        )
+
+        # --------------------------------------------------------------
+        # Generate locale and synchronize hardware clock
+        # --------------------------------------------------------------
+
+        self.log(
+            f"Configuring locale: {locale}"
+        )
 
         self.chroot(
             ["locale-gen"]
+        )
+
+        self.log(
+            f"Configuring timezone: {timezone}"
         )
 
         self.chroot(
@@ -1594,6 +1896,48 @@ class InstallWorker(QThread):
         if not username:
             raise InstallError(
                 "Username cannot be empty."
+            )
+
+        if len(username) > 32:
+            raise InstallError(
+                "Username cannot be longer than 32 characters."
+            )
+
+        if not re.fullmatch(
+            r"[a-z_][a-z0-9_-]*[$]?",
+            username,
+        ):
+            raise InstallError(
+                f"Invalid username: {username}. "
+                "Use lowercase letters, numbers, underscores, "
+                "and hyphens; the first character must be a letter "
+                "or underscore."
+            )
+
+        if username in {
+            "root",
+            "daemon",
+            "bin",
+            "sys",
+            "sync",
+            "games",
+            "man",
+            "lp",
+            "mail",
+            "news",
+            "uucp",
+            "proxy",
+            "www-data",
+            "backup",
+            "list",
+            "irc",
+            "nobody",
+            "systemd-network",
+            "systemd-resolve",
+            "dbus",
+        }:
+            raise InstallError(
+                f"Username is reserved: {username}"
             )
 
         if not password:
@@ -2121,51 +2465,60 @@ class InstallWorker(QThread):
                 "Could not find HOOKS in mkinitcpio.conf."
             )
 
-        hooks = match.group(1).split()
+        existing_hooks = match.group(1).split()
 
-        if "systemd" in hooks:
-            required = [
-                "base",
+        # Keep the existing hook configuration intact and only add
+        # the hooks required for encrypted-root boot.
+        if "systemd" in existing_hooks:
+            required_hooks = [
                 "systemd",
                 "keyboard",
-                "autodetect",
-                "microcode",
-                "modconf",
-                "kms",
-                "sd-vconsole",
                 "block",
                 "sd-encrypt",
                 "filesystems",
-                "fsck",
             ]
         else:
-            required = [
-                "base",
+            required_hooks = [
                 "udev",
                 "keyboard",
                 "keymap",
-                "autodetect",
-                "microcode",
-                "modconf",
-                "kms",
-                "consolefont",
                 "block",
                 "encrypt",
                 "filesystems",
-                "fsck",
             ]
 
-        final_hooks = []
+        hooks = list(existing_hooks)
 
-        for hook in required:
-            if hook not in final_hooks:
-                final_hooks.append(
-                    hook
-                )
+        for hook in required_hooks:
+            if hook not in hooks:
+                hooks.append(hook)
+
+        # Remove the encryption hook that belongs to the other initramfs
+        # framework. This prevents both encrypt and sd-encrypt from being
+        # enabled simultaneously.
+        if "systemd" in hooks:
+            hooks = [
+                hook
+                for hook in hooks
+                if hook != "encrypt"
+            ]
+
+            if "sd-encrypt" not in hooks:
+                hooks.append("sd-encrypt")
+
+        else:
+            hooks = [
+                hook
+                for hook in hooks
+                if hook != "sd-encrypt"
+            ]
+
+            if "encrypt" not in hooks:
+                hooks.append("encrypt")
 
         replacement = (
             "HOOKS=(" +
-            " ".join(final_hooks) +
+            " ".join(hooks) +
             ")"
         )
 
@@ -2181,8 +2534,12 @@ class InstallWorker(QThread):
         )
 
         self.log(
-            "Configured encrypted-root "
-            "mkinitcpio hooks."
+            "Configured encrypted-root mkinitcpio hooks."
+        )
+        self.log(
+            "Final HOOKS=(" +
+            " ".join(hooks) +
+            ")"
         )
 
     # ------------------------------------------------------------------
@@ -2686,66 +3043,107 @@ class InstallWorker(QThread):
         if not self.mounts_active:
             return
 
-        self.log(
-            "Cleaning up installation mounts..."
-        )
+        self.log("Cleaning up mounted filesystems...")
 
-        for path in (
-            self.target / "run",
-            self.target / "sys",
-            self.target / "proc",
+        # Unmount nested virtual filesystems first.
+        cleanup_targets = [
             self.target / "dev",
-        ):
+            self.target / "proc",
+            self.target / "sys",
+            self.target / "run",
+        ]
+
+        for mountpoint in cleanup_targets:
+            try:
+                self.run_command(
+                    [
+                        "umount",
+                        "-R",
+                        str(mountpoint),
+                    ],
+                    check=False,
+                )
+            except Exception as exc:
+                self.log(
+                    f"Cleanup warning for {mountpoint}: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+
+        # Then unmount EFI.
+        try:
+            self.run_command(
+                [
+                    "umount",
+                    str(self.target / "boot"),
+                ],
+                check=False,
+            )
+        except Exception as exc:
+            self.log(
+                "Cleanup warning for EFI mount: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+        # Finally unmount the root filesystem.
+        try:
             self.run_command(
                 [
                     "umount",
                     "-R",
-                    str(path),
+                    str(self.target),
                 ],
                 check=False,
             )
-
-        self.run_command(
-            [
-                "umount",
-                str(
-                    self.target / "boot"
-                ),
-            ],
-            check=False,
-        )
-
-        self.run_command(
-            [
-                "umount",
-                str(self.target),
-            ],
-            check=False,
-        )
+        except Exception as exc:
+            self.log(
+                "Cleanup warning for root mount: "
+                f"{type(exc).__name__}: {exc}"
+            )
 
         self.mounts_active = False
+        self.log("Filesystem cleanup finished.")
 
     # ------------------------------------------------------------------
     # Main installation sequence
     # ------------------------------------------------------------------
 
     def run(self):
+        self.initialize_log()
+
         try:
+            self.log("=== MuliOS Native Installer ===")
+            self.log("Starting installation.")
+            self.log(f"Installer PID: {os.getpid()}")
+            self.log(f"Running as UID: {os.geteuid()}")
+            self.log(f"Target mountpoint: {self.target}")
+            safe_state = dict(self.state)
+
+            for secret_key in (
+                "password",
+                "user_password",
+                "root_password",
+                "encryption_password",
+                "encryption_passphrase",
+                "passphrase",
+            ):
+                if secret_key in safe_state:
+                    safe_state[secret_key] = "<redacted>"
+
+            self.log(
+                f"Installation state: {safe_state}"
+            )
+
             self.require_root()
 
-            self.log(
-                "=== MuliOS Native Installer ==="
-            )
-
-            self.log(
-                "Starting installation."
-            )
+            self.log("Root privilege check passed.")
 
             if not self.is_uefi():
                 raise InstallError(
                     "MuliOS currently requires "
                     "a UEFI boot environment."
                 )
+
+            self.log("UEFI check passed.")
 
             disk = self.disk()
 
@@ -2822,25 +3220,43 @@ class InstallWorker(QThread):
             self.finished_ok.emit()
 
         except Exception as exc:
-            self.log(
-                f"ERROR: {exc}"
-            )
+            error_type = type(exc).__name__
+            error_message = str(exc)
 
+            self.log("")
+            self.log("=" * 80)
+            self.log("=== INSTALLATION FAILED ===")
             self.log(
-                "=== Installation failed ==="
+                f"{error_type}: {error_message}"
             )
+            self.log("Full Python traceback:")
+            self.log(traceback.format_exc())
+            self.log("=" * 80)
 
             try:
+                self.log("Starting failure cleanup...")
                 self.cleanup_mounts()
-            except Exception:
-                pass
+                self.log("Mount cleanup completed.")
+            except Exception as cleanup_exc:
+                self.log(
+                    "Cleanup error: "
+                    f"{type(cleanup_exc).__name__}: "
+                    f"{cleanup_exc}"
+                )
 
             try:
                 self.close_encryption()
-            except Exception:
-                pass
+                self.log("Encryption cleanup completed.")
+            except Exception as encryption_exc:
+                self.log(
+                    "Encryption cleanup error: "
+                    f"{type(encryption_exc).__name__}: "
+                    f"{encryption_exc}"
+                )
+
+            self.log("=== Installer stopped after failure ===")
 
             self.failed.emit(
-                str(exc)
+                f"{error_type}: {error_message}"
             )
 
