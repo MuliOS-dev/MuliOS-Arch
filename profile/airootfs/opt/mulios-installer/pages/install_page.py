@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -67,8 +68,7 @@ class InstallPage(QWidget):
         self.view_log_button.setEnabled(False)
 
         # Create the log before the worker starts so that failures
-        # during worker initialization can never leave the user
-        # with a missing install log.
+        # during worker initialization are visible to the user.
         try:
             log_path = Path(INSTALL_LOG)
             log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -95,7 +95,6 @@ class InstallPage(QWidget):
 
         self.worker = InstallWorker(state)
 
-
         self.worker.log_line.connect(self._append_log)
         self.worker.progress.connect(self.progress_bar.setValue)
         self.worker.finished_ok.connect(self._on_success)
@@ -117,7 +116,9 @@ class InstallPage(QWidget):
         self.view_log_button.setEnabled(True)
 
         self._append_log("")
-        self._append_log("=== Installation completed successfully ===")
+        self._append_log(
+            "=== Installation completed successfully ==="
+        )
 
         self.install_finished.emit(True)
 
@@ -136,7 +137,12 @@ class InstallPage(QWidget):
 
     def show_full_log(self):
         try:
-            with open(INSTALL_LOG, "r", encoding="utf-8", errors="replace") as f:
+            with open(
+                INSTALL_LOG,
+                "r",
+                encoding="utf-8",
+                errors="replace",
+            ) as f:
                 content = f.read()
 
             if not content:
@@ -148,4 +154,6 @@ class InstallPage(QWidget):
             scrollbar.setValue(scrollbar.maximum())
 
         except Exception as exc:
-            self._append_log(f"Unable to read install log: {exc}")
+            self._append_log(
+                f"Unable to read install log: {exc}"
+            )

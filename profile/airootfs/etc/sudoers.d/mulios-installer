@@ -1,0 +1,1 @@
+liveuser ALL=(root) NOPASSWD: /usr/bin/python3 /opt/mulios-installer/main.py

@@ -1,5 +1,4 @@
 import os
-import subprocess
 import webbrowser
 
 from PySide6.QtWidgets import (
@@ -31,16 +30,22 @@ class FinishedPage(QWidget):
         if os.path.exists(LOGO_PATH):
             pixmap = QPixmap(LOGO_PATH)
             logo_label.setPixmap(
-                pixmap.scaledToHeight(56, Qt.SmoothTransformation)
+                pixmap.scaledToHeight(
+                    56,
+                    Qt.SmoothTransformation,
+                )
             )
             layout.addWidget(logo_label)
 
-        self.title = QLabel("Installation completed successfully.")
+        self.title = QLabel(
+            "Installation completed successfully."
+        )
         self.title.setObjectName("TitleLabel")
         layout.addWidget(self.title)
 
         self.subtitle = QLabel(
-            "Remove the installation media and restart to boot into MuliOS."
+            "Remove the installation media and restart "
+            "to boot into MuliOS."
         )
         self.subtitle.setObjectName("SubtitleLabel")
         self.subtitle.setWordWrap(True)
@@ -94,20 +99,18 @@ class FinishedPage(QWidget):
 
         self.subtitle.setText(
             "MuliOS could not be installed.\n\n"
-            "The installer output below contains the failure details."
+            "The installer output below contains the "
+            "failure details."
         )
 
         self.log_path_label.setText(
             f"Install log: {INSTALL_LOG}"
         )
 
-        # Always show the captured installer output immediately.
-        # This avoids losing the diagnostic information when the
-        # filesystem log is unavailable after cleanup.
         self.log_view.setVisible(True)
         self.log_view.setPlainText(
-            error_message or
-            "No installer output was available."
+            error_message
+            or "No installer output was available."
         )
 
         scrollbar = self.log_view.verticalScrollBar()

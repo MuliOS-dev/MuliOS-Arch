@@ -41,6 +41,7 @@ bootstrap_tarball_compression=(
 
 file_permissions=(
   ["/etc/shadow"]="0:0:400"
+  ["/etc/sudoers.d/mulios-installer"]="0:0:440"
 
   ["/usr/local/bin/mupdate"]="0:0:755"
   ["/usr/local/bin/livecd-sound"]="0:0:755"
