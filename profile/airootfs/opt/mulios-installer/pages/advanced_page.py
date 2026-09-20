@@ -21,8 +21,8 @@ class AdvancedPage(QWidget):
         layout.addWidget(title)
 
         subtitle = QLabel(
-            "These settings control how MuliOS configures the installed system."
-            "well for most people."
+            "These settings control how MuliOS configures the installed system. "
+            "The defaults are suitable for most people."
         )
         subtitle.setObjectName("SubtitleLabel")
         subtitle.setWordWrap(True)
