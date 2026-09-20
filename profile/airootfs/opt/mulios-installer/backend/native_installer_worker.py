@@ -2094,9 +2094,31 @@ class InstallWorker(QThread):
         desktop = str(
             self.state.get(
                 "desktop_environment",
-                "Kde",
+                "kde",
             )
         ).strip().lower()
+
+        # The live ISO boots with SDDM and contains its live-user
+        # autologin configuration. Never carry that configuration into
+        # the installed system.
+        for path in (
+            self.target / "etc/sddm.conf",
+            self.target / "etc/sddm.conf.d/autologin.conf",
+        ):
+            if path.exists() or path.is_symlink():
+                path.unlink()
+
+        display_managers = (
+            "sddm",
+            "lightdm",
+            "gdm",
+        )
+
+        for manager in display_managers:
+            self.chroot(
+                ["systemctl", "disable", manager],
+                check=False,
+            )
 
         if desktop == "kde":
             packages = [
@@ -2104,7 +2126,6 @@ class InstallWorker(QThread):
                 "sddm",
                 "dolphin",
             ]
-
             service = "sddm"
 
         elif desktop in {
@@ -2117,7 +2138,6 @@ class InstallWorker(QThread):
                 "lightdm",
                 "lightdm-gtk-greeter",
             ]
-
             service = "lightdm"
 
         elif desktop == "gnome":
@@ -2125,7 +2145,6 @@ class InstallWorker(QThread):
                 "gnome",
                 "gdm",
             ]
-
             service = "gdm"
 
         elif desktop == "cinnamon":
@@ -2134,7 +2153,6 @@ class InstallWorker(QThread):
                 "lightdm",
                 "lightdm-gtk-greeter",
             ]
-
             service = "lightdm"
 
         elif desktop == "budgie":
@@ -2143,7 +2161,6 @@ class InstallWorker(QThread):
                 "lightdm",
                 "lightdm-gtk-greeter",
             ]
-
             service = "lightdm"
 
         elif desktop in {
@@ -2154,6 +2171,7 @@ class InstallWorker(QThread):
             self.log(
                 "No desktop environment selected."
             )
+            self.progress.emit(70)
             return
 
         else:
@@ -2162,9 +2180,7 @@ class InstallWorker(QThread):
                 f"{desktop}"
             )
 
-        self.pacman_install(
-            packages
-        )
+        self.pacman_install(packages)
 
         self.chroot(
             [
