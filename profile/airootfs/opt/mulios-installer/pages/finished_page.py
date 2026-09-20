@@ -67,8 +67,19 @@ class FinishedPage(QWidget):
     def show_failure(self, error_message: str):
         self.title.setText("Installation failed")
         self.subtitle.setText(
-            f"Something went wrong:\n\n{error_message}\n\n"
-            f"Check the log for details, or use 'View logs' below."
+            "The installer output below contains the failure details."
+        )
+
+        self.log_view = getattr(self, "log_view", None)
+        if self.log_view is None:
+            from PySide6.QtWidgets import QTextEdit
+            self.log_view = QTextEdit()
+            self.log_view.setReadOnly(True)
+            self.layout().insertWidget(4, self.log_view, 1)
+
+        self.log_view.setVisible(True)
+        self.log_view.setPlainText(
+            error_message or "No installer output was available."
         )
 
     def _view_logs(self):
