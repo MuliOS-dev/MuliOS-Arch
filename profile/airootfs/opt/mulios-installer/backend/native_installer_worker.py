@@ -1708,6 +1708,28 @@ class InstallWorker(QThread):
             "Preparing target network configuration..."
         )
 
+        pacman_conf = self.target / "etc/pacman.conf"
+
+        # The ISO build uses a host-local [mulios] repository to install
+        # custom packages. That path must never survive into the installed
+        # system because /root/mulios is a build-machine path.
+        if pacman_conf.exists():
+            pacman_text = pacman_conf.read_text(
+                encoding="utf-8",
+                errors="replace",
+            )
+
+            pacman_text = re.sub(
+                r"(?ms)^\[mulios\]\n.*?^\n(?=\[)",
+                "",
+                pacman_text,
+            )
+
+            pacman_conf.write_text(
+                pacman_text,
+                encoding="utf-8",
+            )
+
         resolv = (
             self.target /
             "etc/resolv.conf"
