@@ -42,9 +42,6 @@ bootstrap_tarball_compression=(
 file_permissions=(
   ["/etc/shadow"]="0:0:400"
 
-  ["/root"]="0:0:750"
-  ["/root/.automated_script.sh"]="0:0:755"
-  ["/root/.gnupg"]="0:0:700"
   ["/usr/local/bin/mupdate"]="0:0:755"
   ["/usr/local/bin/livecd-sound"]="0:0:755"
   ["/usr/share/backgrounds/mulios"]="0:0:755"

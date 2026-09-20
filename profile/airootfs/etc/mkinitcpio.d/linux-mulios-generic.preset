@@ -1,0 +1,8 @@
+# mkinitcpio preset for the MuliOS generic kernel on archiso
+
+PRESETS=('archiso')
+
+ALL_kver='/usr/lib/modules/7.2.3-mulios-generic/vmlinuz'
+archiso_config='/etc/mkinitcpio.conf.d/archiso.conf'
+
+archiso_image="/boot/initramfs-linux-mulios-generic.img"

@@ -1,6 +1,7 @@
 # Base
+linux-mulios-generic-headers
+linux-mulios-generic
 base
-linux
 linux-firmware
 amd-ucode
 intel-ucode
@@ -8,7 +9,6 @@ intel-ucode
 # ArchISO
 archiso
 arch-install-scripts
-archinstall
 mkinitcpio
 mkinitcpio-archiso
 mkinitcpio-nfs-utils
@@ -99,3 +99,10 @@ qemu-guest-agent
 
 # MuliOS
 livecd-sounds
+# MuliOS Installer runtime
+python
+pyside6
+jq
+unzip
+p7zip
+electron

@@ -1,0 +1,10 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = linux-mulios-generic
+
+[Action]
+Description = Installing MuliOS kernel into /boot...
+When = PostTransaction
+Exec = /bin/bash -c 'install -Dm644 /usr/lib/modules/7.2.3-mulios-generic/vmlinuz /boot/vmlinuz-linux-mulios-generic'

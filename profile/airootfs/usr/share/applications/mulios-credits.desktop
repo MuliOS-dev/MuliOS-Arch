@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=MuliOS Credits
+Comment=MuliOS developers and project information
+Exec=python /opt/credits/main.py
+Icon=/opt/credits/icons/logo.png
+Terminal=false
+Type=Application
+Categories=System;Utility;
+StartupNotify=true

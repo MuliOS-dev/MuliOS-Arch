@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=MuliOS Installer
+Comment=Install MuliOS on your computer
+Exec=python3 /opt/mulios-installer/main.py
+Icon=/opt/mulios-installer/branding/logo.png
+Terminal=false
+Type=Application
+Categories=System;Settings;
+StartupNotify=true

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=MuliOS Task Manager
+Comment=Monitor system resources and processes
+Exec=electron /opt/taskmanager
+Icon=utilities-system-monitor
+Terminal=false
+Type=Application
+Categories=System;Monitor;
+StartupNotify=true
