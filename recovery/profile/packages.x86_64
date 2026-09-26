@@ -8,5 +8,5 @@ rsync
 grub
 btrfs-progs
 e2fsprogs
-xfs-progs
+xfsprogs
 dosfstools
