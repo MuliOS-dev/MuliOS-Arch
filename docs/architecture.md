@@ -23,7 +23,7 @@ MuliOS-Arch is not a fork of Arch Linux. It is a **custom ArchISO profile and co
 ┌─────────────────────────────────────────────┐
 │         MuliOS Configuration Layer            │
 │   configs/ (kde, plymouth, fastfetch,        │
-│   calamares) + packages/ (mulios-tools,       │
+│   native installer + packages/ (mulios-tools,       │
 │   mulios-installer)                          │
 └───────────────────────┬───────────────────────┘
                         │
@@ -59,9 +59,7 @@ Two supporting components round out the desktop experience:
 
 ## MuliOS Installer
 
-MuliOS-Arch uses **Calamares** as its graphical installer, configured in `configs/calamares/`. This configuration defines the installer's modules, branding, and installation sequence, allowing users to install MuliOS onto persistent storage from the live environment. Calamares configuration in this repository is specific to MuliOS-Arch's installation flow and branding; it does not modify Calamares itself, only its configuration.
-
-Where installer behavior requires MuliOS-specific logic beyond what Calamares provides out of the box, this is supplied through `packages/mulios-installer/`.
+MuliOS-Arch uses the native PySide6 MuliOS Installer under `profile/airootfs/opt/mulios-installer/`. It performs installation directly against the selected disk and uses the native installer backend for partitioning, package installation, user setup, and GRUB configuration.
 
 ## MuliOS Tools
 
@@ -73,7 +71,7 @@ Branding (logos, color schemes, wallpapers, and related assets) is applied acros
 
 - Boot-time branding is defined through **Plymouth** (`configs/plymouth/`) and the bootloader configuration (`grub/`, `syslinux/`, `efiboot/`).
 - Desktop branding is defined through **KDE configuration** (`configs/kde/`).
-- Installer branding is defined through **Calamares configuration** (`configs/calamares/`).
+- Installer UI and behavior are defined by the native installer under `profile/airootfs/opt/mulios-installer/`.
 - Terminal branding is defined through **Fastfetch** (`configs/fastfetch/`).
 
 This layered approach means branding changes are made at the component responsible for that part of the user experience, rather than in a single central branding module.
