@@ -1800,65 +1800,27 @@ class InstallWorker(QThread):
                 ]
             )
 
-            keyring_check = self.chroot(
-                [
-                    "pacman-key",
-                    "--list-keys",
-                ],
-                check=False,
+            # Do not use pacman-key --list-keys as the initialization
+            # test: an empty keyring can return exit code 1 and abort the
+            # installation before it gets a chance to initialize.
+            self.log(
+                "Initializing target pacman keyring..."
             )
 
-            if not keyring_check.strip():
-                self.log(
-                    "Initializing target pacman keyring..."
-                )
+            self.chroot(
+                [
+                    "pacman-key",
+                    "--init",
+                ]
+            )
 
-                self.chroot(
-                    [
-                        "rm",
-                        "-rf",
-                        "/etc/pacman.d/gnupg",
-                    ]
-                )
-
-                self.chroot(
-                    [
-                        "mkdir",
-                        "-p",
-                        "/etc/pacman.d/gnupg",
-                    ]
-                )
-
-                self.chroot(
-                    [
-                        "chmod",
-                        "700",
-                        "/etc/pacman.d/gnupg",
-                    ]
-                )
-
-                self.chroot(
-                    [
-                        "chown",
-                        "root:root",
-                        "/etc/pacman.d/gnupg",
-                    ]
-                )
-
-                self.chroot(
-                    [
-                        "pacman-key",
-                        "--init",
-                    ]
-                )
-
-                self.chroot(
-                    [
-                        "pacman-key",
-                        "--populate",
-                        "archlinux",
-                    ]
-                )
+            self.chroot(
+                [
+                    "pacman-key",
+                    "--populate",
+                    "archlinux",
+                ]
+            )
 
             self.chroot(
                 [
@@ -2001,9 +1963,17 @@ class InstallWorker(QThread):
             "etc/sudoers.d/mulios-wheel"
         )
 
+        if password:
+            sudoers_text = "%wheel ALL=(ALL:ALL) ALL\n"
+        else:
+            # An account with no password cannot authenticate through sudo's
+            # normal password prompt. Explicitly allow wheel sudo without a
+            # password when the user chose no password.
+            sudoers_text = "%wheel ALL=(ALL:ALL) NOPASSWD: ALL\n"
+
         self.write_file(
             sudoers,
-            "%wheel ALL=(ALL:ALL) ALL\n",
+            sudoers_text,
             mode=0o440,
         )
 
