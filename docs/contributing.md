@@ -49,7 +49,6 @@ Clear commit history makes the project easier to maintain and debug over time. W
 Example of a good commit message:
 
 ```
-Fix incorrect Calamares branding path
 
 The branding configuration referenced a logo path that did not
 match the file shipped in configs/calamares/branding. Updated
@@ -64,7 +63,7 @@ All changes must be tested locally before submitting a pull request. At minimum:
 
 1. Build the ISO using `scripts/build.sh` to confirm the profile still builds successfully.
 2. Boot the resulting ISO in a virtual machine to confirm the live environment starts correctly.
-3. If your change affects the installer, run through the Calamares installation flow in a virtual machine.
+3. If your change affects the installer, run through the MuliOS Installer flow in a virtual machine.
 4. If your change affects packages, tools, or scripts, run `scripts/test.sh` if applicable, and manually verify the affected functionality.
 
 Include a summary of how you tested your change in the pull request description. Changes that cannot be reasonably tested (e.g., environment-specific issues) should clearly state that limitation.
@@ -92,8 +91,8 @@ When you are ready to submit your change:
 
 - Follow the existing structure and conventions used in `profile/` and `configs/` rather than introducing new patterns unnecessarily.
 - Shell scripts should be POSIX-compatible where practical and should fail loudly (non-zero exit codes) on errors rather than failing silently.
-- Keep configuration changes minimal and well-commented, especially in `airootfs/`, `calamares/`, and bootloader configuration, since these areas are easy to break in ways that only appear at boot or install time.
+- Keep configuration changes minimal and well-commented, especially in `airootfs/`, installer code, and bootloader configuration, since these areas are easy to break in ways that only appear at boot or install time.
 
 ## Getting Help
 
-If you are unsure how something works, open a discussion or issue rather than guessing, especially around ArchISO internals, Calamares configuration, or bootloader behavior. See [`development.md`](development.md) for an overview of how the pieces of the repository fit together.
+If you are unsure how something works, open a discussion or issue rather than guessing, especially around ArchISO internals, installer code, or bootloader behavior. See [`development.md`](development.md) for an overview of how the pieces of the repository fit together.
