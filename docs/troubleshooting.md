@@ -58,12 +58,12 @@ Steps to diagnose:
 
 ## Configuration Mistakes
 
-**Symptom:** The system boots, but MuliOS-specific configuration does not behave as expected (incorrect branding, KDE defaults not applied, Calamares showing incorrect steps or branding, Fastfetch showing wrong output).
+**Symptom:** The system boots, but MuliOS-specific configuration does not behave as expected (incorrect branding, KDE defaults not applied, the MuliOS Installer showing incorrect steps or branding, Fastfetch showing wrong output).
 
 Steps to diagnose:
 
 - Confirm the relevant configuration files under `configs/` are being copied into the correct location, either directly or via `airootfs/`, since misplaced files are a common cause of "my change didn't take effect" issues.
-- For Calamares issues, check `configs/calamares/` for module configuration errors, such as incorrect branding paths or module ordering, which can prevent the installer from displaying correctly or completing installation.
+- For installer issues, check the native installer files under `profile/airootfs/opt/mulios-installer/` and review `/var/log/mulios/install.log`.
 - For KDE configuration issues, confirm default configuration files are placed in the correct user/system configuration paths expected by Plasma.
 - When in doubt, compare your change against a clean checkout of `main` to identify exactly what was modified.
 
