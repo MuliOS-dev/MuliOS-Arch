@@ -16,7 +16,6 @@ The project includes:
 * Custom ArchISO configuration
 * KDE Plasma desktop environment
 * MuliOS branding and customization
-* Calamares installer integration
 * MuliOS system tools
 * Custom system configurations
 
@@ -27,7 +26,7 @@ The project includes:
 | Base Distribution | Arch Linux |
 | ISO Builder | ArchISO |
 | Desktop Environment | KDE Plasma |
-| Installer | Calamares |
+| Installer | MuliOS Installer |
 | Architecture | x86_64 |
 | Init System | systemd |
 | Package Manager | pacman |
