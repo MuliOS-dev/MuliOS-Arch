@@ -1,0 +1,14 @@
+base
+linux
+linux-firmware
+mkinitcpio
+mkinitcpio-archiso
+arch-install-scripts
+cryptsetup
+rsync
+grub
+efibootmgr
+btrfs-progs
+e2fsprogs
+xfsprogs
+dosfstools
