@@ -22,9 +22,8 @@ MuliOS-Arch is not a fork of Arch Linux. It is a **custom ArchISO profile and co
                         ▼
 ┌─────────────────────────────────────────────┐
 │         MuliOS Configuration Layer            │
-│   configs/ (kde, plymouth, fastfetch,        │
-│   native installer + packages/ (mulios-tools,       │
-│   mulios-installer)                          │
+│   profile/airootfs + packages/               │
+│   (installer, tools, desktop configuration)  │
 └───────────────────────┬───────────────────────┘
                         │
                         ▼
@@ -50,12 +49,7 @@ The `profile/` directory is a standard [ArchISO](https://wiki.archlinux.org/titl
 
 ## KDE Configuration
 
-MuliOS-Arch uses **KDE Plasma** as its desktop environment. Configuration specific to MuliOS's desktop experience lives in `configs/kde/`, and is applied to the live environment via the `airootfs/` overlay (and/or installed onto the target system through the installer, depending on how the build wires these files together). This includes default settings and desktop behavior intended to give MuliOS a consistent look and feel out of the box.
-
-Two supporting components round out the desktop experience:
-
-- **Plymouth** (`configs/plymouth/`) — controls the boot splash screen shown while the system starts, before the desktop environment loads.
-- **Fastfetch** (`configs/fastfetch/`) — configures the system information summary displayed in the terminal, typically used to show branding and system details at a glance.
+MuliOS-Arch uses **KDE Plasma** as its desktop environment. Desktop configuration and MuliOS defaults are shipped through the `profile/airootfs/` overlay and the package list. KDE Plasma is the only desktop environment installed by the native installer.
 
 ## MuliOS Installer
 
@@ -69,10 +63,9 @@ MuliOS-Arch uses the native PySide6 MuliOS Installer under `profile/airootfs/opt
 
 Branding (logos, color schemes, wallpapers, and related assets) is applied across multiple layers of the system rather than in a single location:
 
-- Boot-time branding is defined through **Plymouth** (`configs/plymouth/`) and the bootloader configuration (`grub/`, `syslinux/`, `efiboot/`).
-- Desktop branding is defined through **KDE configuration** (`configs/kde/`).
-- Installer UI and behavior are defined by the native installer under `profile/airootfs/opt/mulios-installer/`.
-- Terminal branding is defined through **Fastfetch** (`configs/fastfetch/`).
+- Boot and desktop configuration is defined through the ArchISO profile and `profile/airootfs/`.
+- Installer UI and behavior are defined by `profile/airootfs/opt/mulios-installer/`.
+- MuliOS command-line tools are provided through `packages/mulios-tools/`.
 
 This layered approach means branding changes are made at the component responsible for that part of the user experience, rather than in a single central branding module.
 
