@@ -15,11 +15,6 @@ MuliOS-Arch/
 │   ├── grub/           # GRUB bootloader configuration
 │   └── syslinux/       # BIOS (legacy) bootloader configuration
 │
-├── configs/            # MuliOS-specific configuration shipped on the live/installed system
-│   ├── kde/            # KDE Plasma configuration and defaults
-│   ├── plymouth/       # Boot splash theme configuration
-│   └── fastfetch/      # Fastfetch system information tool configuration
-│
 ├── packages/            # MuliOS-authored packages
 │   ├── mulios-installer/ # Installer-related package(s)
 │   └── mulios-tools/     # MuliOS-specific command-line tools and utilities
