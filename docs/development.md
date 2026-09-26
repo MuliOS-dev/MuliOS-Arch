@@ -44,7 +44,7 @@ MuliOS-Arch assembles a working Arch Linux live/install image by combining sever
    - `kde/` configures the KDE Plasma desktop defaults.
    - `plymouth/` configures the boot splash shown during startup.
    - `fastfetch/` configures the system information banner shown in the terminal.
-   - `calamares/` configures the graphical installer, including branding, modules, and installation steps.
+   - `profile/airootfs/opt/mulios-installer/` contains the native installer.
 
 4. **`packages/`** contains MuliOS-authored software:
    - `mulios-tools/` provides MuliOS-specific command-line utilities included in the image.
@@ -66,7 +66,7 @@ A typical development cycle looks like this:
 
 3. **Rebuild the ISO** using `scripts/build.sh` (see [`building.md`](building.md)) to confirm your change is picked up correctly and does not break the build.
 
-4. **Test the change** by booting the resulting ISO in a virtual machine, and, if relevant, walking through the Calamares installation flow.
+4. **Test the change** by booting the resulting ISO in a virtual machine, and, if relevant, walking through the MuliOS Installer flow.
 
 5. **Iterate** on the change locally, rebuilding and retesting as needed.
 
@@ -78,7 +78,7 @@ Because MuliOS-Arch produces a bootable system image, changes cannot be verified
 
 1. **Local build** — confirm the ISO builds successfully with `scripts/build.sh` after your change.
 2. **Local boot test** — boot the ISO in a virtual machine (e.g., QEMU or VirtualBox) to confirm the live environment starts and behaves as expected.
-3. **Functional test** — exercise the specific area you changed (e.g., verify a KDE setting, confirm Plymouth displays correctly, run a `mulios-tools` command, or step through Calamares if the installer was affected).
+3. **Functional test** — exercise the specific area you changed (e.g., verify a KDE setting, confirm Plymouth displays correctly, run a `mulios-tools` command, or step through the MuliOS Installer if the installer was affected).
 4. **Pull request review** — maintainers review the change and may request additional testing or rebuilds before merging.
 5. **Integration** — once merged, the change becomes part of the next build produced from `main`, which may later be included in a tagged release (see [`release-process.md`](release-process.md)).
 
