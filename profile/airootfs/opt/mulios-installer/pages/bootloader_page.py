@@ -1,6 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QComboBox
-
-from config.settings import BOOTLOADERS
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
 
 
 class BootloaderPage(QWidget):
@@ -15,18 +13,17 @@ class BootloaderPage(QWidget):
         layout.addWidget(title)
 
         subtitle = QLabel(
-            "GRUB works everywhere (BIOS and UEFI). Systemd-boot and Limine "
-            "are lighter but UEFI-only."
+            "MuliOS installs GRUB as its bootloader."
         )
         subtitle.setObjectName("SubtitleLabel")
         subtitle.setWordWrap(True)
         layout.addWidget(subtitle)
 
-        self.bootloader_combo = QComboBox()
-        self.bootloader_combo.addItems(BOOTLOADERS)
-        layout.addWidget(self.bootloader_combo)
+        card = QLabel("GRUB")
+        card.setObjectName("FixedChoiceCard")
+        layout.addWidget(card)
 
         layout.addStretch()
 
     def selected_bootloader(self) -> str:
-        return self.bootloader_combo.currentText()
+        return "grub"
