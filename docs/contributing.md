@@ -50,9 +50,9 @@ Example of a good commit message:
 
 ```
 
-The branding configuration referenced a logo path that did not
-match the file shipped in configs/calamares/branding. Updated
-the path so the installer displays the correct MuliOS logo.
+The installer referenced a logo path that did not match the file
+shipped in the native installer assets. Updated the path so the
+installer displays the correct MuliOS logo.
 
 Fixes #58
 ```
