@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=MuliOS Task Manager
 Comment=Monitor system resources and processes
-Exec=electron /opt/taskmanager
+Exec=python3 /opt/taskmanager/main.py
 Icon=utilities-system-monitor
 Terminal=false
 Type=Application
