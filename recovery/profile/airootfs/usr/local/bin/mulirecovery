@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT=/mnt/mulios
+TRANSACTION=
+CRYPT_NAME=
+
+say() {
+    printf '\n%s\n' "$*"
+}
+
+progress() {
+    local n="$1"
+    local width=36
+    local filled=$((n * width / 100))
+    local empty=$((width - filled))
+    printf '\r[%s%s] %3d%%' "$(printf '%*s' "$filled" '' | tr ' ' '#')" "$(printf '%*s' "$empty" '' | tr ' ' '.')" "$n"
+}
+
+fail() {
+    say "MuliRecovery: $*"
+    say "The system was not rebooted."
+    exec bash
+}
+
+cleanup() {
+    sync || true
+    umount -R "$ROOT" 2>/dev/null || true
+    umount /run/mulirecovery-rootfs 2>/dev/null || true
+    umount /run/mulirecovery-iso 2>/dev/null || true
+    if [[ -n "$CRYPT_NAME" ]]; then
+        cryptsetup close "$CRYPT_NAME" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+
+find_transaction() {
+    for path in "$ROOT/var/lib/mupdate/transaction/transaction" "$ROOT/var/lib/mupdate/transaction"/*/transaction; do
+        if [[ -f "$path" ]]; then
+            TRANSACTION="$path"
+            return 0
+        fi
+    done
+    return 1
+}
+
+mount_root() {
+    mkdir -p "$ROOT"
+
+    while IFS= read -r dev; do
+        [[ -n "$dev" ]] || continue
+        type="$(blkid -s TYPE -o value "$dev" 2>/dev/null || true)"
+        case "$type" in
+            ext4|btrfs|xfs)
+                if mount -t "$type" "$dev" "$ROOT" 2>/dev/null && find_transaction; then
+                    return 0
+                fi
+                umount "$ROOT" 2>/dev/null || true
+                ;;
+        esac
+    done < <(blkid -o device 2>/dev/null || true)
+
+    while IFS= read -r dev; do
+        [[ -n "$dev" ]] || continue
+        if cryptsetup luksOpen "$dev" mulirecovery-root; then
+            CRYPT_NAME=mulirecovery-root
+            for type in ext4 btrfs xfs; do
+                if mount -t "$type" /dev/mapper/mulirecovery-root "$ROOT" 2>/dev/null && find_transaction; then
+                    return 0
+                fi
+                umount "$ROOT" 2>/dev/null || true
+            done
+            cryptsetup close "$CRYPT_NAME" 2>/dev/null || true
+            CRYPT_NAME=
+        fi
+    done < <(blkid -t TYPE=crypto_LUKS -o device 2>/dev/null || true)
+
+    return 1
+}
+
+mount_ota() {
+    mkdir -p /run/mulirecovery-iso
+    mount -o loop,ro "$ROOT$MUPDATE_ISO" /run/mulirecovery-iso
+
+    if [[ -f /run/mulirecovery-iso/arch/x86_64/airootfs.sfs ]]; then
+        echo /run/mulirecovery-iso/arch/x86_64/airootfs.sfs
+    elif [[ -f /run/mulirecovery-iso/mulios/x86_64/airootfs.sfs ]]; then
+        echo /run/mulirecovery-iso/mulios/x86_64/airootfs.sfs
+    else
+        return 1
+    fi
+}
+
+merge_release() {
+    local sfs="$1"
+    mkdir -p /run/mulirecovery-rootfs
+    mount -o loop,ro "$sfs" /run/mulirecovery-rootfs
+
+    rsync -aHAX --numeric-ids --delete \
+        --exclude=/home/ \
+        --exclude=/root/ \
+        --exclude=/etc/ \
+        --exclude=/var/lib/ \
+        --exclude=/boot/ \
+        --exclude=/efi/ \
+        --exclude=/srv/ \
+        --exclude=/opt/ \
+        --exclude=/dev/ \
+        --exclude=/proc/ \
+        --exclude=/sys/ \
+        --exclude=/run/ \
+        --exclude=/tmp/ \
+        --exclude=/mnt/ \
+        --exclude=/media/ \
+        --exclude=/lost+found \
+        /run/mulirecovery-rootfs/ "$ROOT/"
+}
+
+restore_backups() {
+    if [[ -n "$MUPDATE_BACKUP" && -f "$ROOT$MUPDATE_BACKUP" ]]; then
+        tar --acls --xattrs --numeric-owner -xzf "$ROOT$MUPDATE_BACKUP" -C "$ROOT"
+    fi
+
+    if [[ -n "$MUPDATE_CONFIG_BACKUP" && -f "$ROOT$MUPDATE_CONFIG_BACKUP" ]]; then
+        tar --acls --xattrs --numeric-owner -xzf "$ROOT$MUPDATE_CONFIG_BACKUP" -C "$ROOT"
+    fi
+}
+
+rebuild_boot() {
+    arch-chroot "$ROOT" mkinitcpio -P
+    if [[ -x "$ROOT/usr/bin/grub-mkconfig" ]]; then
+        arch-chroot "$ROOT" grub-mkconfig -o /boot/grub/grub.cfg
+    fi
+}
+
+main() {
+    clear
+    say "MuliRecovery 1.0.0"
+    say "Offline MuliOS recovery and OTA merge"
+
+    progress 5
+    mount_root || fail "No MUpdate transaction was found."
+
+    progress 20
+    source "$TRANSACTION"
+
+    [[ "$MUPDATE_TRANSACTION_VERSION" == "1" ]] || fail "Unsupported transaction version."
+    [[ -f "$ROOT$MUPDATE_ISO" ]] || fail "Staged OTA ISO is missing."
+    [[ -f "$ROOT$MUPDATE_BACKUP" ]] || fail "User backup is missing."
+
+    progress 35
+    actual="$(sha256sum "$ROOT$MUPDATE_ISO" | awk '{print $1}')"
+    [[ "$actual" == "$MUPDATE_ISO_SHA256" ]] || fail "OTA ISO checksum verification failed."
+
+    progress 45
+    sfs="$(mount_ota)" || fail "The OTA ISO does not contain a MuliOS root filesystem."
+
+    progress 60
+    merge_release "$sfs"
+
+    progress 75
+    restore_backups
+
+    progress 88
+    rebuild_boot
+
+    progress 96
+    rm -rf "$ROOT/var/lib/mupdate/transaction/$TRANSACTION_ID" 2>/dev/null || true
+    rm -f "$ROOT/var/lib/mupdate/transaction/transaction" 2>/dev/null || true
+
+    progress 100
+    printf '\n'
+    say "Recovery completed successfully."
+    say "The updated MuliOS installation is ready to boot."
+    sleep 3
+    reboot
+}
+
+main "$@"
