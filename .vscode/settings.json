@@ -1,5 +1,11 @@
 {
     "code-runner.executorMap": {
         "python": "py -3 -u"
-    }
+    },
+    "code-runner.executorMapByFileExtension": {
+        ".py": "py -3 -u"
+    },
+    "code-runner.fileDirectoryAsCwd": true,
+    "python.defaultInterpreterPath": "python.exe",
+    "python.terminal.activateEnvironment": true
 }
