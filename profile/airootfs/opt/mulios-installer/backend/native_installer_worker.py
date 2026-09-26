@@ -1822,13 +1822,6 @@ class InstallWorker(QThread):
                 ]
             )
 
-            self.chroot(
-                [
-                    "pacman-key",
-                    "--list-keys",
-                ]
-            )
-
             self.log(
                 "Synchronizing target package databases..."
             )
@@ -2089,16 +2082,8 @@ class InstallWorker(QThread):
     # ------------------------------------------------------------------
 
     def configure_desktop(self):
-        desktop = str(
-            self.state.get(
-                "desktop_environment",
-                "kde",
-            )
-        ).strip().lower()
-
-        # The live ISO boots with SDDM and contains its live-user
-        # autologin configuration. Never carry that configuration into
-        # the installed system.
+        self.log("Installing KDE Plasma...")
+        
         for path in (
             self.target / "etc/sddm.conf",
             self.target / "etc/sddm.conf.d/autologin.conf",
@@ -2106,88 +2091,16 @@ class InstallWorker(QThread):
             if path.exists() or path.is_symlink():
                 path.unlink()
 
-        display_managers = (
+        for manager in ("sddm", "lightdm", "gdm"):
+            self.chroot(["systemctl", "disable", manager], check=False)
+
+        self.pacman_install([
+            "plasma-desktop",
             "sddm",
-            "lightdm",
-            "gdm",
-        )
+            "dolphin",
+        ])
 
-        for manager in display_managers:
-            self.chroot(
-                ["systemctl", "disable", manager],
-                check=False,
-            )
-
-        if desktop == "kde":
-            packages = [
-                "plasma-desktop",
-                "sddm",
-                "dolphin",
-            ]
-            service = "sddm"
-
-        elif desktop in {
-            "xfce",
-            "xfce4",
-        }:
-            packages = [
-                "xfce4",
-                "xfce4-goodies",
-                "lightdm",
-                "lightdm-gtk-greeter",
-            ]
-            service = "lightdm"
-
-        elif desktop == "gnome":
-            packages = [
-                "gnome",
-                "gdm",
-            ]
-            service = "gdm"
-
-        elif desktop == "cinnamon":
-            packages = [
-                "cinnamon",
-                "lightdm",
-                "lightdm-gtk-greeter",
-            ]
-            service = "lightdm"
-
-        elif desktop == "budgie":
-            packages = [
-                "budgie-desktop",
-                "lightdm",
-                "lightdm-gtk-greeter",
-            ]
-            service = "lightdm"
-
-        elif desktop in {
-            "",
-            "none",
-            "none / minimal",
-        }:
-            self.log(
-                "No desktop environment selected."
-            )
-            self.progress.emit(70)
-            return
-
-        else:
-            raise InstallError(
-                "Unsupported desktop environment: "
-                f"{desktop}"
-            )
-
-        self.pacman_install(packages)
-
-        self.chroot(
-            [
-                "systemctl",
-                "enable",
-                service,
-            ]
-        )
-
+        self.chroot(["systemctl", "enable", "sddm"])
         self.progress.emit(70)
 
     # ------------------------------------------------------------------
@@ -2603,339 +2516,67 @@ class InstallWorker(QThread):
         return " ".join(args)
 
     # ------------------------------------------------------------------
-    # Bootloaders
+    # Bootloader
     # ------------------------------------------------------------------
 
     def configure_grub(self):
-        self.log(
-            "Installing GRUB..."
-        )
+        self.log("Installing GRUB...")
 
-        self.pacman_install(
-            [
-                "grub",
-                "efibootmgr",
-            ]
-        )
+        self.pacman_install([
+            "grub",
+            "efibootmgr",
+        ])
 
-        self.chroot(
-            [
-                "grub-install",
-                "--target=x86_64-efi",
-                "--efi-directory=/boot",
-                "--bootloader-id=MuliOS",
-                "--removable",
-                "--recheck",
-            ]
-        )
+        self.chroot([
+            "grub-install",
+            "--target=x86_64-efi",
+            "--efi-directory=/boot",
+            "--bootloader-id=MuliOS",
+            "--removable",
+            "--no-nvram",
+            "--recheck",
+        ])
+
+        fallback = self.target / "boot/EFI/BOOT/BOOTX64.EFI"
+        if not fallback.is_file():
+            raise InstallError(
+                "GRUB fallback EFI loader was not installed at "
+                "/boot/EFI/BOOT/BOOTX64.EFI."
+            )
 
         cmdline = self.kernel_cmdline()
-
-        grub_default = (
-            self.target /
-            "etc/default/grub"
-        )
+        grub_default = self.target / "etc/default/grub"
 
         if grub_default.exists():
             text = grub_default.read_text(
                 encoding="utf-8",
                 errors="replace",
             )
-
-            line = (
-                f'GRUB_CMDLINE_LINUX_DEFAULT='
-                f'"{cmdline}"'
-            )
-
+            line = f'GRUB_CMDLINE_LINUX_DEFAULT="{cmdline}"'
             text = re.sub(
-                r'(?m)^#?\s*'
-                r'GRUB_CMDLINE_LINUX_DEFAULT=.*$',
+                r'(?m)^#?\s*GRUB_CMDLINE_LINUX_DEFAULT=.*$',
                 line,
                 text,
             )
+            grub_default.write_text(text, encoding="utf-8")
 
-            grub_default.write_text(
-                text,
-                encoding="utf-8",
-            )
+        self.chroot([
+            "grub-mkconfig",
+            "-o",
+            "/boot/grub/grub.cfg",
+        ])
 
-        self.chroot(
-            [
-                "grub-mkconfig",
-                "-o",
-                "/boot/grub/grub.cfg",
-            ]
-        )
-
-    def configure_systemd_boot(self):
-        self.log(
-            "Installing systemd-boot..."
-        )
-
-        self.pacman_install(
-            ["systemd"]
-        )
-
-        # Install systemd-boot from the live UEFI environment rather than
-        # inside arch-chroot. bootctl must be able to access the live
-        # efivarfs so it can register the firmware boot entry.
-        self.run_command(
-            [
-                "bootctl",
-                "--esp-path",
-                str(self.target / "boot"),
-                "--boot-path",
-                str(self.target / "boot"),
-                "--root",
-                str(self.target),
-                "install",
-            ]
-        )
-
-        kernel_name, initramfs_name = (
-            self.kernel_paths()
-        )
-
-        kernel = (
-            self.target /
-            "boot" /
-            kernel_name
-        )
-
-        initramfs = (
-            self.target /
-            "boot" /
-            initramfs_name
-        )
-
-        if not kernel.exists():
+        grub_cfg = self.target / "boot/grub/grub.cfg"
+        if not grub_cfg.is_file() or grub_cfg.stat().st_size == 0:
             raise InstallError(
-                f"Kernel image not found: {kernel_name}"
+                "GRUB configuration was not generated."
             )
 
-        if not initramfs.exists():
-            raise InstallError(
-                f"Initramfs not found: {initramfs_name}"
-            )
-
-        loader_dir = (
-            self.target /
-            "boot/loader"
-        )
-
-        entries_dir = (
-            loader_dir /
-            "entries"
-        )
-
-        entries_dir.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        self.write_file(
-            loader_dir /
-            "loader.conf",
-            "default mulios.conf\n"
-            "timeout 5\n",
-        )
-
-        cmdline = self.kernel_cmdline()
-
-        entry = (
-            "title MuliOS\n"
-            f"linux /{kernel_name}\n"
-            f"initrd /{initramfs_name}\n"
-            f"options {cmdline}\n"
-        )
-
-        self.write_file(
-            entries_dir /
-            "mulios.conf",
-            entry,
-        )
-
-    def find_limine_binary(self):
-        candidates = [
-            self.target /
-            "usr/share/limine/BOOTX64.EFI",
-            self.target /
-            "usr/lib/limine/BOOTX64.EFI",
-        ]
-
-        for candidate in candidates:
-            if candidate.exists():
-                return candidate
-
-        result = self.chroot(
-            [
-                "bash",
-                "-c",
-                "find /usr/share /usr/lib "
-                "-type f \\( "
-                "-iname 'BOOTX64.EFI' -o "
-                "-iname 'limine*.efi' "
-                "\\) 2>/dev/null",
-            ],
-            check=False,
-        )
-
-        for line in result.splitlines():
-            line = line.strip()
-
-            if not line:
-                continue
-
-            candidate = (
-                self.target /
-                line.lstrip("/")
-            )
-
-            if candidate.exists():
-                return candidate
-
-        return None
-
-    def configure_limine(self):
-        self.log(
-            "Installing Limine..."
-        )
-
-        self.pacman_install(
-            ["limine"]
-        )
-
-        limine_binary = (
-            self.find_limine_binary()
-        )
-
-        if limine_binary is None:
-            raise InstallError(
-                "Limine EFI executable was not found."
-            )
-
-        efi_dir = (
-            self.target /
-            "boot/EFI/BOOT"
-        )
-
-        efi_dir.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        shutil.copy2(
-            limine_binary,
-            efi_dir /
-            "BOOTX64.EFI",
-        )
-
-        kernel_name, initramfs_name = (
-            self.kernel_paths()
-        )
-
-        cmdline = self.kernel_cmdline()
-
-        config = (
-            "timeout: 5\n"
-            "interface_branding: MuliOS\n"
-            "\n"
-            "/MuliOS\n"
-            "    protocol: linux\n"
-            f"    kernel_path: "
-            f"boot():/{kernel_name}\n"
-            f"    kernel_cmdline: {cmdline}\n"
-            f"    module_path: "
-            f"boot():/{initramfs_name}\n"
-        )
-
-        self.write_file(
-            self.target /
-            "boot/limine.conf",
-            config,
-        )
-
-    def configure_efistub(self):
-        self.log(
-            "Configuring EFI stub..."
-        )
-
-        self.pacman_install(
-            ["efibootmgr"]
-        )
-
-        kernel_name, initramfs_name = (
-            self.kernel_paths()
-        )
-
-        kernel = (
-            self.target /
-            "boot" /
-            kernel_name
-        )
-
-        if not kernel.exists():
-            raise InstallError(
-                f"Kernel image not found: {kernel_name}"
-            )
-
-        cmdline = (
-            self.kernel_cmdline() +
-            f" initrd=\\{initramfs_name}"
-        )
-
-        self.chroot(
-            [
-                "efibootmgr",
-                "-c",
-                "-d",
-                self.selected_disk,
-                "-p",
-                "1",
-                "-L",
-                "MuliOS",
-                "-l",
-                "\\" + kernel_name,
-                "-u",
-                cmdline,
-            ]
-        )
+        self.log("GRUB fallback loader and configuration verified.")
 
     def configure_bootloader(self):
-        bootloader = str(
-            self.state.get(
-                "bootloader",
-                "Grub",
-            )
-        ).strip().lower()
-
-        self.log(
-            f"Selected bootloader: {bootloader}"
-        )
-
-        if bootloader == "grub":
-            self.configure_grub()
-
-        elif bootloader in {
-            "systemd-boot",
-            "systemd boot",
-        }:
-            self.configure_systemd_boot()
-
-        elif bootloader == "limine":
-            self.configure_limine()
-
-        elif bootloader in {
-            "efistub",
-            "efi stub",
-        }:
-            self.configure_efistub()
-
-        else:
-            raise InstallError(
-                f"Unsupported bootloader: {bootloader}"
-            )
-
+        self.log("Bootloader is fixed to GRUB.")
+        self.configure_grub()
         self.progress.emit(90)
 
     # ------------------------------------------------------------------
