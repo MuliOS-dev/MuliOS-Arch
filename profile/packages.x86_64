@@ -87,6 +87,7 @@ rsync
 livecd-sounds
 # MuliOS Installer runtime
 python
+python-psutil
 pyside6
 qt6-webengine
 jq
