@@ -1,20 +1,30 @@
-"""Visual theme for the native MuliOS installer."""
+"""
+theme.py - MuliOS Arch installer visual theme.
 
-PRIMARY = "#319cc8"
-BG_DARKEST = "rgba(13, 16, 21, 205)"
-BG_DARK = "rgba(20, 23, 29, 185)"
-BG_PANEL = "rgba(36, 40, 48, 205)"
-BORDER = "rgba(255, 255, 255, 32)"
+Per spec: dark gray, minimalistic, MuliOS/Windows 11 Setup/Fedora
+Installer quality. Accent colors used ONLY for primary actions,
+progress, selection highlights, and icons - never as general decoration.
+"""
+
+PRIMARY = "#319cc8"     # Continue/Install buttons, progress, selection
+SECONDARY = "#1748a0"   # pressed states, secondary accents, links
+
+BG_DARKEST = "#1b1d21"     # sidebar
+BG_DARK = "#232529"        # main window background
+BG_PANEL = "#2a2d32"       # cards, inputs
+BORDER = "#3a3d43"
+
 TEXT_PRIMARY = "#f2f3f5"
 TEXT_SECONDARY = "#a7abb3"
 TEXT_DISABLED = "#5c6066"
-RADIUS = "12px"
+
+RADIUS = "8px"
 
 
 def stylesheet() -> str:
     return f"""
     QWidget {{
-        background: transparent;
+        background-color: {BG_DARK};
         color: {TEXT_PRIMARY};
         font-family: "Inter", "Ubuntu", "Cantarell", sans-serif;
         font-size: 10.5pt;
@@ -22,8 +32,6 @@ def stylesheet() -> str:
 
     #Sidebar {{
         background-color: {BG_DARKEST};
-        border: 1px solid {BORDER};
-        border-radius: {RADIUS};
     }}
     #Sidebar QLabel {{
         color: {TEXT_SECONDARY};
@@ -39,58 +47,36 @@ def stylesheet() -> str:
 
     #ContentPanel {{
         background-color: {BG_DARK};
-        border: 1px solid {BORDER};
-        border-radius: {RADIUS};
     }}
     #NavBar {{
-        background-color: rgba(20, 23, 29, 180);
+        background-color: {BG_DARK};
         border-top: 1px solid {BORDER};
-        border-bottom-left-radius: {RADIUS};
-        border-bottom-right-radius: {RADIUS};
     }}
 
     QLabel#TitleLabel {{
         font-size: 19pt;
         font-weight: 600;
         color: {TEXT_PRIMARY};
-        background: transparent;
     }}
     QLabel#SubtitleLabel {{
         font-size: 10.5pt;
         color: {TEXT_SECONDARY};
-        background: transparent;
     }}
     QLabel#SectionLabel {{
         font-size: 10.5pt;
         font-weight: 600;
         color: {TEXT_PRIMARY};
-        background: transparent;
-    }}
-    QLabel#FixedChoiceCard {{
-        background: {BG_PANEL};
-        border: 1px solid {BORDER};
-        border-radius: {RADIUS};
-        padding: 18px;
-        font-size: 12pt;
-        font-weight: 600;
-    }}
-    QLabel[warning="true"] {{
-        color: #e7c46a;
-    }}
-    QLabel[error="true"] {{
-        color: #e06666;
     }}
 
     QPushButton {{
         background-color: {BG_PANEL};
         color: {TEXT_PRIMARY};
         border: 1px solid {BORDER};
-        border-radius: 9px;
+        border-radius: {RADIUS};
         padding: 8px 18px;
     }}
     QPushButton:hover {{
         border: 1px solid {PRIMARY};
-        background-color: rgba(55, 61, 72, 220);
     }}
     QPushButton#PrimaryButton {{
         background-color: {PRIMARY};
@@ -102,7 +88,7 @@ def stylesheet() -> str:
         background-color: #4bb0d6;
     }}
     QPushButton#PrimaryButton:pressed {{
-        background-color: #257b9e;
+        background-color: {SECONDARY};
         color: {TEXT_PRIMARY};
     }}
     QPushButton#PrimaryButton:disabled {{
@@ -110,14 +96,17 @@ def stylesheet() -> str:
         color: {TEXT_DISABLED};
     }}
     QPushButton#SecondaryButton {{
-        background-color: rgba(25, 28, 34, 160);
+        background-color: transparent;
+    }}
+    QPushButton#SecondaryButton:hover {{
+        background-color: #33363c;
     }}
 
     QLineEdit, QComboBox, QListWidget, QTextEdit, QSpinBox {{
-        background-color: rgba(28, 32, 39, 220);
+        background-color: {BG_PANEL};
         border: 1px solid {BORDER};
-        border-radius: 9px;
-        padding: 7px;
+        border-radius: {RADIUS};
+        padding: 6px;
         selection-background-color: {PRIMARY};
     }}
     QLineEdit:focus, QComboBox:focus, QSpinBox:focus {{
@@ -129,14 +118,13 @@ def stylesheet() -> str:
 
     QProgressBar {{
         border: 1px solid {BORDER};
-        border-radius: 8px;
+        border-radius: {RADIUS};
         text-align: center;
-        background-color: rgba(24, 27, 33, 210);
-        min-height: 12px;
+        background-color: {BG_PANEL};
     }}
     QProgressBar::chunk {{
         background-color: {PRIMARY};
-        border-radius: 7px;
+        border-radius: {RADIUS};
     }}
 
     QRadioButton, QCheckBox {{
@@ -146,7 +134,7 @@ def stylesheet() -> str:
         width: 16px; height: 16px;
         border: 1px solid {BORDER};
         border-radius: 4px;
-        background-color: rgba(28, 32, 39, 220);
+        background-color: {BG_PANEL};
     }}
     QRadioButton::indicator:checked, QCheckBox::indicator:checked {{
         background-color: {PRIMARY};
@@ -155,28 +143,33 @@ def stylesheet() -> str:
 
     QPushButton#ProfileCard, QPushButton#SelectCard {{
         background-color: {BG_PANEL};
-        border: 1px solid {BORDER};
+        border: 2px solid {BORDER};
         border-radius: 10px;
         text-align: left;
         padding: 0px;
+        font-weight: normal;
     }}
     QPushButton#ProfileCard:hover, QPushButton#SelectCard:hover {{
-        border: 1px solid {PRIMARY};
+        border: 2px solid {PRIMARY};
     }}
     QPushButton#ProfileCard:checked, QPushButton#SelectCard:checked {{
-        border: 1px solid {PRIMARY};
-        background-color: rgba(36, 51, 58, 225);
+        border: 2px solid {PRIMARY};
+        background-color: #24333a;
     }}
-    QLabel#ProfileCardIcon, QLabel#ProfileCardTitle, QLabel#ProfileCardDescription {{
+    QLabel#ProfileCardIcon {{
+        font-size: 20pt;
         background: transparent;
     }}
     QLabel#ProfileCardTitle {{
         font-size: 11.5pt;
         font-weight: 700;
+        color: {TEXT_PRIMARY};
+        background: transparent;
     }}
     QLabel#ProfileCardDescription {{
         font-size: 9pt;
         color: {TEXT_SECONDARY};
+        background: transparent;
     }}
 
     QScrollBar:vertical {{
@@ -184,7 +177,7 @@ def stylesheet() -> str:
         width: 10px;
     }}
     QScrollBar::handle:vertical {{
-        background: rgba(255,255,255,45);
+        background: {BORDER};
         border-radius: 5px;
         min-height: 24px;
     }}
