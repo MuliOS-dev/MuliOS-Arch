@@ -185,22 +185,6 @@ class MuliOSInstaller(QMainWindow):
         QApplication.instance().setStyleSheet(stylesheet())
         self._goto_step(0)
 
-    def keyPressEvent(self, event):
-        # Development/testing shortcut:
-        # Ctrl+H skips the current wizard step without running its
-        # normal validation. It never skips the installation itself.
-        if (
-            event.modifiers() == Qt.ControlModifier
-            and event.key() == Qt.Key_H
-        ):
-            idx = self.stack.currentIndex()
-
-            if idx < IDX_INSTALL:
-                self._goto_step(idx + 1)
-                return
-
-        super().keyPressEvent(event)
-
     # -- navigation ----------------------------------------------------------
 
     def _goto_step(self, index: int):
