@@ -26,7 +26,7 @@ During this phase:
 
 - Build the ISO from a clean environment using `scripts/build.sh`, following [`building.md`](building.md).
 - Boot the resulting ISO in a virtual machine to confirm the live environment starts correctly, KDE Plasma loads as expected, and Plymouth displays correctly during boot.
-- Walk through the full Calamares installation flow to confirm the installer completes successfully and produces a bootable installed system.
+- Walk through the full MuliOS Installer flow to confirm the installer completes successfully and produces a bootable installed system.
 - Verify that MuliOS tools (`mulios-tools`) function correctly in the live environment and, where applicable, after installation.
 - Test on both UEFI and legacy BIOS boot modes if possible, since bootloader configuration (`efiboot/`, `grub/`, `syslinux/`) differs between them.
 - Where feasible, test on real hardware in addition to virtual machines, since some issues (particularly around boot and firmware) do not always surface in virtualized environments.
