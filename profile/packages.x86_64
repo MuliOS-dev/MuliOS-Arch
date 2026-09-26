@@ -1,4 +1,5 @@
 # Base
+archlinux-keyring
 linux-mulios-generic-headers
 linux-mulios-generic
 base
@@ -73,6 +74,7 @@ pipewire-pulse
 wireplumber
 
 # Applications
+curl
 firefox
 kitty
 fastfetch
