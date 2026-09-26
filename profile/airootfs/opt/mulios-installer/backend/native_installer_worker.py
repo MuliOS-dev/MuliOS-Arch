@@ -1962,14 +1962,14 @@ class InstallWorker(QThread):
                 f"Username is reserved: {username}"
             )
 
-        if not password:
-            raise InstallError(
-                "User password cannot be empty."
+        if password:
+            self.log(
+                f"Creating user account: {username}"
             )
-
-        self.log(
-            f"Creating user account: {username}"
-        )
+        else:
+            self.log(
+                f"Creating user account: {username} with no password (warning accepted)."
+            )
 
         self.chroot(
             [
@@ -1983,12 +1983,18 @@ class InstallWorker(QThread):
             ]
         )
 
-        self.chroot(
-            ["chpasswd"],
-            input_text=(
-                f"{username}:{password}\n"
-            ),
-        )
+        if password:
+            self.chroot(
+                ["chpasswd"],
+                input_text=(
+                    f"{username}:{password}\n"
+                ),
+            )
+        else:
+            self.chroot(
+                ["passwd", "-d", username],
+                check=False,
+            )
 
         sudoers = (
             self.target /
