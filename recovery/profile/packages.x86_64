@@ -1,5 +1,6 @@
 linux
 systemd
+systemd-sysvcompat
 mkinitcpio
 mkinitcpio-archiso
 arch-install-scripts
