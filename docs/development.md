@@ -48,7 +48,7 @@ MuliOS-Arch assembles a working Arch Linux live/install image by combining sever
 
 4. **`packages/`** contains MuliOS-authored software:
    - `mulios-tools/` provides MuliOS-specific command-line utilities included in the image.
-   - `mulios-installer/` provides installer-related functionality used alongside or in support of Calamares.
+   - `mulios-installer/` provides installer packaging.
 
    These packages are built and included in the ISO alongside standard Arch packages listed in `packages.x86_64`.
 
