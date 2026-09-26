@@ -12,10 +12,11 @@ from pathlib import Path
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-    QStackedWidget, QLabel, QPushButton, QMessageBox
+    QStackedWidget, QLabel, QPushButton, QMessageBox, QStackedLayout
 )
 from PySide6.QtGui import QPixmap, QIcon
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QGraphicsBlurEffect
 
 from theme import stylesheet
 from config.settings import LOGO_PATH, APP_NAME, DISTRO_NAME, DEFAULT_PROFILE_SLUG
@@ -117,11 +118,33 @@ class MuliOSInstaller(QMainWindow):
         if os.path.exists(LOGO_PATH):
             self.setWindowIcon(QIcon(LOGO_PATH))
 
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+
         central = QWidget()
         self.setCentralWidget(central)
-        root_layout = QHBoxLayout(central)
-        root_layout.setContentsMargins(0, 0, 0, 0)
-        root_layout.setSpacing(0)
+
+        layers = QStackedLayout(central)
+        layers.setStackingMode(QStackedLayout.StackAll)
+
+        background = QLabel()
+        background.setScaledContents(True)
+        background_path = "/usr/share/wallpapers/MuliOS/wallpaper.png"
+
+        if os.path.exists(background_path):
+            background.setPixmap(QPixmap(background_path))
+            blur = QGraphicsBlurEffect(background)
+            blur.setBlurRadius(24)
+            background.setGraphicsEffect(blur)
+
+        layers.addWidget(background)
+
+        foreground = QWidget()
+        foreground.setAttribute(Qt.WA_TranslucentBackground, True)
+        layers.addWidget(foreground)
+
+        root_layout = QHBoxLayout(foreground)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(10)
 
         self.sidebar = Sidebar()
         root_layout.addWidget(self.sidebar)
