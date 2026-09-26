@@ -16,7 +16,6 @@ MuliOS-Arch/
 │   └── syslinux/       # BIOS (legacy) bootloader configuration
 │
 ├── configs/            # MuliOS-specific configuration shipped on the live/installed system
-│   ├── calamares/      # Calamares installer configuration and branding
 │   ├── kde/            # KDE Plasma configuration and defaults
 │   ├── plymouth/       # Boot splash theme configuration
 │   └── fastfetch/      # Fastfetch system information tool configuration
