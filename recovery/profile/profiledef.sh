@@ -30,5 +30,4 @@ airootfs_image_tool_options=(
 
 file_permissions=(
   ["/usr/local/bin/mulirecovery"]="0:0:755"
-  ["/sbin/init"]="0:0:755"
 )
