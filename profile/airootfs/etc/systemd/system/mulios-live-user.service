@@ -1,11 +1,11 @@
 [Unit]
 Description=Create MuliOS live user
-Before=sddm.service
-After=local-fs.target
+After=systemd-tmpfiles-setup.service
+Before=display-manager.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/bash -c 'if ! id liveuser >/dev/null 2>&1; then useradd -m -G wheel,audio,video,network -s /bin/bash liveuser && echo "liveuser:123" | chpasswd; fi'
+ExecStart=/usr/bin/bash -c 'if ! id liveuser >/dev/null 2>&1; then useradd -m -G wheel,audio,video,network -s /bin/bash liveuser; fi; passwd -d liveuser'
 RemainAfterExit=yes
 
 [Install]

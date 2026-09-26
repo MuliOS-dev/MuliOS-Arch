@@ -20,6 +20,9 @@ progress() {
 fail() {
     say "MuliRecovery: $*"
     say "The system was not rebooted."
+    say ""
+    say "Press Enter to open a recovery shell."
+    read -r
     exec bash
 }
 
@@ -156,8 +159,8 @@ rebuild_boot() {
 
 main() {
     clear
-    say "MuliRecovery"
-    say "Offline MuliOS recovery and OTA merge"
+    printf '\033[2J\033[H'
+    printf '\nLoading Recovery\n\n'
 
     progress 5
     mount_root || fail "No MUpdate transaction was found."

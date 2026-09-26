@@ -1948,7 +1948,6 @@ class InstallWorker(QThread):
         else:
             self.chroot(
                 ["passwd", "-d", username],
-                check=False,
             )
 
         sudoers = (

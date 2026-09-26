@@ -34,26 +34,17 @@ gptfdisk
 alsa-utils
 sof-firmware
 usbutils
-usb_modeswitch
-usbmuxd
-bolt
 iw
 iwd
-wpa_supplicant
 wireless-regdb
-wireless_tools
 
 # Networking
 networkmanager
-network-manager-applet
 plasma-nm
 systemd-resolvconf
-dhcpcd
-modemmanager
 
 # Graphics
 xorg-server
-xorg-xinit
 mesa
 vulkan-radeon
 vulkan-intel
@@ -75,17 +66,14 @@ wireplumber
 
 # Applications
 curl
-firefox
 kitty
 fastfetch
 zsh
 git
 nano
-vim
 
 # Fonts
 noto-fonts
-noto-fonts-cjk
 noto-fonts-emoji
 ttf-dejavu
 terminus-font
@@ -93,17 +81,14 @@ terminus-font
 # Live utilities
 sudo
 less
-man-db
-man-pages
-openssh
 rsync
-qemu-guest-agent
 
 # MuliOS
 livecd-sounds
 # MuliOS Installer runtime
 python
 pyside6
+qt6-webengine
 jq
 unzip
 p7zip
