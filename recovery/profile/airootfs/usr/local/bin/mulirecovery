@@ -127,6 +127,7 @@ restore_backups() {
 }
 
 rebuild_boot() {
+    arch-chroot "$ROOT" mount /boot 2>/dev/null || true
     arch-chroot "$ROOT" mkinitcpio -P
     if [[ -x "$ROOT/usr/bin/grub-mkconfig" ]]; then
         arch-chroot "$ROOT" grub-mkconfig -o /boot/grub/grub.cfg
