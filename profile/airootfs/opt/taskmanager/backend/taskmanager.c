@@ -26,6 +26,12 @@ static double old_time;
 
 static void stop_server(int sig) { (void)sig; running = 0; }
 
+static double monotonic_seconds(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return 0.0;
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1000000000.0;
+}
+
 static void add(char **p, size_t *left, const char *fmt, ...) {
     if (!*p || *left < 2) return;
     va_list ap; va_start(ap, fmt);
@@ -150,7 +156,8 @@ static void disks(char **p,size_t *left) {
             unsigned long long size=(unsigned long long)st.f_blocks*st.f_frsize;
             unsigned long long freeb=(unsigned long long)st.f_bfree*st.f_frsize;
             unsigned long long used=size>freeb?size-freeb:0;
-            if(!first) add(p,left,","); first=0;
+            if(!first) add(p,left,",");
+            first=0;
             add(p,left,"{" Q "mount" Q ":"); json_str(p,left,m->mnt_dir);
             add(p,left,"," Q "fs" Q ":"); json_str(p,left,m->mnt_type);
             add(p,left,"," Q "type" Q ":"); json_str(p,left,m->mnt_fsname);
@@ -167,7 +174,8 @@ static void disks(char **p,size_t *left) {
         while(fgets(line,sizeof line,ls)) {
             int n=sscanf(line,"%63s %llu %127s %63s",name,&size,vendor,tran);
             if(n<2) continue;
-            if(!first) add(p,left,","); first=0;
+            if(!first) add(p,left,",");
+            first=0;
             char path[128]; snprintf(path,sizeof path,"/dev/%s",name);
             add(p,left,"{" Q "name" Q ":"); json_str(p,left,path);
             add(p,left,"," Q "size" Q ":%llu," Q "vendor" Q ":",size);
@@ -192,7 +200,8 @@ static void network(char **p,size_t *left) {
             if(sscanf(c+1," %llu %*u %*u %*u %*u %*u %*u %*u %llu",&a,&b)!=2) continue;
             int internal=!strcmp(iface,"lo");
             if(!internal) { if(!primary[0]) snprintf(primary,sizeof primary,"%s",iface); rx+=a; tx+=b; }
-            if(!first) add(p,left,","); first=0;
+            if(!first) add(p,left,",");
+            first=0;
             add(p,left,"{" Q "iface" Q ":"); json_str(p,left,iface);
             add(p,left,"," Q "ifaceName" Q ":"); json_str(p,left,iface);
             add(p,left,"," Q "internal" Q ":%s," Q "operstate" Q ":" Q "up" Q ","
@@ -242,7 +251,8 @@ static void processes(char **p,size_t *left) {
             fclose(f);
         }
         state[strcspn(state,"\r\n")]=0;
-        if(!first)add(p,left,","); first=0;
+        if(!first)add(p,left,",");
+        first=0;
         add(p,left,"{" Q "pid" Q ":%ld," Q "name" Q ":",pid);json_str(p,left,name);
         add(p,left,"," Q "user" Q ":");json_str(p,left,user);
         add(p,left,"," Q "cpu" Q ":0," Q "mem" Q ":0," Q "memRss" Q ":%llu," Q "state" Q ":",rss);
@@ -289,15 +299,15 @@ static void system_info(char *out,size_t cap) {
 }
 
 static void gpu_info(char *out,size_t cap) {
-    char *p=out;size_t left=cap,model[512]="";
+    char *p=out;size_t left=cap; char model[512]="";
     FILE *f=popen("lspci -nn 2>/dev/null | grep -E 'VGA compatible controller|3D controller' | head -1","r");
-    if(f){fgets((char*)model,sizeof model,f);pclose(f);}
-    model[strcspn((char*)model,"\r\n")]=0;
-    const char *vendor=strstr((char*)model,"AMD")||strstr((char*)model,"Radeon")?"AMD":
-                       strstr((char*)model,"NVIDIA")||strstr((char*)model,"GeForce")?"NVIDIA":
-                       strstr((char*)model,"Intel")?"Intel":"Unknown";
+    if(f){fgets(model,sizeof model,f);pclose(f);}
+    model[strcspn(model,"\r\n")]=0;
+    const char *vendor=strstr(model,"AMD")||strstr(model,"Radeon")?"AMD":
+                       strstr(model,"NVIDIA")||strstr(model,"GeForce")?"NVIDIA":
+                       strstr(model,"Intel")?"Intel":"Unknown";
     add(&p,&left,"{" Q "vendor" Q ":");json_str(&p,&left,vendor);
-    add(&p,&left,"," Q "model" Q ":");json_str(&p,&left,model[0]?(char*)model:"GPU information unavailable");
+    add(&p,&left,"," Q "model" Q ":");json_str(&p,&left,model[0]?model:"GPU information unavailable");
     add(&p,&left,"," Q "bus" Q ":null," Q "vramDetected" Q ":0," Q "driverVersion" Q ":" Q Q ","
         Q "gfx" Q ":0," Q "event" Q ":0," Q "vgt" Q ":0," Q "ta" Q ":0," Q "sx" Q ":0,"
         Q "sci" Q ":0," Q "si" Q ":0," Q "sc" Q ":0," Q "pa" Q ":0," Q "db" Q ":0,"
