@@ -2568,9 +2568,7 @@ class InstallWorker(QThread):
 
         grub_cfg = self.target / "boot/grub/grub.cfg"
         if not grub_cfg.is_file() or grub_cfg.stat().st_size == 0:
-            raise InstallError(
-                "GRUB configuration was not generated."
-            )
+            raise InstallError("GRUB configuration was not generated.")
 
         self.log("GRUB fallback loader and configuration verified.")
 
