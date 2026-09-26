@@ -115,7 +115,7 @@ class TaskManager(QMainWindow):
         self.disk_page.setObjectName("Value")
         self.net_page = QLabel()
         self.net_page.setObjectName("Value")
-        about = QLabel("MuliOS Task Manager\nNative PySide6 implementation.\nNo Electron runtime.")
+        about = QLabel("MuliOS Task Manager\nNative PySide6 implementation.")
         about.setObjectName("Value")
 
         self.tabs.addTab(self.overview, "Overview")
