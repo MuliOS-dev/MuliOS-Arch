@@ -30,7 +30,7 @@ MuliOS-Arch is not a fork of Arch Linux. It is a **custom ArchISO profile and co
                         ▼
 ┌─────────────────────────────────────────────┐
 │              Bootable MuliOS ISO             │
-│    (live environment + Calamares installer)  │
+│    (live environment)  │
 └─────────────────────────────────────────────┘
 ```
 
@@ -57,7 +57,7 @@ Two supporting components round out the desktop experience:
 - **Plymouth** (`configs/plymouth/`) — controls the boot splash screen shown while the system starts, before the desktop environment loads.
 - **Fastfetch** (`configs/fastfetch/`) — configures the system information summary displayed in the terminal, typically used to show branding and system details at a glance.
 
-## Calamares Installer
+## MuliOS Installer
 
 MuliOS-Arch uses **Calamares** as its graphical installer, configured in `configs/calamares/`. This configuration defines the installer's modules, branding, and installation sequence, allowing users to install MuliOS onto persistent storage from the live environment. Calamares configuration in this repository is specific to MuliOS-Arch's installation flow and branding; it does not modify Calamares itself, only its configuration.
 
@@ -86,6 +86,6 @@ Putting it together, `scripts/build.sh` orchestrates the process:
 2. Packages listed in `profile/packages.x86_64` — including standard Arch packages and MuliOS packages from `packages/` — are installed into a working root filesystem.
 3. `profile/airootfs/` is overlaid on top of that root filesystem, applying MuliOS-specific configuration and files.
 4. Bootloader configuration from `efiboot/`, `grub/`, and `syslinux/` is applied so the resulting image boots correctly on both UEFI and legacy BIOS systems.
-5. The result is packaged into a bootable `.iso` file containing the live environment and the configured Calamares installer.
+5. The result is packaged into a bootable `.iso` file containing the live environment and the configured MuliOS Installer.
 
 See [`building.md`](building.md) for the practical steps to run this process, and [`development.md`](development.md) for how these pieces map onto day-to-day development work.
