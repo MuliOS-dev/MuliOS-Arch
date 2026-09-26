@@ -10,7 +10,6 @@ You can contribute to MuliOS-Arch in several ways:
 
 - Fixing bugs in build scripts, packaging, or configuration.
 - Improving or updating the ArchISO profile (`profile/`).
-- Improving Calamares installer configuration (`configs/calamares/`).
 - Improving KDE, Plymouth, or Fastfetch configuration (`configs/`).
 - Developing or improving MuliOS tools (`packages/mulios-tools/`) or the installer package (`packages/mulios-installer/`).
 - Improving documentation.
