@@ -1,6 +1,4 @@
 """
-config/settings.py
-
 Central constants for the native MuliOS installer.
 """
 
@@ -19,7 +17,6 @@ INSTALL_LOG = os.path.join(LOG_DIR, "install.log")
 SETUP_LOG = os.path.join(LOG_DIR, "setup.log")
 
 INSTALL_MOUNTPOINT = "/mnt"
-
 RELEASE_NOTES_URL = "https://github.com/MuliOS-dev"
 
 PROFILES = [
@@ -39,20 +36,14 @@ PROFILES = [
 
 DEFAULT_PROFILE_SLUG = "generic"
 
+# MuliOS uses KDE Plasma for installed systems.
 DESKTOP_ENVIRONMENTS = [
-    ("Xfce4", "Xfce (lightweight, MuliOS default)"),
-    ("Gnome", "GNOME"),
-    ("Kde", "KDE Plasma"),
-    ("Budgie", "Budgie"),
-    ("Cinnamon", "Cinnamon"),
-    (None, "None / minimal (server-style, no GUI)"),
+    ("kde", "KDE Plasma"),
 ]
 
+# MuliOS installations use GRUB.
 BOOTLOADERS = [
-    "Grub",
-    "Systemd-boot",
-    "Limine",
-    "Efistub",
+    "grub",
 ]
 
 FILESYSTEMS = [
