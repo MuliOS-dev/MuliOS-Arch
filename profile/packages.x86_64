@@ -71,6 +71,7 @@ fastfetch
 zsh
 git
 nano
+gcc
 
 # Fonts
 noto-fonts
