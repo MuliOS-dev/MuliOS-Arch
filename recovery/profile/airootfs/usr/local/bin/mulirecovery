@@ -127,16 +127,36 @@ restore_backups() {
 }
 
 rebuild_boot() {
-    arch-chroot "$ROOT" mount /boot 2>/dev/null || true
+    # Mount the installed EFI System Partition from fstab before touching /boot.
+    if ! arch-chroot "$ROOT" mount /boot 2>/dev/null; then
+        fail "Unable to mount the installed EFI System Partition at /boot."
+    fi
+
     arch-chroot "$ROOT" mkinitcpio -P
+
+    if [[ -x "$ROOT/usr/bin/grub-install" ]]; then
+        arch-chroot "$ROOT" grub-install \
+            --target=x86_64-efi \
+            --efi-directory=/boot \
+            --bootloader-id=MuliOS \
+            --removable \
+            --no-nvram \
+            --recheck
+    fi
+
     if [[ -x "$ROOT/usr/bin/grub-mkconfig" ]]; then
         arch-chroot "$ROOT" grub-mkconfig -o /boot/grub/grub.cfg
+        [[ -s "$ROOT/boot/grub/grub.cfg" ]] || \
+            fail "GRUB configuration was not generated."
     fi
+
+    [[ -f "$ROOT/boot/EFI/BOOT/BOOTX64.EFI" ]] || \
+        fail "GRUB EFI fallback loader is missing."
 }
 
 main() {
     clear
-    say "MuliRecovery 1.0.0"
+    say "MuliRecovery"
     say "Offline MuliOS recovery and OTA merge"
 
     progress 5
