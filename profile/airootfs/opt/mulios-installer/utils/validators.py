@@ -1,37 +1,59 @@
-"""
-utils/validators.py
-
-Small, dependency-free validation helpers shared across wizard pages.
-Each returns (is_valid: bool, error_message: str).
-"""
-
 import re
 
-HOSTNAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]{0,62}$")
-USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+from pathlib import Path
 
 
-def validate_hostname(value: str) -> tuple[bool, str]:
-    value = value.strip()
-    if not value:
+def validate_hostname(hostname: str) -> tuple[bool, str]:
+    hostname = hostname.strip()
+
+    if not hostname:
         return False, "Computer name cannot be empty."
-    if not HOSTNAME_RE.match(value):
-        return False, "Use only letters, numbers, and hyphens (cannot start with a hyphen)."
+
+    if len(hostname) > 63:
+        return False, "Computer name cannot be longer than 63 characters."
+
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]*", hostname):
+        return False, "Computer name contains invalid characters."
+
     return True, ""
 
 
-def validate_username(value: str) -> tuple[bool, str]:
-    value = value.strip()
-    if not value:
+def validate_username(username: str) -> tuple[bool, str]:
+    username = username.strip()
+
+    if not username:
         return False, "Username cannot be empty."
-    if not USERNAME_RE.match(value):
-        return False, "Use lowercase letters, numbers, underscores, or hyphens; must start with a letter or underscore."
+
+    if len(username) > 32:
+        return False, "Username cannot be longer than 32 characters."
+
+    if not re.fullmatch(r"[a-z_][a-z0-9_-]*[$]?", username):
+        return False, (
+            "Username must use lowercase letters, numbers, "
+            "underscores, and hyphens."
+        )
+
     return True, ""
 
 
-def validate_password(password: str, confirm: str, min_length: int = 4) -> tuple[bool, str]:
-    if len(password) < min_length:
-        return False, f"Password must be at least {min_length} characters."
+def validate_password(
+    password: str,
+    confirm: str,
+    min_length: int = 8,
+) -> tuple[bool, str]:
     if password != confirm:
         return False, "Passwords do not match."
+
+    if not password:
+        return True, (
+            "Warning: no password was entered. "
+            "The installed user will have an empty password."
+        )
+
+    if len(password) < min_length:
+        return True, (
+            f"Warning: this password is weak because it is shorter "
+            f"than {min_length} characters."
+        )
+
     return True, ""
