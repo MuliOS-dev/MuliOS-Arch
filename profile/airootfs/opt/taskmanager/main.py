@@ -22,6 +22,14 @@ HTML = BASE_DIR / "index.html"
 API_HOST = "127.0.0.1"
 API_PORT = 4700
 
+_last_rates = {
+    "time": time.monotonic(),
+    "disk_read": 0,
+    "disk_write": 0,
+    "net_rx": 0,
+    "net_tx": 0,
+}
+
 
 def bytes_value(value):
     return int(value or 0)
@@ -118,9 +126,29 @@ def system_info():
     cpu_speed = (cpu_freq.current / 1000.0) if cpu_freq and cpu_freq.current else 0
     cpu_max = (cpu_freq.max / 1000.0) if cpu_freq and cpu_freq.max else cpu_speed
 
+    now = time.monotonic()
+    elapsed = max(now - _last_rates["time"], 0.001)
+    disk_read = bytes_value(getattr(io, "read_bytes", 0))
+    disk_write = bytes_value(getattr(io, "write_bytes", 0))
+    net_rx = bytes_value(getattr(net, "bytes_recv", 0))
+    net_tx = bytes_value(getattr(net, "bytes_sent", 0))
+
+    disk_read_sec = max(0, disk_read - _last_rates["disk_read"]) / elapsed
+    disk_write_sec = max(0, disk_write - _last_rates["disk_write"]) / elapsed
+    net_rx_sec = max(0, net_rx - _last_rates["net_rx"]) / elapsed
+    net_tx_sec = max(0, net_tx - _last_rates["net_tx"]) / elapsed
+
+    _last_rates.update({
+        "time": now,
+        "disk_read": disk_read,
+        "disk_write": disk_write,
+        "net_rx": net_rx,
+        "net_tx": net_tx,
+    })
+
     return {
         "cpu": {
-            "currentLoad": float(psutil.cpu_percent(None)),
+            "currentLoad": float(psutil.cpu_percent(0.05)),
             "cpus": [{"load": load} for load in psutil.cpu_percent(None, percpu=True)],
         },
         "cpuInfo": {
@@ -150,15 +178,15 @@ def system_info():
         "disks": partitions,
         "diskLayout": partitions,
         "disksIO": {
-            "rIO_sec": bytes_value(getattr(io, "read_bytes", 0)),
-            "wIO_sec": bytes_value(getattr(io, "write_bytes", 0)),
+            "rIO_sec": disk_read_sec,
+            "wIO_sec": disk_write_sec,
         },
         "net": {
             "iface": primary_iface,
             "rx_bytes": bytes_value(primary_rx),
             "tx_bytes": bytes_value(primary_tx),
-            "rx_sec": 0,
-            "tx_sec": 0,
+            "rx_sec": net_rx_sec,
+            "tx_sec": net_tx_sec,
         },
         "netIfaces": net_ifaces,
     }
