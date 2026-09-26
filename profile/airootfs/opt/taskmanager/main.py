@@ -7,6 +7,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -143,7 +144,7 @@ def system_info():
             "swapused": bytes_value(swap.used),
             "swaptotal": bytes_value(swap.total),
         },
-        "uptime": max(0, int(psutil.time.time() - psutil.boot_time())),
+        "uptime": max(0, int(time.time() - psutil.boot_time())),
         "procCount": len(psutil.pids()),
         "memLayout": [],
         "disks": partitions,
