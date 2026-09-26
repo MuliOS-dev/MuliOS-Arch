@@ -5,7 +5,7 @@ install_dependencies() {
     echo "[INFO]: installing dependencies"
 
     if command -v pacman >/dev/null 2>&1; then
-        sudo pacman -S --needed --noconfirm archiso git
+        sudo pacman -S --needed --noconfirm archiso git base-devel squashfs-tools mtools dosfstools libisoburn
     else
         echo "[ERROR]: not in an Arch Linux environment"
         exit 1
@@ -27,15 +27,6 @@ setup() {
 
 setup
 
-fix_pacman_keyring() {
-    echo "[INFO]: fixing pacman keyring"
-
-    sudo pacman-key --init
-    sudo pacman-key --populate archlinux
-}
-
-fix_pacman_keyring
-
 build() {
     local mulios_version
     mulios_version="$(cat "$PROFILE/version")"
@@ -54,7 +45,7 @@ IMAGE_ID=MuliOS
 IMAGE_VERSION="$mulios_version"
 EOF
 
-    sudo mkarchiso -v -w "$TEMP" -o "$OUTPUT" "$PROFILE" -c
+    sudo mkarchiso -v -w "$TEMP" -o "$OUTPUT" "$PROFILE"
 }
 
 build
