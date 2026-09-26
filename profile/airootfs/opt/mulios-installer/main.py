@@ -1,8 +1,7 @@
-"""
-main.py - MuliOS Arch Installer
+"""MuliOS Arch Installer.
 
-Run with:
-    sudo python3 main.py
+Use --test on Windows or another non-Linux host to test the UI without
+attempting installation or root escalation.
 """
 
 import os
@@ -11,17 +10,31 @@ import traceback
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
+    QApplication,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtGui import QPixmap, QIcon
+from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt
 
 from theme import stylesheet
-from config.settings import LOGO_PATH, APP_NAME, DISTRO_NAME, DEFAULT_PROFILE_SLUG
+from config.settings import LOGO_PATH, APP_NAME, DISTRO_NAME
+
+
+TEST_MODE = "--test" in sys.argv or os.environ.get("MULIOS_INSTALLER_TEST") == "1"
 
 
 def ensure_root():
-    """Re-exec the installer as root when launched by the live user."""
+    """Escalate to root only when running the real Linux installer."""
+    if TEST_MODE or os.name != "posix":
+        return
+
     if os.geteuid() == 0:
         return
 
@@ -41,6 +54,7 @@ def ensure_root():
     ]
 
     os.execv(sudo, command)
+
 
 from pages.welcome_page import WelcomePage
 from pages.language_page import LanguagePage
@@ -65,7 +79,6 @@ STEP_NAMES = [
     "Packages", "Profile", "Advanced", "Summary", "Install", "Finished",
 ]
 
-# Index of key steps, for readability in navigation logic below
 IDX_WELCOME, IDX_LANGUAGE, IDX_KEYBOARD, IDX_TIMEZONE, IDX_NETWORK = 0, 1, 2, 3, 4
 IDX_DISK, IDX_PARTITION, IDX_BOOTLOADER, IDX_ACCOUNT, IDX_DESKTOP = 5, 6, 7, 8, 9
 IDX_PACKAGES, IDX_PROFILE, IDX_ADVANCED, IDX_SUMMARY = 10, 11, 12, 13
@@ -87,7 +100,9 @@ class Sidebar(QWidget):
             logo_label.setPixmap(pixmap.scaledToHeight(32, Qt.SmoothTransformation))
         else:
             logo_label.setText(DISTRO_NAME)
-            logo_label.setStyleSheet("font-size: 13pt; font-weight: 700; color: white;")
+            logo_label.setStyleSheet(
+                "font-size: 13pt; font-weight: 700; color: white;"
+            )
         layout.addWidget(logo_label)
         layout.addSpacing(14)
 
@@ -111,8 +126,9 @@ class Sidebar(QWidget):
 class MuliOSInstaller(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(APP_NAME)
+        self.setWindowTitle(APP_NAME + (" [UI TEST]" if TEST_MODE else ""))
         self.resize(980, 640)
+
         if os.path.exists(LOGO_PATH):
             self.setWindowIcon(QIcon(LOGO_PATH))
 
@@ -135,7 +151,6 @@ class MuliOSInstaller(QMainWindow):
         self.stack = QStackedWidget()
         content_layout.addWidget(self.stack, stretch=1)
 
-        # -- pages --
         self.welcome_page = WelcomePage()
         self.language_page = LanguagePage()
         self.keyboard_page = KeyboardPage()
@@ -151,19 +166,23 @@ class MuliOSInstaller(QMainWindow):
         self.advanced_page = AdvancedPage()
         self.summary_page = SummaryPage()
         self.install_page = InstallPage()
-        self.finished_page = FinishedPage(on_reboot=self.reboot_system, on_exit=self.close)
+        self.finished_page = FinishedPage(
+            on_reboot=self.reboot_system,
+            on_exit=self.close,
+        )
 
         for page in (
-            self.welcome_page, self.language_page, self.keyboard_page, self.timezone_page,
-            self.network_page, self.disk_page, self.partitioning_page, self.bootloader_page,
-            self.account_page, self.desktop_page, self.packages_page, self.profile_page,
-            self.advanced_page, self.summary_page, self.install_page, self.finished_page,
+            self.welcome_page, self.language_page, self.keyboard_page,
+            self.timezone_page, self.network_page, self.disk_page,
+            self.partitioning_page, self.bootloader_page, self.account_page,
+            self.desktop_page, self.packages_page, self.profile_page,
+            self.advanced_page, self.summary_page, self.install_page,
+            self.finished_page,
         ):
             self.stack.addWidget(page)
 
         self.install_page.install_finished.connect(self._on_install_finished)
 
-        # -- nav bar --
         nav_bar = QWidget()
         nav_bar.setObjectName("NavBar")
         nav_layout = QHBoxLayout(nav_bar)
@@ -185,8 +204,6 @@ class MuliOSInstaller(QMainWindow):
         QApplication.instance().setStyleSheet(stylesheet())
         self._goto_step(0)
 
-    # -- navigation ----------------------------------------------------------
-
     def _goto_step(self, index: int):
         self.stack.setCurrentIndex(index)
         self.sidebar.set_active_step(index)
@@ -196,7 +213,8 @@ class MuliOSInstaller(QMainWindow):
         if index == IDX_SUMMARY:
             self.next_button.setText("Install")
             self.summary_page.set_state(
-                self._collect_install_state(), self.network_page.is_connected()
+                self._collect_install_state(),
+                self.network_page.is_connected(),
             )
         else:
             self.next_button.setText("Next")
@@ -211,7 +229,11 @@ class MuliOSInstaller(QMainWindow):
 
         if idx == IDX_DISK:
             if not self.disk_page.selected_disk():
-                QMessageBox.warning(self, "No disk selected", "Please select a disk to continue.")
+                QMessageBox.warning(
+                    self,
+                    "No disk selected",
+                    "Please select a disk to continue.",
+                )
                 return
 
         elif idx == IDX_PARTITION:
@@ -225,13 +247,18 @@ class MuliOSInstaller(QMainWindow):
                 return
 
         elif idx == IDX_SUMMARY:
+            if TEST_MODE:
+                QMessageBox.information(
+                    self,
+                    "UI test mode",
+                    "Installation is disabled in UI test mode.",
+                )
+                return
             self._confirm_and_install()
             return
 
         if idx < IDX_INSTALL:
             self._goto_step(idx + 1)
-
-    # -- state collection -----------------------------------------------------
 
     def _collect_install_state(self) -> dict:
         return {
@@ -261,9 +288,12 @@ class MuliOSInstaller(QMainWindow):
     def _confirm_and_install(self):
         disk = self.disk_page.selected_disk()
         reply = QMessageBox.warning(
-            self, "Confirm installation",
-            f"This will ERASE ALL DATA on {disk}.\n\nThis action cannot be undone. Continue?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            self,
+            "Confirm installation",
+            f"This will ERASE ALL DATA on {disk}.\n\n"
+            "This action cannot be undone. Continue?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
         if reply != QMessageBox.Yes:
             return
@@ -273,15 +303,12 @@ class MuliOSInstaller(QMainWindow):
         self.install_page.start(state)
 
     def _on_install_finished(self, success: bool):
-        # Capture the installer output before changing pages.
-        # The QTextEdit remains available even if the filesystem
-        # log becomes inaccessible during cleanup.
         live_log = ""
 
         try:
             live_log = self.install_page.log_view.toPlainText()
         except Exception:
-            live_log = ""
+            pass
 
         if success:
             self._goto_step(IDX_FINISHED)
@@ -292,40 +319,26 @@ class MuliOSInstaller(QMainWindow):
         failure_text = ""
         log_text = live_log
 
-        # Prefer the live in-memory log, then fall back to the
-        # persistent filesystem log.
         if log_text.strip():
             marker = "=== INSTALLATION FAILED ==="
-
             if marker in log_text:
-                failure_text = log_text.split(
-                    marker,
-                    1,
-                )[1].strip()
-
+                failure_text = log_text.split(marker, 1)[1].strip()
             if not failure_text:
                 failure_text = log_text.strip()
 
         if not failure_text:
             try:
                 log_path = Path("/var/log/mulios/install.log")
-
                 if log_path.exists():
                     log_text = log_path.read_text(
                         encoding="utf-8",
                         errors="replace",
                     )
-
                     marker = "=== INSTALLATION FAILED ==="
-
                     if marker in log_text:
-                        failure_text = log_text.split(
-                            marker,
-                            1,
-                        )[1].strip()
+                        failure_text = log_text.split(marker, 1)[1].strip()
                     else:
                         failure_text = log_text.strip()
-
             except Exception as exc:
                 failure_text = (
                     "The installation failed. "
@@ -334,18 +347,26 @@ class MuliOSInstaller(QMainWindow):
 
         if not failure_text:
             failure_text = (
-                "The installation failed, but no installer "
-                "output was available."
+                "The installation failed, but no installer output was available."
             )
 
-        self.finished_page.show_failure(
-            failure_text
-        )
+        self.finished_page.show_failure(failure_text)
 
     def reboot_system(self):
+        if TEST_MODE:
+            QMessageBox.information(
+                self,
+                "UI test mode",
+                "Reboot is disabled in UI test mode.",
+            )
+            return
+
         reply = QMessageBox.question(
-            self, "Restart", "Restart the computer now?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            self,
+            "Restart",
+            "Restart the computer now?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
         if reply == QMessageBox.Yes:
             import subprocess
@@ -359,41 +380,24 @@ def main():
 
     def handle_exception(exc_type, exc_value, exc_traceback):
         if issubclass(exc_type, KeyboardInterrupt):
-            sys.__excepthook__(
-                exc_type,
-                exc_value,
-                exc_traceback,
-            )
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
             return
 
         try:
-            log_path = Path(
-                "/var/log/mulios/install.log"
-            )
+            if os.name == "nt":
+                log_path = Path.home() / "MuliOS-installer-test.log"
+            else:
+                log_path = Path("/var/log/mulios/install.log")
 
-            log_path.parent.mkdir(
-                parents=True,
-                exist_ok=True,
-            )
+            log_path.parent.mkdir(parents=True, exist_ok=True)
 
-            with log_path.open(
-                "a",
-                encoding="utf-8",
-            ) as f:
-                f.write("\n")
-                f.write("=" * 80 + "\n")
+            with log_path.open("a", encoding="utf-8") as f:
+                f.write("\n" + "=" * 80 + "\n")
                 f.write("=== UNHANDLED INSTALLER EXCEPTION ===\n")
-                f.write(
-                    "".join(
-                        traceback.format_exception(
-                            exc_type,
-                            exc_value,
-                            exc_traceback,
-                        )
-                    )
-                )
+                f.write("".join(traceback.format_exception(
+                    exc_type, exc_value, exc_traceback
+                )))
                 f.write("=" * 80 + "\n")
-
         except Exception:
             pass
 
@@ -401,8 +405,7 @@ def main():
             None,
             "MuliOS Installer Error",
             "An unexpected error occurred.\n\n"
-            "The full Python traceback was written to:\n"
-            "/var/log/mulios/install.log",
+            "The full traceback was written to the installer test log.",
         )
 
     sys.excepthook = handle_exception
