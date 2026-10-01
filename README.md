@@ -43,7 +43,7 @@ A working Arch Linux environment is required.
 Install dependencies:
 
 ```bash
-sudo pacman -S archiso git
+sudo pacman -S --needed archiso git base-devel squashfs-tools mtools dosfstools libisoburn curl
 ```
 
 Clone the repository:
@@ -53,19 +53,13 @@ git clone https://github.com/MuliOS-dev/MuliOS-Arch.git
 cd MuliOS-Arch
 ```
 
-Prepare for build:
-
-```bash
-mv /script/build.sh ../
-```
-
 Build the ISO:
 
 ```bash
-./build.sh
+./scripts/build.sh
 ```
 
-The generated ISO will be available in the output directory.
+The generated ISO will be available in the `output/` directory.
 
 ## Development
 
