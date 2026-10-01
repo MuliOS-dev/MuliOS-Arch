@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# MUpdate — MuliOS repository merger
+# MUpdate
 # Version: a1.0.6
 #
 # Source: https://github.com/MuliOS-dev/MuliOS-Arch
 # Source tree: profile/airootfs
 #
 # Only new/changed MuliOS-owned files are downloaded.
-# Files are never deleted.
+# Files are never deleted as of now.
 # Machine-specific state is protected.
 
 VERSION="a1.0.6"
