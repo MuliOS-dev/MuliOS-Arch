@@ -112,8 +112,6 @@ TX_ID=""
 TX_DIR=""
 OTA_ISO=""
 OTA_ISO_SHA256=""
-ROOT_UUID=""
-ROOT_FSTYPE=""
 
 C_RED=$'\033[0;31m'
 C_GRN=$'\033[0;32m'
@@ -215,8 +213,6 @@ check_dependencies() {
         dd \
         mount \
         umount \
-        findmnt \
-        blkid \
         rsync \
         unsquashfs \
         mountpoint \
@@ -997,43 +993,6 @@ discover_ota() {
 }
 
 
-detect_root_filesystem() {
-    local root_source
-
-    root_source="$(findmnt -n -o SOURCE /)" ||
-        die "Unable to determine the root filesystem."
-
-    ROOT_UUID="$(findmnt -n -o UUID / 2>/dev/null || true)"
-
-    if [[ -z "$ROOT_UUID" ]]; then
-        local device
-
-        device="$root_source"
-
-        if [[ "$device" == *"["* ]]; then
-            device="${device%%[*}"
-        fi
-
-        ROOT_UUID="$(
-            blkid -s UUID -o value "$device" 2>/dev/null || true
-        )"
-    fi
-
-    [[ -n "$ROOT_UUID" ]] ||
-        die "Unable to determine root filesystem UUID."
-
-    ROOT_FSTYPE="$(
-        findmnt -n -o FSTYPE /
-    )"
-
-    [[ -n "$ROOT_FSTYPE" ]] ||
-        die "Unable to determine root filesystem type."
-
-    info "Root filesystem UUID : $ROOT_UUID"
-    info "Root filesystem type : $ROOT_FSTYPE"
-}
-
-
 merge_release_root() {
     local iso="$1"
     local iso_mount="$WORKDIR/ota-iso"
@@ -1256,7 +1215,6 @@ cmd_ota() {
     require_root
     check_dependencies
     verify_os_identity
-    detect_root_filesystem
     discover_ota "$channel"
     TX_ID="$(date -u '+%Y%m%d_%H%M%S')_$$"
     TX_DIR="$TRANS_DIR/$TX_ID"
