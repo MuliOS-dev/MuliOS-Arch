@@ -79,7 +79,7 @@ require_cmd() {
 }
 
 check_dependencies() {
-    require_cmd curl jq git sha1sum sha256sum install mkdir rm mktemp stat chmod readlink flock
+    require_cmd curl jq git sha1sum sha256sum install mkdir rm mktemp stat chmod readlink flock tar cp sed tr date
 }
 
 acquire_lock() {
@@ -281,6 +281,51 @@ sync_repository() {
     echo "Skipped : $SKIPPED_COUNT"
 }
 
+sync_rounded_theme() {
+    local installer_script="$WORKDIR/install-rounded-theme.sh"
+    local commit
+    curl -fsSL --retry 3 --retry-all-errors -o "$installer_script" "$(raw_url scripts/install-rounded-theme.sh)" ||
+        die "Unable to read the pinned ROUNDED theme version from the repository."
+
+    commit="$(sed -n 's/^THEME_COMMIT="\([^"]*\)"/\1/p' "$installer_script" | head -n 1)"
+    [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "Invalid ROUNDED theme commit in scripts/install-rounded-theme.sh."
+
+    local state_file="$STATE_DIR/rounded-theme-commit"
+    if [[ -f "$state_file" && "$(cat "$state_file")" == "$commit" &&
+          -d /usr/share/plasma/desktoptheme/ROUNDED-DARK &&
+          -d /usr/share/plasma/look-and-feel/com.github.varlesh.rounded-dark &&
+          -d /usr/share/aurorae/themes/ROUNDED-DARK &&
+          -f /usr/share/color-schemes/ROUNDEDDARK.colors ]]; then
+        info "ROUNDED theme already matches pinned commit $commit."
+        return 0
+    fi
+
+    if [[ "$DRY_RUN" == "1" || "$SAFE_MODE" == "1" ]]; then
+        echo "THEME   ROUNDED-DARK @ $commit"
+        return 0
+    fi
+
+    info "Downloading pinned ROUNDED KDE theme $commit..."
+    local archive="$WORKDIR/rounded.tar.gz"
+    curl -fsSL --retry 3 --retry-all-errors -o "$archive" "https://github.com/varlesh/rounded/archive/$commit.tar.gz" ||
+        die "Unable to download the ROUNDED theme archive."
+    tar -xzf "$archive" -C "$WORKDIR" || die "Unable to extract the ROUNDED theme archive."
+
+    local root="$WORKDIR/rounded-$commit"
+    [[ -d "$root/plasma/desktoptheme/ROUNDED-DARK" ]] || die "ROUNDED desktop theme is missing from archive."
+    [[ -d "$root/plasma/look-and-feel/com.github.varlesh.rounded-dark" ]] || die "ROUNDED Look-and-Feel package is missing from archive."
+    [[ -d "$root/aurorae/themes/ROUNDED-DARK" ]] || die "ROUNDED Aurorae decoration is missing from archive."
+    [[ -f "$root/plasma/desktoptheme/ROUNDED-DARK/colors" ]] || die "ROUNDED color scheme is missing from archive."
+
+    install -d /usr/share/plasma/desktoptheme /usr/share/plasma/look-and-feel /usr/share/aurorae/themes /usr/share/color-schemes
+    cp -a "$root/plasma/desktoptheme/ROUNDED-DARK" /usr/share/plasma/desktoptheme/
+    cp -a "$root/plasma/look-and-feel/com.github.varlesh.rounded-dark" /usr/share/plasma/look-and-feel/
+    cp -a "$root/aurorae/themes/ROUNDED-DARK" /usr/share/aurorae/themes/
+    install -m 0644 "$root/plasma/desktoptheme/ROUNDED-DARK/colors" /usr/share/color-schemes/ROUNDEDDARK.colors
+    printf "%s\n" "$commit" > "$state_file"
+    ok "ROUNDED theme merged at pinned commit $commit."
+}
+
 cmd_update() {
     require_root
     check_dependencies
@@ -296,6 +341,7 @@ cmd_update() {
     fi
 
     sync_repository
+    sync_rounded_theme
 
     if [[ "$DRY_RUN" == "0" && "$SAFE_MODE" == "0" ]]; then
         ok "MuliOS repository changes merged into the installed OS."
