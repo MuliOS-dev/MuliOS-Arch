@@ -913,14 +913,14 @@ validate_iso_structure() {
         die "Reconstructed ISO does not contain a recognizable MuliOS airootfs."
     fi
 
-    if [[ ! -f "$mount_dir/arch/boot/x86_64/vmlinuz-linux" &&
-          ! -f "$mount_dir/mulios/boot/x86_64/vmlinuz-linux" ]]; then
+    if [[ ! -f "$mount_dir/arch/boot/x86_64/vmlinuz-linux-mulios-generic" &&
+          ! -f "$mount_dir/mulios/boot/x86_64/vmlinuz-linux-mulios-generic" ]]; then
         umount "$mount_dir" || true
         die "Reconstructed ISO does not contain a Linux kernel."
     fi
 
-    if [[ ! -f "$mount_dir/arch/boot/x86_64/initramfs-linux.img" &&
-          ! -f "$mount_dir/mulios/boot/x86_64/initramfs-linux.img" ]]; then
+    if [[ ! -f "$mount_dir/arch/boot/x86_64/initramfs-linux-mulios-generic.img" &&
+          ! -f "$mount_dir/mulios/boot/x86_64/initramfs-linux-mulios-generic.img" ]]; then
         umount "$mount_dir" || true
         die "Reconstructed ISO does not contain an initramfs."
     fi
