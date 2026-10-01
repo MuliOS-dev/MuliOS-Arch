@@ -1823,7 +1823,26 @@ class InstallWorker(QThread):
             )
 
             self.log(
-                "Synchronizing target package databases..."
+                "Updating Arch Linux keyring before the full upgrade..."
+            )
+
+            # The ISO may have been built before the current Arch signing
+            # keys were published. Update the keyring first, then perform
+            # the complete system upgrade. This avoids stale-key failures
+            # without creating a partial-upgrade state.
+            self.chroot(
+                [
+                    "pacman",
+                    "-Sy",
+                    "--needed",
+                    "--noconfirm",
+                    "--disable-download-timeout",
+                    "archlinux-keyring",
+                ]
+            )
+
+            self.log(
+                "Synchronizing target package databases and upgrading the target system..."
             )
 
             self.chroot(
@@ -1831,6 +1850,7 @@ class InstallWorker(QThread):
                     "pacman",
                     "-Syu",
                     "--noconfirm",
+                    "--disable-download-timeout",
                 ]
             )
 
