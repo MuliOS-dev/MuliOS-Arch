@@ -1834,9 +1834,7 @@ class InstallWorker(QThread):
                 [
                     "pacman",
                     "-Sy",
-                    "--needed",
                     "--noconfirm",
-                    "--disable-download-timeout",
                     "archlinux-keyring",
                 ]
             )
@@ -1850,7 +1848,6 @@ class InstallWorker(QThread):
                     "pacman",
                     "-Syu",
                     "--noconfirm",
-                    "--disable-download-timeout",
                 ]
             )
 
