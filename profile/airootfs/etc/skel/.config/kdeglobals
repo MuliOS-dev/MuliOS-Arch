@@ -1,3 +1,9 @@
 [General]
-ColorScheme=BreezeDark
-Name=Breeze Dark
+ColorScheme=ROUNDEDDARK
+Name=ROUNDED DARK
+
+[KDE]
+widgetStyle=Breeze
+
+[Icons]
+Theme=breeze-dark
