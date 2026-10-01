@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=MuliOS Task Manager
+Comment=Monitor system resources and processes
+Exec=python3 /opt/taskmanager/launcher.py
+Icon=utilities-system-monitor
+Terminal=false
+Type=Application
+Categories=System;Monitor;
+StartupNotify=true
