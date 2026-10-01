@@ -109,8 +109,16 @@ get_tree() {
 }
 
 is_protected() {
-    case "$1" in
-        profile/airootfs/etc/passwd|        profile/airootfs/etc/shadow|        profile/airootfs/etc/group|        profile/airootfs/etc/gshadow|        profile/airootfs/etc/hostname|        profile/airootfs/etc/hosts|        profile/airootfs/etc/machine-id|        profile/airootfs/etc/localtime|        profile/airootfs/etc/adjtime|        profile/airootfs/etc/fstab|        profile/airootfs/etc/crypttab|        profile/airootfs/etc/ssh/*|        profile/airootfs/var/*|        profile/airootfs/home/*|        profile/airootfs/root/*|        profile/airootfs/boot/*|        profile/airootfs/efi/*)
+    local path="$1"
+    case "$path" in
+        profile/airootfs/etc/passwd|profile/airootfs/etc/shadow|profile/airootfs/etc/group|profile/airootfs/etc/gshadow|profile/airootfs/etc/hostname|profile/airootfs/etc/hosts|profile/airootfs/etc/machine-id|profile/airootfs/etc/localtime|profile/airootfs/etc/adjtime|profile/airootfs/etc/fstab|profile/airootfs/etc/crypttab|profile/airootfs/etc/ssh/*|
+        profile/airootfs/etc/sddm.conf.d/autologin.conf|profile/airootfs/etc/sudoers.d/mulios-installer|
+        profile/airootfs/etc/systemd/system/*|profile/airootfs/etc/mkinitcpio.conf.d/archiso.conf|profile/airootfs/etc/systemd/resolved.conf.d/archiso.conf|
+        profile/airootfs/etc/pacman.d/hooks/zzzz99-remove-custom-hooks-from-airootfs.hook|profile/airootfs/usr/local/bin/livecd-sound|
+        profile/airootfs/usr/share/applications/mulios-installer.desktop|profile/airootfs/usr/share/applications/mulios-changelog.desktop|
+        profile/airootfs/etc/xdg/autostart/mulios-welcome.desktop|profile/airootfs/etc/skel/Desktop/mulios-installer.desktop|
+        profile/airootfs/opt/mulios-installer/*|profile/airootfs/opt/mulios-changelog/*|
+        profile/airootfs/var/*|profile/airootfs/home/*|profile/airootfs/root/*|profile/airootfs/boot/*|profile/airootfs/efi/*)
             return 0
             ;;
     esac
@@ -183,8 +191,10 @@ merge_file() {
     curl -fsSL         --retry 3         --retry-all-errors         -o "$temp_file"         "$(raw_url "$repo_path")" ||
         die "Failed downloading: $repo_path"
 
-    [[ -s "$temp_file" || "$(stat -c '%s' "$temp_file")" == "0" ]] ||
-        die "Downloaded file is invalid: $repo_path"
+    local downloaded_sha
+    downloaded_sha="$(git hash-object "$temp_file")"
+    [[ "$downloaded_sha" == "$remote_sha" ]] ||
+        die "Repository changed or download was corrupted: $repo_path"
 
     if [[ "$DRY_RUN" == "1" ]]; then
         printf 'UPDATE %s\n' "$local_path"
