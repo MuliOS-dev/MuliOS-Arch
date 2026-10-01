@@ -2,7 +2,7 @@
 
 # MUpdate — MuliOS Arch OTA + Kernel Profile Manager
 #
-# Version: a1.0.5
+# Version: a1.0.6
 #
 # NOTICE TO USERS:
 # MUpdate is a system program that modifies the kernel and bootloader.
@@ -42,11 +42,11 @@
 #   6. Calculate ISO SHA-256
 #   7. Backup user data
 #   8. Create persistent transaction
-#   9. Install MuliRecovery boot payload
-#  10. Configure one-shot recovery boot
-#  11. Reboot into MuliRecovery
+#   9. Stage the release root filesystem
+#  10. Merge the release into the installed OS
+#  11. Reboot into the updated MuliOS system
 #
-# MuliRecovery performs the offline OS merge.
+# MUpdate performs the offline merge directly into the installed root.
 #
 # The merge is designed to preserve:
 #
@@ -62,12 +62,11 @@
 # while allowing the new MuliOS release to update system files.
 #
 # IMPORTANT:
-# The recovery engine is responsible for the actual merge.
-# MUpdate never overwrites the live root filesystem while it is running.
+# MUpdate merges only MuliOS-owned system areas and preserves machine-specific state.
 
 set -Eeuo pipefail
 
-VERSION="a1.0.5"
+VERSION="a1.0.6"
 
 GITHUB_OWNER="${GITHUB_OWNER:-MuliOS-dev}"
 GITHUB_REPO="${GITHUB_REPO:-update}"
@@ -81,10 +80,6 @@ BACKUP_DIR="${STATE_DIR}/backups"
 CHANNEL_FILE="${STATE_DIR}/channel"
 LOG_FILE="/var/log/mupdate.log"
 LOCK_FILE="${STATE_DIR}/mupdate.lock"
-
-RECOVERY_STATE_DIR="${STATE_DIR}/recovery"
-RECOVERY_ISO_DIR="${RECOVERY_STATE_DIR}/iso"
-RECOVERY_ISO_GLOB="${RECOVERY_ISO_GLOB:-${RECOVERY_ISO_DIR}/MuliRecovery-*-x86_64.iso}"
 
 WORKDIR="$(mktemp -d /tmp/mupdate.XXXXXX)"
 
@@ -119,8 +114,6 @@ OTA_ISO=""
 OTA_ISO_SHA256=""
 ROOT_UUID=""
 ROOT_FSTYPE=""
-ESP_MOUNT=""
-RECOVERY_PAYLOAD_DIR=""
 
 C_RED=$'\033[0;31m'
 C_GRN=$'\033[0;32m'
@@ -224,7 +217,10 @@ check_dependencies() {
         umount \
         findmnt \
         blkid \
-        rsync
+        rsync \
+        unsquashfs \
+        mountpoint \
+        sync
 
     if ! command -v unzip >/dev/null 2>&1 &&
        ! command -v 7z >/dev/null 2>&1; then
@@ -1038,259 +1034,130 @@ detect_root_filesystem() {
 }
 
 
-detect_esp() {
-    local candidate
-
-    ESP_MOUNT=""
-
-    while IFS= read -r candidate; do
-        [[ -n "$candidate" ]] || continue
-
-        if [[ -d "$candidate/EFI" ]]; then
-            ESP_MOUNT="$candidate"
-            break
-        fi
-    done < <(
-        findmnt -rn -t vfat -o TARGET
-    )
-
-    if [[ -z "$ESP_MOUNT" ]]; then
-        for candidate in /efi /boot/efi /boot; do
-            if mountpoint -q "$candidate" &&
-               findmnt -n -t vfat "$candidate" >/dev/null 2>&1 &&
-               [[ -d "$candidate/EFI" ]]; then
-                ESP_MOUNT="$candidate"
-                break
-            fi
-        done
-    fi
-
-    [[ -n "$ESP_MOUNT" ]] ||
-        die "Unable to locate the EFI System Partition."
-
-    info "EFI System Partition: $ESP_MOUNT"
-}
-
-
-find_recovery_iso() {
-    local found
-
-    found="$(
-        compgen -G "$RECOVERY_ISO_GLOB" |
-        sort -V |
-        tail -n 1 || true
-    )"
-
-    if [[ -z "$found" ]]; then
-        die "MuliRecovery ISO not found.
-
-Expected:
-  $RECOVERY_ISO_GLOB
-
-Build MuliRecovery first and place the resulting ISO in:
-  $RECOVERY_ISO_DIR"
-    fi
-
-    [[ -f "$found" ]] ||
-        die "MuliRecovery ISO does not exist: $found"
-
-    RECOVERY_ISO="$found"
-
-    ok "MuliRecovery ISO: $RECOVERY_ISO"
-}
-
-
-install_recovery_payload() {
-    detect_esp
-    find_recovery_iso
-
-    local mount_dir
-    mount_dir="$WORKDIR/recovery-iso"
-
-    mkdir -p "$mount_dir"
-
-    info "Mounting MuliRecovery ISO..."
-
-    mount -o loop,ro "$RECOVERY_ISO" "$mount_dir" ||
-        die "Unable to mount MuliRecovery ISO."
-
-    local source_dir
-
-    if [[ -d "$mount_dir/mulirecovery" ]]; then
-        source_dir="$mount_dir/mulirecovery"
+merge_release_root() {
+    local iso="$1"
+    local iso_mount="$WORKDIR/ota-iso"
+    local rootfs="$WORKDIR/ota-root"
+    mkdir -p "$iso_mount" "$rootfs"
+    info "Mounting OTA ISO..."
+    mount -o loop,ro "$iso" "$iso_mount" || die "Unable to mount OTA ISO."
+    local sfs=""
+    if [[ -f "$iso_mount/arch/x86_64/airootfs.sfs" ]]; then
+        sfs="$iso_mount/arch/x86_64/airootfs.sfs"
+    elif [[ -f "$iso_mount/mulios/x86_64/airootfs.sfs" ]]; then
+        sfs="$iso_mount/mulios/x86_64/airootfs.sfs"
     else
-        umount "$mount_dir" || true
-        die "MuliRecovery ISO does not contain /mulirecovery."
+        umount "$iso_mount" || true
+        die "OTA ISO does not contain a MuliOS airootfs."
     fi
-
-    if [[ ! -f "$source_dir/boot/x86_64/vmlinuz-linux" ]]; then
-        umount "$mount_dir" || true
-        die "MuliRecovery ISO kernel is missing."
+    info "Extracting MuliOS release filesystem..."
+    unsquashfs -no-progress -d "$rootfs" "$sfs" >/dev/null || {
+        umount "$iso_mount" || true
+        die "Unable to extract the OTA root filesystem."
+    }
+    umount "$iso_mount"
+    [[ -f "$rootfs/etc/os-release" ]] || die "Extracted release has no /etc/os-release."
+    local release_id
+    release_id="$(sed -n 's/^ID=//p' "$rootfs/etc/os-release" | tr -d '"' )"
+    [[ "$release_id" == "mulios" ]] || die "OTA root filesystem is not MuliOS."
+    info "Merging MuliOS-owned system files..."
+    rsync -aHAX --numeric-ids "$rootfs/usr/" /usr/ || die "Failed merging /usr."
+    [[ -d "$rootfs/usr/local" ]] && rsync -aHAX --numeric-ids "$rootfs/usr/local/" /usr/local/ || true
+    [[ -d "$rootfs/opt" ]] && rsync -aHAX --numeric-ids "$rootfs/opt/" /opt/ || true
+    [[ -d "$rootfs/etc/xdg" ]] && rsync -aHAX --numeric-ids "$rootfs/etc/xdg/" /etc/xdg/ || true
+    for path in etc/sddm.conf etc/os-release; do
+        if [[ -f "$rootfs/$path" ]]; then install -D -m 0644 "$rootfs/$path" "/$path"; fi
+    done
+    for dir in etc/sddm.conf.d etc/mkinitcpio.conf.d etc/mkinitcpio.d etc/pacman.d/hooks; do
+        if [[ -d "$rootfs/$dir" ]]; then mkdir -p "/$dir"; rsync -aHAX --numeric-ids "$rootfs/$dir/" "/$dir/" || die "Failed merging /$dir."; fi
+    done
+    for kernel_file in vmlinuz-linux-mulios-generic initramfs-linux-mulios-generic.img; do
+        if [[ -f "$rootfs/boot/$kernel_file" ]]; then install -m 0644 "$rootfs/boot/$kernel_file" "/boot/$kernel_file"; fi
+    done
+    if command -v mkinitcpio >/dev/null 2>&1; then
+        info "Regenerating installed initramfs..."
+        mkinitcpio -P || die "mkinitcpio failed after OTA merge."
     fi
-
-    if [[ ! -f "$source_dir/boot/x86_64/initramfs-linux.img" ]]; then
-        umount "$mount_dir" || true
-        die "MuliRecovery ISO initramfs is missing."
+    if command -v grub-mkconfig >/dev/null 2>&1 && [[ -d /boot/grub ]]; then
+        info "Regenerating GRUB configuration..."
+        grub-mkconfig -o /boot/grub/grub.cfg >/dev/null || die "grub-mkconfig failed."
     fi
-
-    if [[ ! -f "$source_dir/x86_64/airootfs.sfs" ]]; then
-        umount "$mount_dir" || true
-        die "MuliRecovery ISO root filesystem is missing."
-    fi
-
-    RECOVERY_PAYLOAD_DIR="$ESP_MOUNT/EFI/MuliRecovery"
-
-    info "Installing MuliRecovery payload to:"
-    info "$RECOVERY_PAYLOAD_DIR"
-
-    rm -rf "$RECOVERY_PAYLOAD_DIR"
-    mkdir -p "$RECOVERY_PAYLOAD_DIR"
-
-    rsync \
-        -aH \
-        --delete \
-        "$source_dir/" \
-        "$RECOVERY_PAYLOAD_DIR/" ||
-        die "Failed installing MuliRecovery payload."
-
-    umount "$mount_dir"
-
-    ok "MuliRecovery payload installed to the ESP."
+    sync
+    ok "MuliOS $OTA_VERSION merged into the installed system."
 }
 
-
-write_systemd_boot_entry() {
-    detect_esp
-
-    command -v bootctl >/dev/null 2>&1 ||
-        return 1
-
-    local loader_dir="$ESP_MOUNT/loader"
-    local entry_dir="$loader_dir/entries"
-    local entry="$entry_dir/mulirecovery.conf"
-
-    [[ -d "$loader_dir" ]] ||
-        return 1
-
-    mkdir -p "$entry_dir"
-
-    cat > "$entry" <<'EOF'
-title   MuliOS Recovery
-linux   /EFI/MuliRecovery/boot/x86_64/vmlinuz-linux
-initrd  /EFI/MuliRecovery/boot/x86_64/initramfs-linux.img
-options archisobasedir=/EFI/MuliRecovery archisosearchfilename=/EFI/MuliRecovery/boot/x86_64/vmlinuz-linux quiet loglevel=0 systemd.show_status=0 rd.systemd.show_status=0 vt.global_cursor_default=0
+create_transaction() {
+    mkdir -p "$TX_DIR"
+    local backup_archive="$1"
+    local config_archive="$2"
+    local installed_version
+    installed_version="$(get_installed_version)"
+    OTA_ISO_SHA256="$(sha256sum "$OTA_ISO" | cut -d " " -f1)"
+    cat > "$TX_DIR/transaction" <<EOF
+MUPDATE_TRANSACTION_VERSION=2
+MUPDATE_MERGE=0
+MUPDATE_MERGE_MODE=installed-root
+TRANSACTION_ID=$(printf '%q' "$TX_ID")
+MUPDATE_CHANNEL=$(printf '%q' "$OTA_CHANNEL")
+MUPDATE_TARGET=$(printf '%q' "$OTA_VERSION")
+MUPDATE_INSTALLED_VERSION=$(printf '%q' "$installed_version")
+MUPDATE_ISO=$(printf '%q' "$OTA_ISO")
+MUPDATE_ISO_SHA256=$(printf '%q' "$OTA_ISO_SHA256")
+MUPDATE_BACKUP=$(printf '%q' "$backup_archive")
+MUPDATE_CONFIG_BACKUP=$(printf '%q' "$config_archive")
+MUPDATE_STATUS=staged
 EOF
-
-    ok "MuliRecovery systemd-boot entry created."
-
-    if bootctl --esp-path="$ESP_MOUNT" set-oneshot mulirecovery.conf >/dev/null 2>&1; then
-        ok "MuliRecovery configured as the next boot."
-        return 0
-    fi
-
-    if bootctl set-oneshot mulirecovery.conf >/dev/null 2>&1; then
-        ok "MuliRecovery configured as the next boot."
-        return 0
-    fi
-
-    warn "systemd-boot entry was created, but set-oneshot failed."
-    return 1
+    chmod 600 "$TX_DIR/transaction"
+    ln -sfn "$TX_DIR/transaction" "$TRANS_DIR/transaction"
+    cat > "$TX_DIR/metadata.json" <<EOF
+{
+  "transaction_id": "$TX_ID",
+  "status": "staged",
+  "channel": "$OTA_CHANNEL",
+  "installed_version": "$installed_version",
+  "target_version": "$OTA_VERSION",
+  "iso": "$OTA_ISO",
+  "iso_sha256": "$OTA_ISO_SHA256",
+  "backup": "$backup_archive",
+  "config_backup": "$config_archive",
+  "merge_mode": "installed-root"
 }
-
-
-write_grub_entry() {
-    command -v grub-mkconfig >/dev/null 2>&1 ||
-        return 1
-
-    command -v grub-reboot >/dev/null 2>&1 ||
-        return 1
-
-    [[ -d /boot/grub ]] ||
-        return 1
-
-    local root_uuid="$ROOT_UUID"
-
-    local grub_script="/etc/grub.d/41_mupdate_recovery"
-
-    cat > "$grub_script" <<EOF
-#!/bin/sh
-
-cat <<'GRUB_ENTRY'
-menuentry 'MuliOS Recovery' --id 'mulirecovery' {
-    search --no-floppy --fs-uuid --set=root ${root_uuid}
-    linux /boot/mulirecovery/boot/x86_64/vmlinuz-linux archisobasedir=/boot/mulirecovery archisosearchfilename=/boot/mulirecovery/boot/x86_64/vmlinuz-linux quiet loglevel=0 systemd.show_status=0 rd.systemd.show_status=0 vt.global_cursor_default=0
-    initrd /boot/mulirecovery/boot/x86_64/initramfs-linux.img
-}
-GRUB_ENTRY
 EOF
-
-    chmod 755 "$grub_script"
-
-    local target="/boot/mulirecovery"
-
-    rm -rf "$target"
-    mkdir -p "$target"
-
-    local mount_dir="$WORKDIR/recovery-grub-iso"
-    mkdir -p "$mount_dir"
-
-    mount -o loop,ro "$RECOVERY_ISO" "$mount_dir" ||
-        die "Unable to mount MuliRecovery ISO for GRUB."
-
-    [[ -d "$mount_dir/mulirecovery" ]] ||
-        die "MuliRecovery payload directory missing."
-
-    rsync \
-        -aH \
-        --delete \
-        "$mount_dir/mulirecovery/" \
-        "$target/" ||
-        die "Failed copying MuliRecovery payload to /boot."
-
-    umount "$mount_dir"
-
-    info "Regenerating GRUB configuration..."
-
-    grub-mkconfig -o /boot/grub/grub.cfg >/dev/null ||
-        die "grub-mkconfig failed."
-
-    grub-reboot "mulirecovery" ||
-        die "Unable to configure GRUB one-shot recovery boot."
-
-    ok "MuliRecovery configured as the next GRUB boot."
-
-    return 0
+    chmod 600 "$TX_DIR/metadata.json"
+    ok "Persistent OTA merge transaction created."
 }
 
-
-configure_recovery_boot() {
-    local systemd_boot_success=0
-    local grub_success=0
-
-    if write_systemd_boot_entry; then
-        systemd_boot_success=1
-    fi
-
-    if [[ "$systemd_boot_success" == "0" ]]; then
-        if write_grub_entry; then
-            grub_success=1
-        fi
-    fi
-
-    if [[ "$systemd_boot_success" == "0" &&
-          "$grub_success" == "0" ]]; then
-
-        die "Unable to configure one-shot MuliRecovery boot.
-
-MUpdate currently supports:
-  - systemd-boot
-  - GRUB
-
-The recovery payload has been installed, but no bootloader was configured.
-The system has NOT been rebooted."
-    fi
+verify_transaction() {
+    [[ -f "$TX_DIR/transaction" ]] || die "OTA transaction was not created."
+    [[ -f "$TX_DIR/metadata.json" ]] || die "OTA transaction metadata was not created."
+    [[ -f "$OTA_ISO" ]] || die "Staged OTA ISO is missing."
+    local actual
+    actual="$(sha256sum "$OTA_ISO" | cut -d " " -f1)"
+    [[ "$actual" == "$OTA_ISO_SHA256" ]] || die "OTA ISO checksum changed after staging."
+    ok "Persistent OTA merge transaction verified."
 }
 
+request_reboot() {
+    echo
+    echo "MUpdate $VERSION — OTA MERGED"
+    echo
+    echo "Channel       : $OTA_CHANNEL"
+    echo "Current       : $(get_installed_version)"
+    echo "Target        : $OTA_VERSION"
+    echo "ISO SHA-256   : $OTA_ISO_SHA256"
+    echo "Transaction   : $TX_ID"
+    echo
+    echo "The MuliOS release has been merged into the installed OS."
+    echo "Machine-specific /etc, /home, /root, /var and bootloader state were preserved."
+    echo
+    confirm "Reboot into the updated MuliOS system now?" || {
+        ok "OTA merge completed. Reboot was cancelled."
+        return 0
+    }
+    sync
+    ok "Rebooting into updated MuliOS..."
+    systemctl reboot
+}
 
 backup_users() {
     mkdir -p "$BACKUP_DIR"
@@ -1382,294 +1249,62 @@ backup_configuration() {
 }
 
 
-create_transaction() {
-    mkdir -p "$TX_DIR"
-
-    local backup_archive="$1"
-    local config_archive="$2"
-
-    local installed_version
-    installed_version="$(get_installed_version)"
-
-    local iso_sha
-    iso_sha="$(
-        sha256sum "$OTA_ISO" |
-        awk '{print $1}'
-    )"
-
-    OTA_ISO_SHA256="$iso_sha"
-
-    local recovery_iso_sha=""
-    recovery_iso_sha="$(
-        sha256sum "$RECOVERY_ISO" |
-        awk '{print $1}'
-    )"
-
-    cat > "$TX_DIR/transaction" <<EOF
-# MUpdate persistent recovery transaction.
-# Generated automatically. Do not edit.
-
-MUPDATE_TRANSACTION_VERSION=1
-MUPDATE_RECOVERY=1
-
-TRANSACTION_ID=$(printf '%q' "$TX_ID")
-
-MUPDATE_CHANNEL=$(printf '%q' "$OTA_CHANNEL")
-MUPDATE_TARGET=$(printf '%q' "$OTA_VERSION")
-MUPDATE_INSTALLED_VERSION=$(printf '%q' "$installed_version")
-
-MUPDATE_ISO=$(printf '%q' "$OTA_ISO")
-MUPDATE_ISO_SHA256=$(printf '%q' "$OTA_ISO_SHA256")
-
-MUPDATE_RECOVERY_ISO=$(printf '%q' "$RECOVERY_ISO")
-MUPDATE_RECOVERY_ISO_SHA256=$(printf '%q' "$recovery_iso_sha")
-
-MUPDATE_ROOT_UUID=$(printf '%q' "$ROOT_UUID")
-MUPDATE_ROOT_FSTYPE=$(printf '%q' "$ROOT_FSTYPE")
-
-MUPDATE_BACKUP=$(printf '%q' "$backup_archive")
-MUPDATE_CONFIG_BACKUP=$(printf '%q' "$config_archive")
-
-MUPDATE_STATUS=staged
-MUPDATE_MERGE_MODE=preserve-setup
-EOF
-
-    chmod 600 "$TX_DIR/transaction"
-
-    ln -sfn "$TX_DIR/transaction" \
-        "$TRANS_DIR/transaction"
-
-    cat > "$TX_DIR/state" <<EOF
-staged
-EOF
-
-    cat > "$TX_DIR/metadata.json" <<EOF
-{
-  "transaction_id": "$TX_ID",
-  "status": "staged",
-  "channel": "$OTA_CHANNEL",
-  "installed_version": "$installed_version",
-  "target_version": "$OTA_VERSION",
-  "iso": "$OTA_ISO",
-  "iso_sha256": "$OTA_ISO_SHA256",
-  "recovery_iso": "$RECOVERY_ISO",
-  "root_uuid": "$ROOT_UUID",
-  "root_fstype": "$ROOT_FSTYPE",
-  "backup": "$backup_archive",
-  "config_backup": "$config_archive",
-  "merge_mode": "preserve-setup"
-}
-EOF
-
-    chmod 600 "$TX_DIR/metadata.json"
-
-    ok "Persistent recovery transaction created."
-}
-
-
-verify_transaction() {
-    [[ -f "$TX_DIR/transaction" ]] ||
-        die "Recovery transaction was not created."
-
-    [[ -f "$TX_DIR/metadata.json" ]] ||
-        die "Recovery transaction metadata was not created."
-
-    [[ -f "$OTA_ISO" ]] ||
-        die "Staged OTA ISO is missing."
-
-    [[ -f "$TX_DIR/transaction" ]] ||
-        die "Transaction file missing."
-
-    local actual
-
-    actual="$(
-        sha256sum "$OTA_ISO" |
-        awk '{print $1}'
-    )"
-
-    [[ "$actual" == "$OTA_ISO_SHA256" ]] ||
-        die "Final OTA ISO checksum changed after staging."
-
-    ok "Persistent OTA transaction verified."
-}
-
-
-prepare_recovery_transaction() {
-    local transaction_copy
-
-    transaction_copy="$ESP_MOUNT/EFI/MuliRecovery/mupdate.transaction"
-
-    install \
-        -m 600 \
-        "$TX_DIR/transaction" \
-        "$transaction_copy"
-
-    ok "Recovery transaction copied to MuliRecovery payload."
-}
-
-
-request_reboot() {
-    echo
-    echo "MUpdate $VERSION — OTA READY"
-    echo
-    echo "Channel       : $OTA_CHANNEL"
-    echo "Current       : $(get_installed_version)"
-    echo "Target        : $OTA_VERSION"
-    echo "ISO           : $OTA_ISO"
-    echo "ISO SHA-256   : $OTA_ISO_SHA256"
-    echo "Transaction   : $TX_ID"
-    echo "Backup        : $TX_DIR"
-    echo
-    echo "The next boot will enter MuliRecovery."
-    echo "MuliRecovery will:"
-    echo
-    echo "  1. Mount the installed MuliOS system"
-    echo "  2. Read the persistent transaction"
-    echo "  3. Load the user/configuration backups"
-    echo "  4. Verify the OTA ISO again"
-    echo "  5. Merge the new MuliOS release"
-    echo "  6. Preserve the existing setup"
-    echo "  7. Restore user data"
-    echo "  8. Regenerate initramfs and boot configuration"
-    echo "  9. Verify the resulting installation"
-    echo " 10. Remove the one-shot recovery boot"
-    echo " 11. Reboot into the updated MuliOS system"
-    echo
-
-    confirm "Reboot into MuliRecovery now?" ||
-        die "OTA is staged but reboot was cancelled.
-
-Transaction:
-  $TX_DIR/transaction"
-
-    sync
-
-    ok "Rebooting into MuliRecovery..."
-
-    systemctl reboot
-}
-
-
 cmd_ota() {
     local channel="$1"
-
-    [[ "$channel" == "beta" ||
-       "$channel" == "stable" ]] ||
-        die "OTA channel must be beta or stable."
-
+    [[ "$channel" == "beta" || "$channel" == "stable" ]] || die "OTA channel must be beta or stable."
     acquire_lock
     require_root
     check_dependencies
     verify_os_identity
     detect_root_filesystem
-
     discover_ota "$channel"
-
     TX_ID="$(date -u '+%Y%m%d_%H%M%S')_$$"
-
     TX_DIR="$TRANS_DIR/$TX_ID"
-
-    local workspace
-    workspace="$TX_DIR/workspace"
-
+    local workspace="$TX_DIR/workspace"
     mkdir -p "$workspace"
-
     info "Downloading OTA parts..."
-
     for part in "${OTA_PARTS[@]}"; do
-        local destination
-        destination="$workspace/$part"
-
-        local url
-        url="$(
-            raw_url "latest/${channel}/arch/${part}"
-        )"
-
+        local destination="$workspace/$part"
+        local url="$(raw_url "latest/${channel}/arch/${part}")"
         info "Downloading $part..."
-
-        curl \
-            -fL \
-            --retry 3 \
-            --retry-all-errors \
-            -o "$destination" \
-            "$url" ||
-            die "Failed downloading $part."
-
-        [[ -s "$destination" ]] ||
-            die "Downloaded OTA part is empty: $part"
-
-        ok "Downloaded $part."
+        curl -fL --retry 3 --retry-all-errors -o "$destination" "$url" || die "Failed downloading $part."
+        [[ -s "$destination" ]] || die "Downloaded OTA part is empty: $part"
     done
-
     OTA_ISO="$TX_DIR/MuliOS-${OTA_VERSION}-x86_64.iso"
-
     info "Reassembling ISO..."
-
     : > "$OTA_ISO"
-
-    for part in "${OTA_PARTS[@]}"; do
-        cat "$workspace/$part" >> "$OTA_ISO"
-    done
-
-    [[ -s "$OTA_ISO" ]] ||
-        die "Reassembled OTA ISO is empty."
-
+    for part in "${OTA_PARTS[@]}"; do cat "$workspace/$part" >> "$OTA_ISO"; done
+    [[ -s "$OTA_ISO" ]] || die "Reassembled OTA ISO is empty."
     validate_iso9660_header "$OTA_ISO"
     validate_iso_structure "$OTA_ISO"
-
-    OTA_ISO_SHA256="$(
-        sha256sum "$OTA_ISO" |
-        awk '{print $1}'
-    )"
-
-    ok "OTA ISO SHA-256:"
-    ok "$OTA_ISO_SHA256"
-
+    OTA_ISO_SHA256="$(sha256sum "$OTA_ISO" | cut -d " " -f1)"
+    ok "OTA ISO SHA-256: $OTA_ISO_SHA256"
     backup_users
-    local backup_archive
-    backup_archive="$BACKUP_DIR/users_${TX_ID}.tar.gz"
-
+    local backup_archive="$BACKUP_DIR/users_${TX_ID}.tar.gz"
     backup_configuration
-    local config_archive
-    config_archive="$BACKUP_DIR/config_${TX_ID}.tar.gz"
-
-    install_recovery_payload
-
-    create_transaction \
-        "$backup_archive" \
-        "$config_archive"
-
-    prepare_recovery_transaction
-
+    local config_archive="$BACKUP_DIR/config_${TX_ID}.tar.gz"
+    create_transaction "$backup_archive" "$config_archive"
     verify_transaction
-
-    configure_recovery_boot
-
-    printf '%s\n' "$channel" \
-        > "$CHANNEL_FILE"
-
+    merge_release_root "$OTA_ISO"
+    sed -i 's/^MUPDATE_STATUS=.*/MUPDATE_STATUS=merged/' "$TX_DIR/transaction"
+    sed -i 's/"status": "staged"/"status": "merged"/' "$TX_DIR/metadata.json"
+    printf '%s\n' "$channel" > "$CHANNEL_FILE"
     cat > "$TRANS_DIR/latest.json" <<EOF
 {
   "transaction_id": "$TX_ID",
-  "status": "ready-for-recovery",
+  "status": "merged",
   "channel": "$channel",
   "target_version": "$OTA_VERSION",
   "iso": "$OTA_ISO",
   "iso_sha256": "$OTA_ISO_SHA256",
-  "root_uuid": "$ROOT_UUID",
-  "root_fstype": "$ROOT_FSTYPE",
   "backup": "$backup_archive",
   "config_backup": "$config_archive",
-  "recovery_iso": "$RECOVERY_ISO",
-  "merge_mode": "preserve-setup"
+  "merge_mode": "installed-root"
 }
 EOF
-
     sync
-
     request_reboot
 }
-
 
 cmd_status() {
     require_root
@@ -1708,7 +1343,7 @@ cmd_status() {
     if [[ -L "$TRANS_DIR/transaction" ||
           -f "$TRANS_DIR/transaction" ]]; then
         echo
-        echo "Recovery Transaction:"
+        echo "OTA Merge Transaction:"
         echo "  $TRANS_DIR/transaction"
 
         if [[ -f "$TRANS_DIR/transaction" ]]; then
@@ -1807,83 +1442,22 @@ OTA
   sudo mupdate ota stable
 
 OTA FLOW
-  MUpdate performs:
+  MUpdate downloads and verifies the split release ISO, backs up user data,
+  extracts the release filesystem and merges MuliOS-owned system areas
+  directly into the installed OS. No MuliOS OTA merge ISO is installed.
 
-    1. Discover split MuliOS ISO
-    2. Download every ISO part
-    3. Verify part continuity
-    4. Reassemble the ISO
-    5. Verify ISO 9660 structure
-    6. Calculate ISO SHA-256
-    7. Backup /home
-    8. Backup /root
-    9. Backup /etc and /var/lib
-   10. Prepare persistent transaction
-   11. Install MuliRecovery to the ESP
-   12. Create a one-shot recovery boot
-   13. Reboot into MuliRecovery
+  Preserved:
+    /home /root machine-specific /etc /var /srv bootloader state
 
-RECOVERY
-  MuliRecovery performs the offline update.
-
-  It receives:
-
-    - OTA ISO
-    - ISO SHA-256
-    - root filesystem UUID
-    - root filesystem type
-    - user backup
-    - configuration backup
-    - target release
-    - transaction ID
-
-MERGE MODE
-  The recovery engine uses:
-
-    preserve-setup
-
-  User data and existing configuration are preserved.
-
-  The new MuliOS release is merged into the
-  existing installation instead of performing
-  a normal live installer installation.
-
-PROFILE DISCOVERY
-  GitHub:
-    ${GITHUB_OWNER}/${GITHUB_REPO}
-
-  Profiles:
-    profiles/<profile>/
-
-PROFILE PACKAGE
-  A profile ZIP may contain:
-
-    linux-mulios-*.pkg.tar.zst
-    linux-mulios-*-headers-*.pkg.tar.zst
-    sh/packages.sh
-    sh/install.sh
-
-  MUpdate runs:
-
-    1. sh/packages.sh
-    2. sh/install.sh
+  Updated:
+    /usr /usr/local /opt /etc/xdg MuliOS hooks kernel and initramfs
 
 INFORMATION
   sudo mupdate status
   sudo mupdate --check
   sudo mupdate cancel
-
   mupdate --version
   mupdate --help
-
-RECOVERY ISO
-  MUpdate expects a built MuliRecovery ISO at:
-
-    ${RECOVERY_ISO_DIR}/MuliRecovery-*-x86_64.iso
-
-  Override the discovery pattern with:
-
-    RECOVERY_ISO_GLOB=/path/to/MuliRecovery-*.iso
 EOF
 }
 
@@ -1929,11 +1503,11 @@ while [[ $# -gt 0 ]]; do
             ;;
 
         --apply)
-            die "--apply is obsolete. OTA installation is performed by MuliRecovery."
+            die "--apply is obsolete. Use sudo mupdate ota beta|stable."
             ;;
 
         --repair)
-            die "--repair is not available outside MuliRecovery."
+            die "--repair is not available."
             ;;
 
         status)
