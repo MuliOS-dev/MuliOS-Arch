@@ -21,7 +21,7 @@ LOG_FILE="/var/log/mupdate.log"
 LOCK_FILE="$STATE_DIR/mupdate.lock"
 WORKDIR="$(mktemp -d /tmp/mupdate.XXXXXX)"
 
-ASSUME_YES=0
+ASSUME_YES=1
 SAFE_MODE=0
 DRY_RUN=0
 
@@ -164,6 +164,10 @@ merge_file() {
         link_target="$(curl -fsSL --retry 3 --retry-all-errors "$(raw_url "$repo_path")")" ||
             die "Failed downloading symlink: $repo_path"
 
+        local link_sha
+        link_sha="$(printf '%s' "$link_target" | git hash-object --stdin)"
+        [[ "$link_sha" == "$remote_sha" ]] || die "Repository changed while downloading symlink: $repo_path"
+
         if [[ "$DRY_RUN" == "1" ]]; then
             printf 'UPDATE LINK %s -> %s\n' "$local_path" "$link_target"
             return
@@ -187,11 +191,18 @@ merge_file() {
         return
     fi
 
-    case "$mode" in
-        100755) install -D -m 0755 "$temp_file" "$local_path" ;;
-        100644) install -D -m 0644 "$temp_file" "$local_path" ;;
-        *) die "Unsupported Git mode $mode: $repo_path" ;;
-    esac
+    local install_mode=0644
+    if [[ -e "$local_path" && ! -L "$local_path" ]]; then
+        install_mode="$(stat -c '%a' "$local_path")"
+    else
+        case "$local_path" in
+            /usr/bin/*|/usr/local/bin/*|/usr/lib/systemd/system-generators/*|/usr/lib/udev/*)
+                install_mode=0755
+                ;;
+        esac
+    fi
+
+    install -D -m "$install_mode" "$temp_file" "$local_path"
 }
 
 sync_repository() {
@@ -333,6 +344,11 @@ BEHAVIOR
   New or changed files are downloaded and merged.
 
   Files are never deleted.
+  New files default to non-executable permissions unless installed under a
+  known executable directory. Existing file permissions are preserved.
+
+  Live-ISO-only files are excluded, including live-user autologin, the live
+  installer shortcut, live systemd unit links, and archiso mkinitcpio config.
 
 PROTECTED MACHINE STATE
   /etc/passwd
