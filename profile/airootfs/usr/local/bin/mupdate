@@ -133,7 +133,9 @@ local_blob_sha() {
 
     if [[ "$mode" == "120000" ]]; then
         [[ -L "$local_path" ]] || return 1
-        readlink "$local_path" | git hash-object --stdin
+        local link_target
+        link_target="$(readlink "$local_path")"
+        printf '%s' "$link_target" | git hash-object --stdin
         return
     fi
 
@@ -222,6 +224,9 @@ sync_repository() {
 
     jq -e '.tree | type == "array"' "$tree_file" >/dev/null ||
         die "GitHub returned an invalid repository tree."
+
+    [[ "$(jq -r '.truncated // false' "$tree_file")" == "false" ]] ||
+        die "GitHub returned a truncated tree; refusing an incomplete merge."
 
     REMOTE_TREE_SHA="$(jq -r '.sha' "$tree_file")"
 
