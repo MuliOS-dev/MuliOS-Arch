@@ -79,7 +79,7 @@ require_cmd() {
 }
 
 check_dependencies() {
-    require_cmd curl jq git sha1sum sha256sum install mkdir rm mktemp stat chmod readlink flock tar cp sed tr date
+    require_cmd curl jq git sha1sum sha256sum install mkdir rm mktemp stat chmod readlink flock tar cp sed tr date head cat
 }
 
 acquire_lock() {
@@ -212,6 +212,9 @@ merge_file() {
 sync_repository() {
     local tree_file="$WORKDIR/tree.json"
     local manifest="$WORKDIR/manifest"
+    local deferred_mupdate_path=""
+    local deferred_mupdate_mode=""
+    local deferred_mupdate_sha=""
 
     info "Checking MuliOS-Arch..."
     get_tree > "$tree_file" ||
@@ -258,6 +261,13 @@ sync_repository() {
 
         [[ "$SAFE_MODE" == "1" ]] && continue
 
+        if [[ "$path" == "profile/airootfs/usr/local/bin/mupdate" ]]; then
+            deferred_mupdate_path="$path"
+            deferred_mupdate_mode="$mode"
+            deferred_mupdate_sha="$remote_sha"
+            continue
+        fi
+
         if ! confirm "Merge /$(printf '%s' "$path" | sed 's#^profile/airootfs/##')?"; then
             ((SKIPPED_COUNT+=1))
             continue
@@ -265,6 +275,14 @@ sync_repository() {
 
         merge_file "$path" "$mode" "$remote_sha"
     done < "$manifest"
+
+    if [[ -n "$deferred_mupdate_path" ]]; then
+        if [[ "$SAFE_MODE" == "0" ]]; then
+            merge_file "$deferred_mupdate_path" "$deferred_mupdate_mode" "$deferred_mupdate_sha"
+        else
+            echo "UPDATE /usr/local/bin/mupdate (deferred until other files are checked)"
+        fi
+    fi
 
     if [[ "$DRY_RUN" == "0" && "$SAFE_MODE" == "0" ]]; then
         mkdir -p "$STATE_DIR"
