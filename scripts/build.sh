@@ -5,7 +5,8 @@ install_dependencies() {
     echo "[INFO]: installing dependencies"
 
     if command -v pacman >/dev/null 2>&1; then
-        sudo pacman -S --needed --noconfirm archiso git base-devel squashfs-tools mtools dosfstools libisoburn
+        sudo pacman -S --needed --noconfirm \
+            archiso git base-devel squashfs-tools mtools dosfstools libisoburn curl
     else
         echo "[ERROR]: not in an Arch Linux environment"
         exit 1
@@ -30,6 +31,8 @@ setup
 build() {
     local mulios_version
     mulios_version="$(cat "$PROFILE/version")"
+
+    "$WORK_DIR/scripts/install-rounded-theme.sh"
 
     cat > "$PROFILE/airootfs/etc/os-release" <<EOF
 NAME="MuliOS"
