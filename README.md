@@ -61,6 +61,26 @@ Build the ISO:
 
 The generated ISO will be available in the `output/` directory.
 
+## Updating an installed MuliOS system
+
+MUpdate updates an installed system directly from this repository. It does not download or reconstruct an ISO and does not use a recovery environment.
+
+```bash
+sudo mupdate update
+```
+
+MUpdate compares Git blob hashes for files under `profile/airootfs/` against the corresponding installed paths. It downloads and merges only new or changed files. It does not delete files.
+
+Live-ISO-only configuration is excluded, including live-user autologin, live installer shortcuts, ArchISO initramfs settings, and live systemd unit links. Machine-specific account, host, storage, SSH, user-data, and boot files are protected.
+
+Preview changes before applying them:
+
+```bash
+sudo mupdate update --dry-run
+```
+
+See [`docs/mupdate.md`](docs/mupdate.md) for details and limitations.
+
 ## Development
 
 MuliOS Arch is developed using a structured workflow:
