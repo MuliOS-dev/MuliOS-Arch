@@ -57,7 +57,7 @@
 #   /boot
 #   /efi
 #   /srv
-#   /opt
+#   /opt is updated from the release
 #
 # while allowing the new MuliOS release to update system files.
 #
@@ -1095,7 +1095,7 @@ create_transaction() {
     OTA_ISO_SHA256="$(sha256sum "$OTA_ISO" | cut -d " " -f1)"
     cat > "$TX_DIR/transaction" <<EOF
 MUPDATE_TRANSACTION_VERSION=2
-MUPDATE_MERGE=0
+MUPDATE_MERGE=1
 MUPDATE_MERGE_MODE=installed-root
 TRANSACTION_ID=$(printf '%q' "$TX_ID")
 MUPDATE_CHANNEL=$(printf '%q' "$OTA_CHANNEL")
