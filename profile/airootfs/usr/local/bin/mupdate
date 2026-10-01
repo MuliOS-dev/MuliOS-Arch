@@ -111,14 +111,7 @@ get_tree() {
 is_protected() {
     local path="$1"
     case "$path" in
-        profile/airootfs/etc/passwd|profile/airootfs/etc/shadow|profile/airootfs/etc/group|profile/airootfs/etc/gshadow|profile/airootfs/etc/hostname|profile/airootfs/etc/hosts|profile/airootfs/etc/machine-id|profile/airootfs/etc/localtime|profile/airootfs/etc/adjtime|profile/airootfs/etc/fstab|profile/airootfs/etc/crypttab|profile/airootfs/etc/ssh/*|
-        profile/airootfs/etc/sddm.conf.d/autologin.conf|profile/airootfs/etc/sudoers.d/mulios-installer|
-        profile/airootfs/etc/systemd/system/*|profile/airootfs/etc/mkinitcpio.conf.d/archiso.conf|profile/airootfs/etc/systemd/resolved.conf.d/archiso.conf|
-        profile/airootfs/etc/pacman.d/hooks/zzzz99-remove-custom-hooks-from-airootfs.hook|profile/airootfs/usr/local/bin/livecd-sound|
-        profile/airootfs/usr/share/applications/mulios-installer.desktop|profile/airootfs/usr/share/applications/mulios-changelog.desktop|
-        profile/airootfs/etc/xdg/autostart/mulios-welcome.desktop|profile/airootfs/etc/skel/Desktop/mulios-installer.desktop|
-        profile/airootfs/opt/mulios-installer/*|profile/airootfs/opt/mulios-changelog/*|
-        profile/airootfs/var/*|profile/airootfs/home/*|profile/airootfs/root/*|profile/airootfs/boot/*|profile/airootfs/efi/*)
+        profile/airootfs/etc/passwd|profile/airootfs/etc/shadow|profile/airootfs/etc/group|profile/airootfs/etc/gshadow|profile/airootfs/etc/hostname|profile/airootfs/etc/hosts|profile/airootfs/etc/machine-id|profile/airootfs/etc/localtime|profile/airootfs/etc/adjtime|profile/airootfs/etc/fstab|profile/airootfs/etc/crypttab|profile/airootfs/etc/ssh/*|profile/airootfs/etc/sddm.conf.d/autologin.conf|profile/airootfs/etc/sudoers.d/mulios-installer|profile/airootfs/etc/systemd/system/*|profile/airootfs/etc/mkinitcpio.conf.d/archiso.conf|profile/airootfs/etc/systemd/resolved.conf.d/archiso.conf|profile/airootfs/etc/pacman.d/hooks/zzzz99-remove-custom-hooks-from-airootfs.hook|profile/airootfs/usr/local/bin/livecd-sound|profile/airootfs/usr/share/applications/mulios-installer.desktop|profile/airootfs/usr/share/applications/mulios-changelog.desktop|profile/airootfs/etc/xdg/autostart/mulios-welcome.desktop|profile/airootfs/etc/skel/Desktop/mulios-installer.desktop|profile/airootfs/opt/mulios-installer/*|profile/airootfs/opt/mulios-changelog/*|profile/airootfs/var/*|profile/airootfs/home/*|profile/airootfs/root/*|profile/airootfs/boot/*|profile/airootfs/efi/*)
             return 0
             ;;
     esac
