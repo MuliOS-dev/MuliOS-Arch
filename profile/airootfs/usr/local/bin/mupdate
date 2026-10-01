@@ -1,1588 +1,399 @@
 #!/usr/bin/env bash
-
-# MUpdate — MuliOS Arch OTA + Kernel Profile Manager
-#
-# Version: a1.0.6
-#
-# NOTICE TO USERS:
-# MUpdate is a system program that modifies the kernel and bootloader.
-# IT IS NOT INTENDED FOR MODIFICATIONS.
-# DO NOT INSTALL OR RUN ANY MODIFIED MUPDATE VERSIONS.
-#
-# Commands:
-#
-#   sudo mupdate install
-#   sudo mupdate <profile>
-#   sudo mupdate <profile> -r
-#   sudo mupdate <profile> -y
-#   sudo mupdate <profile> -s
-#   sudo mupdate <profile> -f
-#   sudo mupdate <profile> setup
-#
-# OTA:
-#
-#   sudo mupdate ota beta
-#   sudo mupdate ota stable
-#
-# Information:
-#
-#   mupdate --version
-#   mupdate --help
-#   sudo mupdate status
-#   sudo mupdate cancel
-#   sudo mupdate --check
-#
-# OTA transaction:
-#
-#   1. Discover split ISO
-#   2. Download every part
-#   3. Verify part continuity
-#   4. Reassemble ISO
-#   5. Verify ISO 9660 structure
-#   6. Calculate ISO SHA-256
-#   7. Backup user data
-#   8. Create persistent transaction
-#   9. Stage the release root filesystem
-#  10. Merge the release into the installed OS
-#  11. Reboot into the updated MuliOS system
-#
-# MUpdate performs the offline merge directly into the installed root.
-#
-# The merge is designed to preserve:
-#
-#   /home
-#   /root
-#   /etc
-#   /var
-#   /boot
-#   /efi
-#   /srv
-#   /opt is updated from the release
-#
-# while allowing the new MuliOS release to update system files.
-#
-# IMPORTANT:
-# MUpdate merges only MuliOS-owned system areas and preserves machine-specific state.
-
 set -Eeuo pipefail
 
-VERSION="a1.0.6"
+# MUpdate — MuliOS repository merger
+# Version: a1.0.6
+#
+# Source: https://github.com/MuliOS-dev/MuliOS-Arch
+# Source tree: profile/airootfs
+#
+# Only new/changed MuliOS-owned files are downloaded.
+# Files are never deleted.
+# Machine-specific state is protected.
 
-GITHUB_OWNER="${GITHUB_OWNER:-MuliOS-dev}"
-GITHUB_REPO="${GITHUB_REPO:-update}"
-GITHUB_BRANCH="${GITHUB_BRANCH:-main}"
-GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+VERSION="a1.0.6"
+GITHUB_OWNER="MuliOS-dev"
+GITHUB_REPO="MuliOS-Arch"
+GITHUB_BRANCH="main"
 
 STATE_DIR="/var/lib/mupdate"
-PROFILE_STATE_DIR="${STATE_DIR}/state"
-TRANS_DIR="${STATE_DIR}/transaction"
-BACKUP_DIR="${STATE_DIR}/backups"
-CHANNEL_FILE="${STATE_DIR}/channel"
 LOG_FILE="/var/log/mupdate.log"
-LOCK_FILE="${STATE_DIR}/mupdate.lock"
-
+LOCK_FILE="$STATE_DIR/mupdate.lock"
 WORKDIR="$(mktemp -d /tmp/mupdate.XXXXXX)"
 
 ASSUME_YES=0
 SAFE_MODE=0
-FORCE=0
-RESET=0
+DRY_RUN=0
 
-CURRENT_PROFILE=""
-KERNEL_VERSION=""
-OS_TAG=""
+CHANGED_COUNT=0
+ADDED_COUNT=0
+SKIPPED_COUNT=0
+REMOTE_VERSION=""
+REMOTE_TREE_SHA=""
 
-TARGET_PROFILE=""
-
-RUN_HAD_FAILURES=0
-
-PROFILE_DIR=""
-ZIP_NAME=""
-ZIP_URL=""
-CHECKSUM_NAME=""
-CHECKSUM_URL=""
-ZIP_PATH=""
-EXTRACT_DIR=""
-
-OTA_CHANNEL=""
-OTA_VERSION=""
-OTA_PARTS=()
-
-TX_ID=""
-TX_DIR=""
-OTA_ISO=""
-OTA_ISO_SHA256=""
-
-C_RED=$'\033[0;31m'
-C_GRN=$'\033[0;32m'
-C_YEL=$'\033[0;33m'
-C_BLU=$'\033[0;34m'
-C_RST=$'\033[0m'
-
+cleanup() {
+    rm -rf "$WORKDIR"
+}
+trap cleanup EXIT
+trap 'die "Interrupted."' INT TERM
 
 log() {
     mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
-
-    echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') [$$] $1" \
-        >> "$LOG_FILE" 2>/dev/null || true
+    printf '%s [MUpdate] %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1" >> "$LOG_FILE" 2>/dev/null || true
 }
 
-
 info() {
-    echo "${C_BLU}==>${C_RST} $*" >&2
+    printf '\033[0;34m==>\033[0m %s\n' "$*" >&2
     log "INFO: $*"
 }
 
-
 ok() {
-    echo "${C_GRN}==>${C_RST} $*" >&2
+    printf '\033[0;32m==>\033[0m %s\n' "$*" >&2
     log "OK: $*"
 }
 
-
 warn() {
-    echo "${C_YEL}==>${C_RST} $*" >&2
+    printf '\033[0;33m==>\033[0m %s\n' "$*" >&2
     log "WARN: $*"
 }
 
-
 err() {
-    echo "${C_RED}==>${C_RST} $*" >&2
+    printf '\033[0;31m==>\033[0m %s\n' "$*" >&2
     log "ERROR: $*"
 }
-
-
-cleanup() {
-    if [[ -d "$WORKDIR" ]]; then
-        rm -rf "$WORKDIR"
-    fi
-}
-
 
 die() {
     err "$*"
     exit 1
 }
 
-
-trap cleanup EXIT
-trap 'die "Interrupted by signal."' INT TERM
-
-
 require_root() {
-    [[ "$(id -u)" -eq 0 ]] ||
-        die "Administrator privileges required. Run with sudo."
+    [[ "$(id -u)" -eq 0 ]] || die "Run MUpdate with sudo."
 }
-
 
 require_cmd() {
-    local missing=()
-
+    local cmd
     for cmd in "$@"; do
-        command -v "$cmd" >/dev/null 2>&1 ||
-            missing+=("$cmd")
+        command -v "$cmd" >/dev/null 2>&1 || die "Missing required command: $cmd"
     done
-
-    if [[ ${#missing[@]} -gt 0 ]]; then
-        die "Missing required commands: ${missing[*]}"
-    fi
 }
-
 
 check_dependencies() {
-    require_cmd \
-        bash \
-        curl \
-        jq \
-        sha256sum \
-        pacman \
-        uname \
-        grep \
-        sed \
-        awk \
-        sort \
-        find \
-        tar \
-        stat \
-        flock \
-        mktemp \
-        install \
-        tr \
-        head \
-        cat \
-        dd \
-        mount \
-        umount \
-        rsync \
-        unsquashfs \
-        sync
-
-    if ! command -v unzip >/dev/null 2>&1 &&
-       ! command -v 7z >/dev/null 2>&1; then
-        die "Neither unzip nor 7z is installed."
-    fi
+    require_cmd curl jq git sha1sum sha256sum install mkdir rm mktemp stat chmod readlink flock
 }
-
 
 acquire_lock() {
     mkdir -p "$STATE_DIR"
-
     exec 200>"$LOCK_FILE"
-
-    flock -n 200 ||
-        die "Another instance of MUpdate is already running."
+    flock -n 200 || die "Another MUpdate process is already running."
 }
 
+verify_os() {
+    [[ -r /etc/os-release ]] || die "/etc/os-release is missing."
+
+    local id id_like
+    id="$(sed -n 's/^ID=//p' /etc/os-release | tr -d '"')"
+    id_like="$(sed -n 's/^ID_LIKE=//p' /etc/os-release | tr -d '"')"
+
+    [[ "$id" == "mulios" && "$id_like" == *arch* ]] ||
+        die "This is not an Arch-based MuliOS installation."
+}
+
+raw_url() {
+    printf 'https://raw.githubusercontent.com/%s/%s/%s/%s\n' \
+        "$GITHUB_OWNER" "$GITHUB_REPO" "$GITHUB_BRANCH" "$1"
+}
+
+get_tree() {
+    curl -fsSL         --retry 3         --retry-all-errors         -H "Accept: application/vnd.github+json"         -H "X-GitHub-Api-Version: 2022-11-28"         "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/git/trees/$GITHUB_BRANCH?recursive=1"
+}
+
+is_protected() {
+    case "$1" in
+        profile/airootfs/etc/passwd|        profile/airootfs/etc/shadow|        profile/airootfs/etc/group|        profile/airootfs/etc/gshadow|        profile/airootfs/etc/hostname|        profile/airootfs/etc/hosts|        profile/airootfs/etc/machine-id|        profile/airootfs/etc/localtime|        profile/airootfs/etc/adjtime|        profile/airootfs/etc/fstab|        profile/airootfs/etc/crypttab|        profile/airootfs/etc/ssh/*|        profile/airootfs/var/*|        profile/airootfs/home/*|        profile/airootfs/root/*|        profile/airootfs/boot/*|        profile/airootfs/efi/*)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+is_syncable() {
+    [[ "$1" == profile/airootfs/* ]] || return 1
+    is_protected "$1" && return 1
+    return 0
+}
+
+local_blob_sha() {
+    local repo_path="$1"
+    local mode="$2"
+    local local_path
+
+    local_path="$(printf '%s' "$repo_path" | sed 's#^profile/airootfs##')"
+
+    if [[ "$mode" == "120000" ]]; then
+        [[ -L "$local_path" ]] || return 1
+        readlink "$local_path" | git hash-object --stdin
+        return
+    fi
+
+    [[ -f "$local_path" ]] || return 1
+    git hash-object "$local_path"
+}
 
 confirm() {
     [[ "$ASSUME_YES" == "1" ]] && return 0
 
     local reply
-
-    read -r -p "${C_YEL}?${C_RST} $1 [y/N] " reply
+    read -r -p "? $1 [y/N] " reply
 
     case "$reply" in
-        y|Y|yes|YES|Yes)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
+        y|Y|yes|YES|Yes) return 0 ;;
+        *) return 1 ;;
     esac
 }
 
-
-print_version() {
-    echo "mupdate version $VERSION"
-}
-
-
-verify_os_identity() {
-    [[ -f /etc/os-release ]] ||
-        die "/etc/os-release is missing."
-
-    local id_val
-    local id_like
-
-    id_val="$(
-        sed -n 's/^ID=//p' /etc/os-release |
-        tr -d '"'
-    )"
-
-    id_like="$(
-        sed -n 's/^ID_LIKE=//p' /etc/os-release |
-        tr -d '"'
-    )"
-
-    if [[ "$id_val" != "mulios" || "$id_like" != *arch* ]]; then
-        die "Incompatible OS: ID=$id_val ID_LIKE=$id_like. MUpdate $VERSION requires an Arch-based MuliOS installation."
-    fi
-
-    ok "MuliOS Arch system detected."
-}
-
-
-get_installed_version() {
-    local ver
-
-    ver="$(
-        sed -n 's/^VERSION_ID=//p' /etc/os-release |
-        tr -d '"'
-    )"
-
-    if [[ -z "$ver" ]]; then
-        ver="$(
-            sed -n 's/^VERSION=//p' /etc/os-release |
-            tr -d '"'
-        )"
-    fi
-
-    [[ -n "$ver" ]] ||
-        die "Unable to determine installed MuliOS version."
-
-    echo "$ver"
-}
-
-
-detect_kernel() {
-    local kernel_string
-
-    kernel_string="$(uname -r)"
-
-    info "Running kernel: $kernel_string"
-
-    if [[ "$kernel_string" =~ ^([0-9]+(\.[0-9]+)*)-([A-Za-z0-9_-]+)-([A-Za-z0-9_-]+)$ ]]; then
-        KERNEL_VERSION="${BASH_REMATCH[1]}"
-        OS_TAG="${BASH_REMATCH[3]}"
-        CURRENT_PROFILE="${BASH_REMATCH[4],,}"
-
-        info "Kernel version : $KERNEL_VERSION"
-        info "OS tag         : $OS_TAG"
-        info "Current profile: $CURRENT_PROFILE"
-    else
-        warn "Kernel does not match <version>-mulios-<profile>."
-
-        KERNEL_VERSION="unknown"
-        OS_TAG="unknown"
-        CURRENT_PROFILE=""
-    fi
-}
-
-
-check_profile_lock() {
-    local target="${1,,}"
-
-    if [[ "$FORCE" == "1" ]]; then
-        warn "Force mode: bypassing profile lock."
-        return 0
-    fi
-
-    if [[ -z "$CURRENT_PROFILE" ]]; then
-        warn "Unable to determine the current kernel profile."
-
-        confirm "Proceed with installing '$target'?" ||
-            die "Aborted."
-
-        return 0
-    fi
-
-    if [[ "$CURRENT_PROFILE" == "generic" ]]; then
-        return 0
-    fi
-
-    if [[ "$CURRENT_PROFILE" == "$target" ]]; then
-        return 0
-    fi
-
-    if [[ "$RESET" != "1" ]]; then
-        die "Currently using profile '$CURRENT_PROFILE'. Switching to '$target' requires -r."
-    fi
-
-    warn "Profile reset requested: '$CURRENT_PROFILE' -> '$target'."
-}
-
-
-gh_api_get() {
-    local path="$1"
-
-    local url
-    url="https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${path}?ref=${GITHUB_BRANCH}"
-
-    local tmp
-    tmp="$(mktemp)"
-
-    local curl_args=(
-        -sS
-        -o "$tmp"
-        -w "%{http_code}"
-        -H "Accept: application/vnd.github+json"
-        -H "X-GitHub-Api-Version: 2022-11-28"
-    )
-
-    if [[ -n "$GITHUB_TOKEN" ]]; then
-        curl_args+=(
-            -H "Authorization: Bearer ${GITHUB_TOKEN}"
-        )
-    fi
-
-    local http_code
-
-    if ! http_code="$(
-        curl "${curl_args[@]}" "$url"
-    )"; then
-        rm -f "$tmp"
-        return 100
-    fi
-
-    case "$http_code" in
-        200)
-            cat "$tmp"
-            rm -f "$tmp"
-            return 0
-            ;;
-
-        404)
-            rm -f "$tmp"
-            return 404
-            ;;
-
-        429)
-            rm -f "$tmp"
-            return 429
-            ;;
-
-        *)
-            rm -f "$tmp"
-            return 500
-            ;;
-    esac
-}
-
-
-raw_url() {
-    local path="$1"
-
-    printf \
-        'https://raw.githubusercontent.com/%s/%s/%s/%s\n' \
-        "$GITHUB_OWNER" \
-        "$GITHUB_REPO" \
-        "$GITHUB_BRANCH" \
-        "$path"
-}
-
-
-find_profile_dir() {
-    local target="${1,,}"
-
-    info "Querying live profiles directory..."
-
-    local listing
-
-    if ! listing="$(gh_api_get "profiles")"; then
-        die "Unable to query GitHub profiles directory."
-    fi
-
-    PROFILE_DIR="$(
-        echo "$listing" |
-        jq -r '
-            .[]?
-            | select(.type == "dir")
-            | .name
-        ' |
-        awk -v target="$target" '
-            BEGIN { IGNORECASE=1 }
-            tolower($0) == tolower(target) {
-                print
-                exit
-            }
-        '
-    )"
-
-    if [[ -z "$PROFILE_DIR" ]]; then
-        die "Unknown MuliOS profile: '$target'. No matching directory exists in profiles/."
-    fi
-
-    ok "Remote profile directory: profiles/$PROFILE_DIR"
-}
-
-
-find_profile_zip() {
-    local target="${1,,}"
-
-    local listing
-
-    if ! listing="$(gh_api_get "profiles/${PROFILE_DIR}")"; then
-        die "Unable to query profiles/${PROFILE_DIR}."
-    fi
-
-    ZIP_NAME="$(
-        echo "$listing" |
-        jq -r '
-            .[]?
-            | select(.type == "file")
-            | .name
-        ' |
-        awk -v target="$target" '
-            BEGIN { IGNORECASE=1 }
-            /\.zip$/ && index(tolower($0), tolower(target)) {
-                print
-                exit
-            }
-        '
-    )"
-
-    if [[ -z "$ZIP_NAME" ]]; then
-        die "Profile '$target' exists, but no profile ZIP containing '$target' is currently available in profiles/$PROFILE_DIR/."
-    fi
-
-    ZIP_URL="$(
-        raw_url "profiles/${PROFILE_DIR}/${ZIP_NAME}"
-    )"
-
-    ok "Profile ZIP: $ZIP_NAME"
-
-    local base
-    base="${ZIP_NAME%.zip}"
-
-    CHECKSUM_NAME="$(
-        echo "$listing" |
-        jq -r '
-            .[]?
-            | select(.type == "file")
-            | .name
-        ' |
-        awk -v base="$base" '
-            BEGIN { IGNORECASE=1 }
-            tolower($0) == tolower(base ".sha256") {
-                print
-                exit
-            }
-        '
-    )"
-
-    if [[ -n "$CHECKSUM_NAME" ]]; then
-        CHECKSUM_URL="$(
-            raw_url "profiles/${PROFILE_DIR}/${CHECKSUM_NAME}"
-        )"
-
-        ok "Profile checksum: $CHECKSUM_NAME"
-    else
-        CHECKSUM_URL=""
-        warn "No checksum file found for $ZIP_NAME."
-    fi
-}
-
-
-find_global_release() {
-    info "Querying live global release..."
-
-    local listing
-
-    if ! listing="$(gh_api_get "global")"; then
-        die "Unable to query global/."
-    fi
-
-    ZIP_NAME="$(
-        echo "$listing" |
-        jq -r '
-            .[]?
-            | select(.type == "file")
-            | .name
-        ' |
-        awk '
-            BEGIN { IGNORECASE=1 }
-            tolower($0) == "release.zip" {
-                print
-                exit
-            }
-        '
-    )"
-
-    [[ -n "$ZIP_NAME" ]] ||
-        die "global/release.zip was not found."
-
-    ZIP_URL="$(
-        raw_url "global/${ZIP_NAME}"
-    )"
-
-    CHECKSUM_NAME="$(
-        echo "$listing" |
-        jq -r '
-            .[]?
-            | select(.type == "file")
-            | .name
-        ' |
-        awk '
-            BEGIN { IGNORECASE=1 }
-            tolower($0) == "release.sha256" {
-                print
-                exit
-            }
-        '
-    )"
-
-    if [[ -n "$CHECKSUM_NAME" ]]; then
-        CHECKSUM_URL="$(
-            raw_url "global/${CHECKSUM_NAME}"
-        )"
-    else
-        CHECKSUM_URL=""
-    fi
-
-    ok "Global package: $ZIP_NAME"
-}
-
-
-download_zip() {
-    ZIP_PATH="$WORKDIR/$ZIP_NAME"
-
-    info "Downloading $ZIP_NAME..."
-
-    curl \
-        -fL \
-        --retry 3 \
-        --retry-all-errors \
-        -o "$ZIP_PATH" \
-        "$ZIP_URL" ||
-        die "Failed downloading $ZIP_NAME."
-
-    local size
-    size="$(stat -c%s "$ZIP_PATH")"
-
-    [[ "$size" -gt 0 ]] ||
-        die "Downloaded ZIP is empty."
-
-    info "Downloaded $(numfmt --to=iec "$size" 2>/dev/null || echo "$size bytes")."
-
-    if [[ "$FORCE" == "1" ]]; then
-        warn "Force mode: checksum verification skipped."
-        return
-    fi
-
-    if [[ -n "$CHECKSUM_URL" ]]; then
-        local checksum_file
-        checksum_file="$WORKDIR/package.sha256"
-
-        curl \
-            -fL \
-            --retry 3 \
-            --retry-all-errors \
-            -o "$checksum_file" \
-            "$CHECKSUM_URL" ||
-            die "Failed downloading checksum."
-
-        local expected
-        local actual
-
-        expected="$(
-            awk '
-                NF {
-                    print $1
-                    exit
-                }
-            ' "$checksum_file"
-        )"
-
-        actual="$(
-            sha256sum "$ZIP_PATH" |
-            awk '{print $1}'
-        )"
-
-        [[ "$expected" =~ ^[[:xdigit:]]{64}$ ]] ||
-            die "Invalid SHA-256 checksum file."
-
-        [[ "$expected" == "$actual" ]] ||
-            die "Checksum mismatch for $ZIP_NAME."
-
-        ok "ZIP checksum verified."
-    elif [[ "$SAFE_MODE" == "1" ]]; then
-        die "Safe mode requires a .sha256 checksum."
-    else
-        warn "No checksum file found. Continuing without ZIP checksum verification."
-    fi
-}
-
-
-extract_zip() {
-    EXTRACT_DIR="$WORKDIR/extracted"
-
-    mkdir -p "$EXTRACT_DIR"
-
-    info "Extracting $ZIP_NAME..."
-
-    if command -v unzip >/dev/null 2>&1; then
-        unzip -q "$ZIP_PATH" -d "$EXTRACT_DIR" ||
-            die "ZIP extraction failed."
-    elif command -v 7z >/dev/null 2>&1; then
-        7z x \
-            -y \
-            "-o$EXTRACT_DIR" \
-            "$ZIP_PATH" >/dev/null ||
-            die "ZIP extraction failed."
-    else
-        die "No ZIP extraction tool is available."
-    fi
-
-    local extracted_count
-
-    extracted_count="$(
-        find "$EXTRACT_DIR" \
-            -type f |
-        wc -l
-    )"
-
-    [[ "$extracted_count" -gt 0 ]] ||
-        die "ZIP extraction produced no files."
-
-    ok "ZIP extracted successfully."
-}
-
-
-find_script() {
-    local name="$1"
-
-    find "$EXTRACT_DIR" \
-        -type f \
-        -path '*/sh/'"$name" \
-        -print \
-        -quit
-}
-
-
-run_script() {
-    local script="$1"
-
-    [[ -f "$script" ]] ||
-        die "Script does not exist: $script"
-
-    chmod +x "$script"
-
-    if [[ "$SAFE_MODE" == "1" ]]; then
-        echo
-        echo "${C_YEL}Preview: $(basename "$script")${C_RST}"
-        sed -n '1,160p' "$script"
-        echo
-    fi
-
-    confirm "Run $(basename "$script")?" ||
-        die "Aborted."
-
-    info "Running $(basename "$script")..."
-
-    if (
-        cd "$(dirname "$(dirname "$script")")"
-        "$script"
-    ); then
-        ok "$(basename "$script") completed."
-    else
-        warn "$(basename "$script") failed."
-        RUN_HAD_FAILURES=1
-
-        [[ "$FORCE" == "1" ]] ||
-            die "Profile script failed: $(basename "$script")"
-    fi
-}
-
-
-run_profile_scripts() {
-    local packages_script
-    local install_script
-
-    packages_script="$(find_script "packages.sh")"
-    install_script="$(find_script "install.sh")"
-
-    if [[ -z "$packages_script" && -z "$install_script" ]]; then
-        die "No sh/packages.sh or sh/install.sh found in the profile package."
-    fi
-
-    if [[ "$SAFE_MODE" == "1" ]]; then
-        info "Safe mode enabled."
-        info "Scripts will be previewed before execution."
-    fi
-
-    if [[ -n "$packages_script" ]]; then
-        info "Profile dependency script found: sh/packages.sh"
-        run_script "$packages_script"
-    else
-        warn "sh/packages.sh was not found."
-    fi
-
-    if [[ -n "$install_script" ]]; then
-        info "Kernel installation script found: sh/install.sh"
-        run_script "$install_script"
-    else
-        die "sh/install.sh was not found. A profile kernel package cannot be installed without its official installer."
-    fi
-}
-
-
-cmd_profile() {
-    TARGET_PROFILE="${TARGET_PROFILE,,}"
-
-    [[ "$TARGET_PROFILE" =~ ^[a-z0-9][a-z0-9_-]*$ ]] ||
-        die "Invalid profile name: $TARGET_PROFILE"
-
-    acquire_lock
-    require_root
-    check_dependencies
-    verify_os_identity
-    detect_kernel
-    check_profile_lock "$TARGET_PROFILE"
-
-    echo
-
-    info "MUpdate $VERSION"
-    info "Target profile: $TARGET_PROFILE"
-
-    find_profile_dir "$TARGET_PROFILE"
-    find_profile_zip "$TARGET_PROFILE"
-
-    download_zip
-    extract_zip
-
-    echo
-
-    info "Preparing official '$TARGET_PROFILE' profile package."
-
-    run_profile_scripts
-
-    if [[ "$RUN_HAD_FAILURES" == "1" ]]; then
-        die "Profile installation completed with script failures."
-    fi
-
-    mkdir -p /etc/mupdate
-
-    printf '%s\n' "$TARGET_PROFILE" \
-        > /etc/mupdate/profile
-
-    printf '%s\n' "$ZIP_NAME" \
-        > /etc/mupdate/profile-package
-
-    printf '%s\n' "$VERSION" \
-        > /etc/mupdate/mupdate-version
-
-    echo
-
-    ok "MuliOS profile '$TARGET_PROFILE' installed successfully."
-    warn "Reboot to start the newly installed kernel if the profile installer requested it."
-}
-
-
-cmd_install() {
-    acquire_lock
-    require_root
-    check_dependencies
-    verify_os_identity
-
-    info "MUpdate global installation/update."
-
-    find_global_release
-    download_zip
-    extract_zip
-
-    run_profile_scripts
-
-    if [[ "$RUN_HAD_FAILURES" == "1" ]]; then
-        die "Global installation completed with script failures."
-    fi
-
-    ok "Global MuliOS installation/update completed."
-}
-
-
-validate_iso9660_header() {
-    local iso="$1"
-
-    [[ -f "$iso" ]] ||
-        die "ISO file does not exist: $iso"
-
-    local size
-    size="$(stat -c%s "$iso")"
-
-    [[ "$size" -ge 38000 ]] ||
-        die "ISO is too small to be valid."
-
-    local magic
-
-    magic="$(
-        dd \
-            if="$iso" \
-            bs=1 \
-            skip=32769 \
-            count=5 \
-            2>/dev/null || true
-    )"
-
-    [[ "$magic" == "CD001" ]] ||
-        die "ISO 9660 header validation failed."
-
-    ok "ISO 9660 header verified."
-}
-
-
-validate_iso_structure() {
-    local iso="$1"
-
-    local mount_dir
-    mount_dir="$WORKDIR/iso-check"
-
-    mkdir -p "$mount_dir"
-
-    info "Mounting reconstructed ISO for structural verification..."
-
-    mount -o loop,ro "$iso" "$mount_dir" ||
-        die "Unable to mount reconstructed MuliOS ISO."
-
-    local found_root=0
-
-    if [[ -f "$mount_dir/arch/x86_64/airootfs.sfs" ]]; then
-        found_root=1
-    fi
-
-    if [[ -f "$mount_dir/mulios/x86_64/airootfs.sfs" ]]; then
-        found_root=1
-    fi
-
-    if [[ "$found_root" != "1" ]]; then
-        umount "$mount_dir" || true
-        die "Reconstructed ISO does not contain a recognizable MuliOS airootfs."
-    fi
-
-    if [[ ! -f "$mount_dir/arch/boot/x86_64/vmlinuz-linux-mulios-generic" &&
-          ! -f "$mount_dir/mulios/boot/x86_64/vmlinuz-linux-mulios-generic" ]]; then
-        umount "$mount_dir" || true
-        die "Reconstructed ISO does not contain a Linux kernel."
-    fi
-
-    if [[ ! -f "$mount_dir/arch/boot/x86_64/initramfs-linux-mulios-generic.img" &&
-          ! -f "$mount_dir/mulios/boot/x86_64/initramfs-linux-mulios-generic.img" ]]; then
-        umount "$mount_dir" || true
-        die "Reconstructed ISO does not contain an initramfs."
-    fi
-
-    umount "$mount_dir"
-
-    ok "MuliOS ISO structure verified."
-}
-
-
-discover_ota() {
-    local channel="$1"
-    local remote_path="latest/${channel}/arch"
-
-    info "Querying OTA channel: $remote_path"
-
-    local listing
-
-    if ! listing="$(gh_api_get "$remote_path")"; then
-        die "Unable to query OTA channel '$channel'."
-    fi
-
-    local parts=()
-    local detected_version=""
-
-    while IFS= read -r file; do
-        [[ -n "$file" ]] || continue
-
-        if [[ "$file" =~ ^MuliOS-([A-Za-z0-9.]+)-x86_64\.iso\.([0-9]+)$ ]]; then
-            local version
-            version="${BASH_REMATCH[1]}"
-
-            if [[ -z "$detected_version" ]]; then
-                detected_version="$version"
-            elif [[ "$detected_version" != "$version" ]]; then
-                die "OTA channel contains mixed ISO versions."
-            fi
-
-            parts+=("$file")
+merge_file() {
+    local repo_path="$1"
+    local mode="$2"
+    local local_path
+
+    local_path="$(printf '%s' "$repo_path" | sed 's#^profile/airootfs##')"
+
+    if [[ "$mode" == "120000" ]]; then
+        local link_target
+        link_target="$(curl -fsSL --retry 3 --retry-all-errors "$(raw_url "$repo_path")")" ||
+            die "Failed downloading symlink: $repo_path"
+
+        if [[ "$DRY_RUN" == "1" ]]; then
+            printf 'UPDATE LINK %s -> %s\n' "$local_path" "$link_target"
+            return
         fi
-    done < <(
-        echo "$listing" |
-        jq -r '
-            .[]?
-            | select(.type == "file")
-            | .name
-        '
-    )
 
-    [[ -n "$detected_version" ]] ||
-        die "No split MuliOS ISO found in $remote_path."
-
-    mapfile -t OTA_PARTS < <(
-        printf '%s\n' "${parts[@]}" |
-        sort -V
-    )
-
-    local expected=1
-
-    for part in "${OTA_PARTS[@]}"; do
-        local number
-        number="${part##*.}"
-
-        [[ "$((10#$number))" -eq "$expected" ]] ||
-            die "OTA ISO parts are discontinuous."
-
-        expected=$((expected + 1))
-    done
-
-    OTA_VERSION="$detected_version"
-
-    ok "OTA version: $OTA_VERSION"
-    ok "OTA parts: ${#OTA_PARTS[@]}"
-}
-
-
-merge_release_root() {
-    local iso="$1"
-    local iso_mount="$WORKDIR/ota-iso"
-    local rootfs="$WORKDIR/ota-root"
-    mkdir -p "$iso_mount" "$rootfs"
-    info "Mounting OTA ISO..."
-    mount -o loop,ro "$iso" "$iso_mount" || die "Unable to mount OTA ISO."
-    local sfs=""
-    if [[ -f "$iso_mount/arch/x86_64/airootfs.sfs" ]]; then
-        sfs="$iso_mount/arch/x86_64/airootfs.sfs"
-    elif [[ -f "$iso_mount/mulios/x86_64/airootfs.sfs" ]]; then
-        sfs="$iso_mount/mulios/x86_64/airootfs.sfs"
-    else
-        umount "$iso_mount" || true
-        die "OTA ISO does not contain a MuliOS airootfs."
-    fi
-    info "Extracting MuliOS release filesystem..."
-    unsquashfs -no-progress -d "$rootfs" "$sfs" >/dev/null || {
-        umount "$iso_mount" || true
-        die "Unable to extract the OTA root filesystem."
-    }
-    umount "$iso_mount"
-    [[ -f "$rootfs/etc/os-release" ]] || die "Extracted release has no /etc/os-release."
-    local release_id
-    release_id="$(sed -n 's/^ID=//p' "$rootfs/etc/os-release" | tr -d '"' )"
-    [[ "$release_id" == "mulios" ]] || die "OTA root filesystem is not MuliOS."
-    info "Merging MuliOS-owned system files..."
-    rsync -aHAX --numeric-ids "$rootfs/usr/" /usr/ || die "Failed merging /usr."
-    [[ -d "$rootfs/usr/local" ]] && rsync -aHAX --numeric-ids "$rootfs/usr/local/" /usr/local/ || true
-    [[ -d "$rootfs/opt" ]] && rsync -aHAX --numeric-ids "$rootfs/opt/" /opt/ || true
-    [[ -d "$rootfs/etc/xdg" ]] && rsync -aHAX --numeric-ids "$rootfs/etc/xdg/" /etc/xdg/ || true
-    for path in etc/sddm.conf etc/os-release; do
-        if [[ -f "$rootfs/$path" ]]; then install -D -m 0644 "$rootfs/$path" "/$path"; fi
-    done
-    for dir in etc/sddm.conf.d etc/mkinitcpio.conf.d etc/mkinitcpio.d etc/pacman.d/hooks; do
-        if [[ -d "$rootfs/$dir" ]]; then mkdir -p "/$dir"; rsync -aHAX --numeric-ids "$rootfs/$dir/" "/$dir/" || die "Failed merging /$dir."; fi
-    done
-    for kernel_file in vmlinuz-linux-mulios-generic initramfs-linux-mulios-generic.img; do
-        if [[ -f "$rootfs/boot/$kernel_file" ]]; then install -m 0644 "$rootfs/boot/$kernel_file" "/boot/$kernel_file"; fi
-    done
-    if command -v mkinitcpio >/dev/null 2>&1; then
-        info "Regenerating installed initramfs..."
-        mkinitcpio -P || die "mkinitcpio failed after OTA merge."
-    fi
-    if command -v grub-mkconfig >/dev/null 2>&1 && [[ -d /boot/grub ]]; then
-        info "Regenerating GRUB configuration..."
-        grub-mkconfig -o /boot/grub/grub.cfg >/dev/null || die "grub-mkconfig failed."
-    fi
-    sync
-    ok "MuliOS $OTA_VERSION merged into the installed system."
-}
-
-create_transaction() {
-    mkdir -p "$TX_DIR"
-    local backup_archive="$1"
-    local config_archive="$2"
-    local installed_version
-    installed_version="$(get_installed_version)"
-    OTA_ISO_SHA256="$(sha256sum "$OTA_ISO" | cut -d " " -f1)"
-    cat > "$TX_DIR/transaction" <<EOF
-MUPDATE_TRANSACTION_VERSION=2
-MUPDATE_MERGE=1
-MUPDATE_MERGE_MODE=installed-root
-TRANSACTION_ID=$(printf '%q' "$TX_ID")
-MUPDATE_CHANNEL=$(printf '%q' "$OTA_CHANNEL")
-MUPDATE_TARGET=$(printf '%q' "$OTA_VERSION")
-MUPDATE_INSTALLED_VERSION=$(printf '%q' "$installed_version")
-MUPDATE_ISO=$(printf '%q' "$OTA_ISO")
-MUPDATE_ISO_SHA256=$(printf '%q' "$OTA_ISO_SHA256")
-MUPDATE_BACKUP=$(printf '%q' "$backup_archive")
-MUPDATE_CONFIG_BACKUP=$(printf '%q' "$config_archive")
-MUPDATE_STATUS=staged
-EOF
-    chmod 600 "$TX_DIR/transaction"
-    ln -sfn "$TX_DIR/transaction" "$TRANS_DIR/transaction"
-    cat > "$TX_DIR/metadata.json" <<EOF
-{
-  "transaction_id": "$TX_ID",
-  "status": "staged",
-  "channel": "$OTA_CHANNEL",
-  "installed_version": "$installed_version",
-  "target_version": "$OTA_VERSION",
-  "iso": "$OTA_ISO",
-  "iso_sha256": "$OTA_ISO_SHA256",
-  "backup": "$backup_archive",
-  "config_backup": "$config_archive",
-  "merge_mode": "installed-root"
-}
-EOF
-    chmod 600 "$TX_DIR/metadata.json"
-    ok "Persistent OTA merge transaction created."
-}
-
-verify_transaction() {
-    [[ -f "$TX_DIR/transaction" ]] || die "OTA transaction was not created."
-    [[ -f "$TX_DIR/metadata.json" ]] || die "OTA transaction metadata was not created."
-    [[ -f "$OTA_ISO" ]] || die "Staged OTA ISO is missing."
-    local actual
-    actual="$(sha256sum "$OTA_ISO" | cut -d " " -f1)"
-    [[ "$actual" == "$OTA_ISO_SHA256" ]] || die "OTA ISO checksum changed after staging."
-    ok "Persistent OTA merge transaction verified."
-}
-
-request_reboot() {
-    echo
-    echo "MUpdate $VERSION — OTA MERGED"
-    echo
-    echo "Channel       : $OTA_CHANNEL"
-    echo "Current       : $(get_installed_version)"
-    echo "Target        : $OTA_VERSION"
-    echo "ISO SHA-256   : $OTA_ISO_SHA256"
-    echo "Transaction   : $TX_ID"
-    echo
-    echo "The MuliOS release has been merged into the installed OS."
-    echo "Machine-specific /etc, /home, /root, /var and bootloader state were preserved."
-    echo
-    confirm "Reboot into the updated MuliOS system now?" || {
-        ok "OTA merge completed. Reboot was cancelled."
-        return 0
-    }
-    sync
-    ok "Rebooting into updated MuliOS..."
-    systemctl reboot
-}
-
-backup_users() {
-    mkdir -p "$BACKUP_DIR"
-
-    local backup_archive
-    backup_archive="$BACKUP_DIR/users_${TX_ID}.tar.gz"
-
-    info "Backing up user data..."
-
-    local tar_items=()
-
-    [[ -d /home ]] && tar_items+=("home")
-    [[ -d /root ]] && tar_items+=("root")
-
-    [[ ${#tar_items[@]} -gt 0 ]] ||
-        die "No user directories were found to back up."
-
-    tar \
-        --acls \
-        --xattrs \
-        --xattrs-include='*' \
-        --numeric-owner \
-        --one-file-system \
-        -czf "$backup_archive" \
-        -C / \
-        "${tar_items[@]}" ||
-        die "Failed to create user backup."
-
-    [[ -s "$backup_archive" ]] ||
-        die "User backup is empty."
-
-    local backup_sha
-
-    backup_sha="$(
-        sha256sum "$backup_archive" |
-        awk '{print $1}'
-    )"
-
-    printf '%s\n' "$backup_sha" \
-        > "${backup_archive}.sha256"
-
-    ok "User backup created:"
-    ok "$backup_archive"
-
-    printf '%s\n' "$backup_archive"
-}
-
-
-backup_configuration() {
-    local config_archive
-    config_archive="$BACKUP_DIR/config_${TX_ID}.tar.gz"
-
-    info "Backing up MuliOS configuration..."
-
-    local config_items=()
-
-    [[ -d /etc ]] && config_items+=("etc")
-    [[ -d /var/lib ]] && config_items+=("var/lib")
-
-    if [[ ${#config_items[@]} -eq 0 ]]; then
-        warn "No configuration directories available."
+        rm -f "$local_path"
+        mkdir -p "$(dirname "$local_path")"
+        ln -s "$link_target" "$local_path"
         return
     fi
 
-    tar \
-        --acls \
-        --xattrs \
-        --xattrs-include='*' \
-        --numeric-owner \
-        --one-file-system \
-        --exclude='var/lib/mupdate/backups' \
-        --exclude='var/lib/mupdate/transaction' \
-        -czf "$config_archive" \
-        -C / \
-        "${config_items[@]}" ||
-        die "Failed to create configuration backup."
+    local temp_file="$WORKDIR/file"
+    curl -fsSL         --retry 3         --retry-all-errors         -o "$temp_file"         "$(raw_url "$repo_path")" ||
+        die "Failed downloading: $repo_path"
 
-    local config_sha
+    [[ -s "$temp_file" || "$(stat -c '%s' "$temp_file")" == "0" ]] ||
+        die "Downloaded file is invalid: $repo_path"
 
-    config_sha="$(
-        sha256sum "$config_archive" |
-        awk '{print $1}'
-    )"
+    if [[ "$DRY_RUN" == "1" ]]; then
+        printf 'UPDATE %s\n' "$local_path"
+        return
+    fi
 
-    printf '%s\n' "$config_sha" \
-        > "${config_archive}.sha256"
-
-    ok "Configuration backup created."
+    case "$mode" in
+        100755) install -D -m 0755 "$temp_file" "$local_path" ;;
+        100644) install -D -m 0644 "$temp_file" "$local_path" ;;
+        *) die "Unsupported Git mode $mode: $repo_path" ;;
+    esac
 }
 
+sync_repository() {
+    local tree_file="$WORKDIR/tree.json"
+    local manifest="$WORKDIR/manifest"
 
-cmd_ota() {
-    local channel="$1"
-    [[ "$channel" == "beta" || "$channel" == "stable" ]] || die "OTA channel must be beta or stable."
-    acquire_lock
+    info "Checking MuliOS-Arch..."
+    get_tree > "$tree_file" ||
+        die "Unable to read the MuliOS-Arch repository."
+
+    jq -e '.tree | type == "array"' "$tree_file" >/dev/null ||
+        die "GitHub returned an invalid repository tree."
+
+    REMOTE_TREE_SHA="$(jq -r '.sha' "$tree_file")"
+
+    REMOTE_VERSION="$(curl -fsSL --retry 3 --retry-all-errors         "$(raw_url profile/version)")" ||
+        die "Unable to read profile/version."
+
+    REMOTE_VERSION="$(printf '%s' "$REMOTE_VERSION" | tr -d '\r\n')"
+
+    info "Remote version: $REMOTE_VERSION"
+    info "Remote tree: $REMOTE_TREE_SHA"
+
+    : > "$manifest"
+
+    while IFS="$(printf '\t')" read -r path mode type sha; do
+        [[ "$type" == "blob" ]] || continue
+        is_syncable "$path" || {
+            ((SKIPPED_COUNT+=1))
+            continue
+        }
+
+        printf '%s\t%s\t%s\n' "$path" "$mode" "$sha" >> "$manifest"
+    done < <(
+        jq -r '.tree[] | [.path,.mode,.type,.sha] | @tsv' "$tree_file"
+    )
+
+    while IFS="$(printf '\t')" read -r path mode remote_sha; do
+        local_sha=""
+
+        if local_sha="$(local_blob_sha "$path" "$mode" 2>/dev/null)"; then
+            [[ "$local_sha" == "$remote_sha" ]] && continue
+            ((CHANGED_COUNT+=1))
+            printf 'CHANGED  /%s\n' "$(printf '%s' "$path" | sed 's#^profile/airootfs/##')"
+        else
+            ((ADDED_COUNT+=1))
+            printf 'ADDED    /%s\n' "$(printf '%s' "$path" | sed 's#^profile/airootfs/##')"
+        fi
+
+        [[ "$SAFE_MODE" == "1" ]] && continue
+
+        if ! confirm "Merge /$(printf '%s' "$path" | sed 's#^profile/airootfs/##')?"; then
+            ((SKIPPED_COUNT+=1))
+            continue
+        fi
+
+        merge_file "$path" "$mode"
+    done < "$manifest"
+
+    if [[ "$DRY_RUN" == "0" && "$SAFE_MODE" == "0" ]]; then
+        mkdir -p "$STATE_DIR"
+        printf '%s\n' "$REMOTE_TREE_SHA" > "$STATE_DIR/tree"
+        printf '%s\n' "$REMOTE_VERSION" > "$STATE_DIR/version"
+        printf '%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$STATE_DIR/last-sync"
+        sync
+    fi
+
+    echo
+    ok "Repository comparison complete."
+    echo "Changed : $CHANGED_COUNT"
+    echo "Added   : $ADDED_COUNT"
+    echo "Skipped : $SKIPPED_COUNT"
+}
+
+cmd_update() {
     require_root
     check_dependencies
-    verify_os_identity
-    discover_ota "$channel"
-    TX_ID="$(date -u '+%Y%m%d_%H%M%S')_$$"
-    TX_DIR="$TRANS_DIR/$TX_ID"
-    local workspace="$TX_DIR/workspace"
-    mkdir -p "$workspace"
-    info "Downloading OTA parts..."
-    for part in "${OTA_PARTS[@]}"; do
-        local destination="$workspace/$part"
-        local url="$(raw_url "latest/${channel}/arch/${part}")"
-        info "Downloading $part..."
-        curl -fL --retry 3 --retry-all-errors -o "$destination" "$url" || die "Failed downloading $part."
-        [[ -s "$destination" ]] || die "Downloaded OTA part is empty: $part"
-    done
-    OTA_ISO="$TX_DIR/MuliOS-${OTA_VERSION}-x86_64.iso"
-    info "Reassembling ISO..."
-    : > "$OTA_ISO"
-    for part in "${OTA_PARTS[@]}"; do cat "$workspace/$part" >> "$OTA_ISO"; done
-    [[ -s "$OTA_ISO" ]] || die "Reassembled OTA ISO is empty."
-    validate_iso9660_header "$OTA_ISO"
-    validate_iso_structure "$OTA_ISO"
-    OTA_ISO_SHA256="$(sha256sum "$OTA_ISO" | cut -d " " -f1)"
-    ok "OTA ISO SHA-256: $OTA_ISO_SHA256"
-    backup_users
-    local backup_archive="$BACKUP_DIR/users_${TX_ID}.tar.gz"
-    backup_configuration
-    local config_archive="$BACKUP_DIR/config_${TX_ID}.tar.gz"
-    create_transaction "$backup_archive" "$config_archive"
-    verify_transaction
-    merge_release_root "$OTA_ISO"
-    sed -i 's/^MUPDATE_STATUS=.*/MUPDATE_STATUS=merged/' "$TX_DIR/transaction"
-    sed -i 's/"status": "staged"/"status": "merged"/' "$TX_DIR/metadata.json"
-    printf '%s\n' "$channel" > "$CHANNEL_FILE"
-    cat > "$TRANS_DIR/latest.json" <<EOF
-{
-  "transaction_id": "$TX_ID",
-  "status": "merged",
-  "channel": "$channel",
-  "target_version": "$OTA_VERSION",
-  "iso": "$OTA_ISO",
-  "iso_sha256": "$OTA_ISO_SHA256",
-  "backup": "$backup_archive",
-  "config_backup": "$config_archive",
-  "merge_mode": "installed-root"
-}
-EOF
-    sync
-    request_reboot
+    verify_os
+    acquire_lock
+
+    info "MUpdate $VERSION — direct repository merge"
+
+    if [[ "$DRY_RUN" == "1" ]]; then
+        warn "Dry-run: no files will be changed."
+    elif [[ "$SAFE_MODE" == "1" ]]; then
+        warn "Safe mode: changes will be listed but not applied."
+    fi
+
+    sync_repository
+
+    if [[ "$DRY_RUN" == "0" && "$SAFE_MODE" == "0" ]]; then
+        ok "MuliOS repository changes merged into the installed OS."
+    fi
 }
 
 cmd_status() {
-    require_root
-    check_dependencies
-
     echo "MUpdate $VERSION"
-    echo
+    echo "Repository: https://github.com/$GITHUB_OWNER/$GITHUB_REPO"
+    echo "Branch: $GITHUB_BRANCH"
 
-    if [[ -f "$CHANNEL_FILE" ]]; then
-        echo "OTA Channel       : $(cat "$CHANNEL_FILE")"
-    else
-        echo "OTA Channel       : unknown"
-    fi
+    [[ -f "$STATE_DIR/version" ]] &&
+        echo "Last synced version: $(cat "$STATE_DIR/version")"
 
-    echo "Running Kernel    : $(uname -r)"
+    [[ -f "$STATE_DIR/tree" ]] &&
+        echo "Last synced tree: $(cat "$STATE_DIR/tree")"
 
-    if [[ -f /etc/mupdate/profile ]]; then
-        echo "MuliOS Profile    : $(cat /etc/mupdate/profile)"
-    else
-        echo "MuliOS Profile    : unknown"
-    fi
-
-    if [[ -f /etc/mupdate/profile-package ]]; then
-        echo "Profile Package   : $(cat /etc/mupdate/profile-package)"
-    fi
-
-    if [[ -f "$TRANS_DIR/latest.json" ]]; then
-        echo
-        echo "OTA Transaction:"
-        jq . "$TRANS_DIR/latest.json"
-    else
-        echo
-        echo "OTA Transaction   : none"
-    fi
-
-    if [[ -L "$TRANS_DIR/transaction" ||
-          -f "$TRANS_DIR/transaction" ]]; then
-        echo
-        echo "OTA Merge Transaction:"
-        echo "  $TRANS_DIR/transaction"
-
-        if [[ -f "$TRANS_DIR/transaction" ]]; then
-            sed -n '1,160p' "$TRANS_DIR/transaction"
-        fi
-    fi
+    [[ -f "$STATE_DIR/last-sync" ]] &&
+        echo "Last sync: $(cat "$STATE_DIR/last-sync")"
 }
-
-
-cmd_cancel() {
-    require_root
-
-    if [[ ! -f "$TRANS_DIR/latest.json" ]]; then
-        info "No OTA transaction exists."
-        return
-    fi
-
-    local iso
-
-    iso="$(
-        jq -r '.iso // empty' "$TRANS_DIR/latest.json"
-    )"
-
-    if [[ -n "$iso" && -f "$iso" ]]; then
-        rm -f "$iso"
-    fi
-
-    if [[ -L "$TRANS_DIR/transaction" ]]; then
-        local transaction_target
-        transaction_target="$(
-            readlink -f "$TRANS_DIR/transaction" 2>/dev/null || true
-        )"
-
-        if [[ -n "$transaction_target" &&
-              -f "$transaction_target" ]]; then
-
-            local transaction_dir
-            transaction_dir="$(dirname "$transaction_target")"
-
-            rm -rf "$transaction_dir"
-        fi
-
-        rm -f "$TRANS_DIR/transaction"
-    fi
-
-    rm -f "$TRANS_DIR/latest.json"
-
-    ok "OTA transaction cancelled."
-}
-
-
-cmd_check() {
-    require_root
-    check_dependencies
-    verify_os_identity
-
-    local channel="beta"
-
-    if [[ -f "$CHANNEL_FILE" ]]; then
-        channel="$(cat "$CHANNEL_FILE")"
-    fi
-
-    [[ "$channel" == "beta" ||
-       "$channel" == "stable" ]] ||
-        channel="beta"
-
-    discover_ota "$channel"
-
-    local installed
-    installed="$(get_installed_version)"
-
-    echo
-    echo "Installed MuliOS : $installed"
-    echo "OTA Channel      : $channel"
-    echo "Available OTA    : $OTA_VERSION"
-}
-
 
 show_help() {
     cat <<EOF
-MUpdate $VERSION — MuliOS Arch OTA + Kernel Profile Manager
+MUpdate $VERSION — MuliOS repository merger
 
-GLOBAL INSTALL
-  sudo mupdate install
+UPDATE
+  sudo mupdate update
+  sudo mupdate sync
+  sudo mupdate update -y
 
-KERNEL PROFILES
-  sudo mupdate <profile>
-  sudo mupdate <profile> -r
-  sudo mupdate <profile> -y
-  sudo mupdate <profile> -s
-  sudo mupdate <profile> -f
-  sudo mupdate <profile> setup
+CHECK
+  sudo mupdate update --dry-run
+  sudo mupdate update --safe
+  mupdate status
 
-OTA
-  sudo mupdate ota beta
-  sudo mupdate ota stable
+SOURCE
+  https://github.com/$GITHUB_OWNER/$GITHUB_REPO
+  branch: $GITHUB_BRANCH
+  filesystem tree: profile/airootfs
 
-OTA FLOW
-  MUpdate downloads and verifies the split release ISO, backs up user data,
-  extracts the release filesystem and merges MuliOS-owned system areas
-  directly into the installed OS. No MuliOS OTA merge ISO is installed.
+BEHAVIOR
+  The repository is compared directly with the installed filesystem.
 
-  Preserved:
-    /home /root machine-specific /etc /var /srv bootloader state
+  profile/airootfs/etc/foo
+      -> /etc/foo
 
-  Updated:
-    /usr /usr/local /opt /etc/xdg MuliOS hooks kernel and initramfs
+  profile/airootfs/usr/bin/foo
+      -> /usr/bin/foo
 
-INFORMATION
-  sudo mupdate status
-  sudo mupdate --check
-  sudo mupdate cancel
-  mupdate --version
-  mupdate --help
+  New or changed files are downloaded and merged.
+
+  Files are never deleted.
+
+PROTECTED MACHINE STATE
+  /etc/passwd
+  /etc/shadow
+  /etc/group
+  /etc/gshadow
+  /etc/hostname
+  /etc/hosts
+  /etc/machine-id
+  /etc/localtime
+  /etc/adjtime
+  /etc/fstab
+  /etc/crypttab
+  /etc/ssh/
+  /var/
+  /home/
+  /root/
+  /boot/
+  /efi/
 EOF
 }
 
+main() {
+    local command="update"
 
-if [[ $# -eq 0 ]]; then
-    show_help
-    exit 0
-fi
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            update|sync)
+                command="update"
+                ;;
+            status)
+                command="status"
+                ;;
+            -y|--yes)
+                ASSUME_YES=1
+                ;;
+            --safe|-s)
+                SAFE_MODE=1
+                ;;
+            --dry-run)
+                DRY_RUN=1
+                ;;
+            --version|-v)
+                echo "mupdate version $VERSION"
+                exit 0
+                ;;
+            --help|-h)
+                show_help
+                exit 0
+                ;;
+            *)
+                die "Unknown argument: $1"
+                ;;
+        esac
+        shift
+    done
 
-
-for arg in "$@"; do
-    case "$arg" in
-        --version|-v)
-            print_version
-            exit 0
-            ;;
+    case "$command" in
+        update) cmd_update ;;
+        status) cmd_status ;;
     esac
-done
+}
 
-
-COMMAND=""
-TARGET_PROFILE=""
-
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-
-        --help|-h)
-            show_help
-            exit 0
-            ;;
-
-        --version|-v)
-            print_version
-            exit 0
-            ;;
-
-        --check)
-            [[ -z "$COMMAND" ]] ||
-                die "Unexpected argument: --check."
-
-            COMMAND="check"
-            ;;
-
-        --apply)
-            die "--apply is obsolete. Use sudo mupdate ota beta|stable."
-            ;;
-
-        --repair)
-            die "--repair is not available."
-            ;;
-
-        status)
-            [[ -z "$COMMAND" ]] ||
-                die "Unexpected argument: status."
-
-            COMMAND="status"
-            ;;
-
-        cancel)
-            [[ -z "$COMMAND" ]] ||
-                die "Unexpected argument: cancel."
-
-            COMMAND="cancel"
-            ;;
-
-        install)
-            [[ -z "$COMMAND" ]] ||
-                die "Unexpected argument: install."
-
-            COMMAND="install"
-            ;;
-
-        ota)
-            [[ -z "$COMMAND" ]] ||
-                die "Unexpected argument: ota."
-
-            COMMAND="ota"
-            shift
-
-            [[ $# -gt 0 ]] ||
-                die "Missing OTA channel."
-
-            OTA_CHANNEL="$1"
-
-            [[ "$OTA_CHANNEL" == "beta" ||
-               "$OTA_CHANNEL" == "stable" ]] ||
-                die "OTA channel must be beta or stable."
-
-            ;;
-
-        setup)
-            [[ "$COMMAND" == "profile" ]] ||
-                die "'setup' must follow a profile name."
-
-            ASSUME_YES=1
-            ;;
-
-        -y|--yes)
-            ASSUME_YES=1
-            ;;
-
-        -s|--safe)
-            SAFE_MODE=1
-            ;;
-
-        -f|--force)
-            FORCE=1
-            ASSUME_YES=1
-            ;;
-
-        -r|--reset)
-            RESET=1
-            ;;
-
-        -*)
-            die "Unknown option: $1"
-            ;;
-
-        *)
-            if [[ -n "$COMMAND" ]]; then
-                die "Unexpected argument: $1"
-            fi
-
-            COMMAND="profile"
-            TARGET_PROFILE="$1"
-            ;;
-    esac
-
-    shift
-done
-
-
-if [[ "$SAFE_MODE" == "1" &&
-      "$FORCE" == "1" ]]; then
-
-    die "-s/--safe and -f/--force cannot be used together."
-fi
-
-
-case "$COMMAND" in
-
-    install)
-        cmd_install
-        ;;
-
-    profile)
-        cmd_profile
-        ;;
-
-    ota)
-        cmd_ota "$OTA_CHANNEL"
-        ;;
-
-    check)
-        cmd_check
-        ;;
-
-    status)
-        cmd_status
-        ;;
-
-    cancel)
-        cmd_cancel
-        ;;
-
-    *)
-        die "No valid command specified."
-        ;;
-
-esac
+main "$@"
