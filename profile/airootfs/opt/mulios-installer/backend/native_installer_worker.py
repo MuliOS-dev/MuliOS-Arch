@@ -1823,21 +1823,121 @@ class InstallWorker(QThread):
             )
 
             self.log(
-                "Updating Arch Linux keyring before the full upgrade..."
+                "Backing up pacman state before recovery..."
             )
 
-            # The ISO may have been built before the current Arch signing
-            # keys were published. Update the keyring first, then perform
-            # the complete system upgrade. This avoids stale-key failures
-            # without creating a partial-upgrade state.
             self.chroot(
                 [
+                    "bash",
+                    "-c",
+                    "mkdir -p /var/lib/mulios-installer/pacman-backup && "
+                    "cp -a /var/lib/pacman/sync "
+                    "/var/lib/mulios-installer/pacman-backup/sync-backup "
+                    "2>/dev/null || true",
+                ],
+                check=False,
+            )
+
+            self.log(
+                "Refreshing Arch Linux package databases..."
+            )
+
+            refresh = self.chroot(
+                [
                     "pacman",
-                    "-Sy",
+                    "-Syy",
+                    "--noconfirm",
+                ],
+                check=False,
+            )
+
+            if "error:" in refresh.lower():
+                self.log(
+                    "Pacman database refresh reported an error. "
+                    "Retrying once with a clean sync database..."
+                )
+
+                self.chroot(
+                    [
+                        "bash",
+                        "-c",
+                        "find /var/lib/pacman/sync -mindepth 1 "
+                        "-maxdepth 1 -type f -delete",
+                    ],
+                    check=False,
+                )
+
+                self.chroot(
+                    [
+                        "pacman",
+                        "-Syy",
+                        "--noconfirm",
+                    ]
+                )
+
+            self.log(
+                "Installing/updating archlinux-keyring..."
+            )
+
+            keyring = self.chroot(
+                [
+                    "pacman",
+                    "-S",
+                    "--needed",
                     "--noconfirm",
                     "archlinux-keyring",
-                ]
+                ],
+                check=False,
             )
+
+            if "error:" in keyring.lower():
+                self.log(
+                    "Keyring update failed. Reinitializing the target "
+                    "keyring and retrying once..."
+                )
+
+                self.chroot(
+                    [
+                        "bash",
+                        "-c",
+                        "find /etc/pacman.d/gnupg -mindepth 1 "
+                        "-maxdepth 1 -exec rm -rf {} +",
+                    ],
+                    check=False,
+                )
+
+                self.chroot(
+                    [
+                        "pacman-key",
+                        "--init",
+                    ]
+                )
+
+                self.chroot(
+                    [
+                        "pacman-key",
+                        "--populate",
+                        "archlinux",
+                    ]
+                )
+
+                self.chroot(
+                    [
+                        "pacman",
+                        "-Syy",
+                        "--noconfirm",
+                    ]
+                )
+
+                self.chroot(
+                    [
+                        "pacman",
+                        "-S",
+                        "--needed",
+                        "--noconfirm",
+                        "archlinux-keyring",
+                    ]
+                )
 
             self.log(
                 "Synchronizing target package databases and upgrading the target system..."
