@@ -78,10 +78,10 @@ class NetworkPage(QWidget):
     def recheck_connection(self):
         self._is_connected = check_internet()
         if self._is_connected:
-            self.status_label.setText("â— Connected to the internet")
+            self.status_label.setText("● Connected to the internet")
             self.status_label.setStyleSheet("color: #319cc8; font-weight: 600;")
         else:
-            self.status_label.setText("â— Not connected")
+            self.status_label.setText("● Not connected")
             self.status_label.setStyleSheet("color: #c0392b; font-weight: 600;")
 
     def is_connected(self) -> bool:
@@ -94,7 +94,7 @@ class NetworkPage(QWidget):
             self.wifi_list.addItem("No Wi-Fi networks found (or nmcli unavailable).")
             return
         for net in networks:
-            label = f"{net['ssid']}   ({net['signal']}%{' Â· ' + net['security'] if net['security'] else ''})"
+            label = f"{net['ssid']}   ({net['signal']}%{' · ' + net['security'] if net['security'] else ''})"
             item = QListWidgetItem(label)
             item.setData(1000, net["ssid"])
             self.wifi_list.addItem(item)
