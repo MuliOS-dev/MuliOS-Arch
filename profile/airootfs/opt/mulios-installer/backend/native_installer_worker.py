@@ -1769,10 +1769,7 @@ class InstallWorker(QThread):
 
         self.prepare_network()
 
-        # Offline installation: the ISO already contains the complete base
-        # MuliOS desktop environment. Only attempt package operations for
-        # packages that are actually missing from the copied system.
-        if not self.network_available:
+        def offline_package_check():
             missing = []
 
             for package in packages:
@@ -1796,30 +1793,25 @@ class InstallWorker(QThread):
                 )
 
             self.pacman_synced = True
+
+        # Internet is optional. If the live session has no Internet,
+        # continue using the packages already present in the ISO.
+        if not self.network_available:
+            offline_package_check()
             return
 
         if not self.pacman_synced:
-            self.log(
-                "Preparing target pacman keyring..."
-            )
+            self.log("Preparing target pacman keyring...")
 
-            self.chroot(
-                ["mkdir", "-p", "/etc/pacman.d/gnupg"]
-            )
-            self.chroot(
-                ["chmod", "700", "/etc/pacman.d/gnupg"]
-            )
-            self.chroot(
-                ["chown", "-R", "root:root", "/etc/pacman.d/gnupg"]
-            )
+            self.chroot(["mkdir", "-p", "/etc/pacman.d/gnupg"])
+            self.chroot(["chmod", "700", "/etc/pacman.d/gnupg"])
+            self.chroot(["chown", "-R", "root:root", "/etc/pacman.d/gnupg"])
 
             self.log("Initializing target pacman keyring...")
-
             self.chroot(["pacman-key", "--init"])
             self.chroot(["pacman-key", "--populate", "archlinux"])
 
             self.log("Backing up pacman state before recovery...")
-
             self.chroot(
                 [
                     "bash",
@@ -1839,10 +1831,18 @@ class InstallWorker(QThread):
                 check=False,
             )
 
-            if "error:" in refresh.lower():
+            refresh_failed = (
+                not refresh.strip()
+                or "error:" in refresh.lower()
+                or "failed to retrieve" in refresh.lower()
+                or "could not resolve" in refresh.lower()
+                or "failed retrieving" in refresh.lower()
+            )
+
+            if refresh_failed:
                 self.log(
-                    "Pacman database refresh reported an error. "
-                    "Retrying once with a clean sync database..."
+                    "Pacman database refresh failed. "
+                    "Cleaning the sync database and retrying once..."
                 )
 
                 self.chroot(
@@ -1855,9 +1855,28 @@ class InstallWorker(QThread):
                     check=False,
                 )
 
-                self.chroot(
-                    ["pacman", "-Syy", "--noconfirm"]
+                refresh = self.chroot(
+                    ["pacman", "-Syy", "--noconfirm"],
+                    check=False,
                 )
+
+                refresh_failed = (
+                    not refresh.strip()
+                    or "error:" in refresh.lower()
+                    or "failed to retrieve" in refresh.lower()
+                    or "could not resolve" in refresh.lower()
+                    or "failed retrieving" in refresh.lower()
+                )
+
+            if refresh_failed:
+                self.log(
+                    "Pacman cannot reach the configured mirrors. "
+                    "Falling back to offline installation. "
+                    "Packages already present in the ISO will be kept."
+                )
+                self.network_available = False
+                offline_package_check()
+                return
 
             self.log("Installing/updating archlinux-keyring...")
 
@@ -1890,25 +1909,40 @@ class InstallWorker(QThread):
 
                 self.chroot(["pacman-key", "--init"])
                 self.chroot(["pacman-key", "--populate", "archlinux"])
-                self.chroot(["pacman", "-Syy", "--noconfirm"])
-                self.chroot(
+
+                keyring_retry = self.chroot(
                     [
                         "pacman",
                         "-S",
                         "--needed",
                         "--noconfirm",
                         "archlinux-keyring",
-                    ]
+                    ],
+                    check=False,
                 )
+
+                if "error:" in keyring_retry.lower():
+                    self.log(
+                        "Arch Linux keyring could not be updated. "
+                        "Continuing with the keyring already present in "
+                        "the live ISO."
+                    )
 
             self.log(
                 "Synchronizing target package databases and "
                 "upgrading the target system..."
             )
 
-            self.chroot(
-                ["pacman", "-Syu", "--noconfirm"]
+            upgrade = self.chroot(
+                ["pacman", "-Syu", "--noconfirm"],
+                check=False,
             )
+
+            if "error:" in upgrade.lower():
+                self.log(
+                    "Target package upgrade failed. "
+                    "Continuing installation without the upgrade."
+                )
 
             self.pacman_synced = True
 
@@ -1917,15 +1951,23 @@ class InstallWorker(QThread):
             " ".join(packages)
         )
 
-        self.chroot(
+        package_result = self.chroot(
             [
                 "pacman",
                 "-S",
                 "--needed",
                 "--noconfirm",
                 *packages,
-            ]
+            ],
+            check=False,
         )
+
+        if "error:" in package_result.lower():
+            self.log(
+                "Some requested packages could not be installed. "
+                "Continuing with the packages already available in "
+                "the ISO."
+            )
 
     # ------------------------------------------------------------------
     # Users
