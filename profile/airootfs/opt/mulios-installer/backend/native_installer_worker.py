@@ -1458,7 +1458,7 @@ class InstallWorker(QThread):
         )
 
         if re.search(
-            r"(?m)^\\s*Server\\s*=",
+            r"(?m)^\s*Server\s*=",
             text,
         ):
             return
@@ -1642,16 +1642,16 @@ class InstallWorker(QThread):
             )
 
             pacman_text = re.sub(
-                r"(?ms)^\\[mulios\\]\\s*.*?(?=^\\[|\\Z)",
+                r"(?ms)^\[mulios\]\s*.*?(?=^\[|\Z)",
                 "",
                 pacman_text,
             )
 
             if re.search(
-                r"(?mi)^\\s*Server\\s*=\\s*file:///root/MuliOS-Arch/profile/packages\\s*$",
+                r"(?mi)^\s*Server\s*=\s*file:///root/MuliOS-Arch/profile/packages\s*$",
                 pacman_text,
             ) or re.search(
-                r"(?mi)^\\[mulios\\]\\s*$",
+                r"(?mi)^\[mulios\]\s*$",
                 pacman_text,
             ):
                 raise InstallError(
@@ -1692,7 +1692,7 @@ class InstallWorker(QThread):
 
             for line in source_text.splitlines():
                 match = re.match(
-                    r"^\\s*nameserver\\s+([^\\s#]+)",
+                    r"^\s*nameserver\s+([^\s#]+)",
                     line,
                 )
 
