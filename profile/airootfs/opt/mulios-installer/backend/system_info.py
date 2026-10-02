@@ -103,39 +103,89 @@ def list_timezones() -> list[str]:
 
 
 def check_internet(timeout=3) -> bool:
-    import socket
-    try:
-        socket.setdefaulttimeout(timeout)
-        socket.create_connection(("8.8.8.8", 53))
-        return True
-    except OSError:
-        return False
+    """Return True when DNS or HTTPS Internet access works."""
+    commands = [
+        ["getent", "hosts", "archlinux.org"],
+        ["curl", "-4", "-fsS", "--connect-timeout", str(timeout),
+         "--max-time", str(timeout + 1), "https://archlinux.org/"],
+    ]
+    for command in commands:
+        try:
+            result = subprocess.run(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=timeout + 2,
+                check=False,
+            )
+            if result.returncode == 0:
+                return True
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return False
 
 
-def scan_wifi() -> list[dict]:
-    """Returns [{ssid, signal, security}] via nmcli."""
+def list_network_devices() -> list[dict]:
+    """Return live network interfaces and their connection state."""
     try:
         out = subprocess.run(
-            ["nmcli", "-t", "-f", "SSID,SIGNAL,SECURITY", "dev", "wifi", "list"],
-            capture_output=True, text=True, timeout=10,
+            ["nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION",
+             "device", "status"],
+            capture_output=True, text=True, timeout=10, check=False,
         )
     except Exception:
         return []
+
     if out.returncode != 0:
         return []
 
-    seen = set()
-    networks = []
-    for line in out.stdout.strip().splitlines():
+    devices = []
+    for line in out.stdout.splitlines():
         parts = line.split(":")
-        if not parts or not parts[0] or parts[0] in seen:
+        if len(parts) >= 4:
+            devices.append({
+                "device": parts[0],
+                "type": parts[1],
+                "state": parts[2],
+                "connection": parts[3],
+            })
+    return devices
+
+
+def scan_wifi() -> list[dict]:
+    """Return nearby Wi-Fi networks using NetworkManager."""
+    try:
+        out = subprocess.run(
+            ["nmcli", "-t", "--escape", "yes",
+             "-f", "SSID,SIGNAL,SECURITY,CHAN,BARS",
+             "device", "wifi", "list", "--rescan", "yes"],
+            capture_output=True, text=True, timeout=15, check=False,
+        )
+    except Exception:
+        return []
+
+    if out.returncode != 0:
+        return []
+
+    networks = []
+    seen = set()
+    for line in out.stdout.splitlines():
+        parts = line.split(":")
+        if len(parts) < 5:
             continue
-        seen.add(parts[0])
+        ssid = parts[0].replace("\\:", ":")
+        if not ssid or ssid in seen:
+            continue
+        seen.add(ssid)
         networks.append({
-            "ssid": parts[0],
-            "signal": parts[1] if len(parts) > 1 else "",
-            "security": parts[2] if len(parts) > 2 else "",
+            "ssid": ssid,
+            "signal": parts[1],
+            "security": parts[2],
+            "channel": parts[3],
+            "bars": parts[4],
         })
+
+    networks.sort(key=lambda item: int(item["signal"] or 0), reverse=True)
     return networks
 
 
