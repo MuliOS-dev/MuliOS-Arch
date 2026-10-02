@@ -1402,122 +1402,50 @@ class InstallWorker(QThread):
             "etc/pacman.d/mirrorlist"
         )
 
-        if not mirrorlist.exists():
-            self.log(
-                "Mirrorlist not found; leaving "
-                "the existing pacman configuration unchanged."
-            )
-            return
-
-        if not mirror_region:
-            mirror_region = "Worldwide"
-
-        if mirror_region == "Worldwide":
-            self.ensure_active_mirror(
-                mirrorlist
-            )
-            return
-
-        text = mirrorlist.read_text(
-            encoding="utf-8",
-            errors="replace",
-        )
-
-        lines = text.splitlines()
-
-        region_aliases = {
-            "United States": [
-                "United States",
-            ],
-            "Germany": [
-                "Germany",
-            ],
-            "France": [
-                "France",
-            ],
-            "United Kingdom": [
-                "United Kingdom",
-                "Great Britain",
-            ],
-            "Canada": [
-                "Canada",
-            ],
-            "Australia": [
-                "Australia",
-            ],
-            "Japan": [
-                "Japan",
-            ],
-            "Brazil": [
-                "Brazil",
-            ],
-            "India": [
-                "India",
-            ],
-        }
-
-        wanted = region_aliases.get(
-            mirror_region,
-            [mirror_region],
-        )
-
-        current = ""
-
-        output = []
-
-        for line in lines:
-            heading = re.match(
-                r"^##(?:\s+Score:.*?,)?\s*(.+?)\s*$",
-                line,
+        if not mirrorlist.parent.exists():
+            mirrorlist.parent.mkdir(
+                parents=True,
+                exist_ok=True,
             )
 
-            if heading:
-                current = heading.group(1).strip()
+        # Do not inherit the ISO's huge generated mirrorlist. A long list
+        # of mirrors makes installation fragile when DNS or individual
+        # mirrors are unavailable. Use a small curated HTTPS set instead.
+        #
+        # These mirrors are currently listed as active by Arch Linux's
+        # official mirror-status service. Keep multiple geographic options
+        # so one unavailable host cannot stop installation.
+        mirrors = [
+            "https://fastly.mirror.pkgbuild.com/\\$repo/os/\\$arch",
+            "https://mirror.cyberbits.eu/archlinux/\\$repo/os/\\$arch",
+            "https://mirror.thekinrar.fr/archlinux/\\$repo/os/\\$arch",
+            "https://berlin.mirror.pkgbuild.com/\\$repo/os/\\$arch",
+        ]
 
-            if re.match(
-                r"^#?\s*Server\s*=",
-                line,
-            ):
-                enabled = any(
-                    alias.lower()
-                    in current.lower()
-                    for alias in wanted
-                )
-
-                stripped = line.lstrip()
-
-                if enabled:
-                    line = re.sub(
-                        r"^#\s*",
-                        "",
-                        line,
-                    )
-                else:
-                    if not stripped.startswith(
-                        "#"
-                    ):
-                        line = "#" + line
-
-            output.append(line)
-
-        new_text = (
-            "\n".join(output) +
-            "\n"
+        mirror_text = (
+            "# MuliOS installer mirrorlist\\n"
+            "# Curated HTTPS mirrors; generated dynamically by the installer.\\n"
+            + "\\n".join(
+                f"Server = {mirror}"
+                for mirror in mirrors
+            )
+            + "\\n"
         )
 
         mirrorlist.write_text(
-            new_text,
+            mirror_text,
             encoding="utf-8",
         )
 
-        self.ensure_active_mirror(
-            mirrorlist
+        self.log(
+            "Configured curated Arch Linux HTTPS mirrors."
         )
 
-        self.log(
-            f"Mirror region configured: "
-            f"{mirror_region}"
-        )
+        if mirror_region:
+            self.log(
+                f"Requested mirror region: {mirror_region}; "
+                "using curated HTTPS fallback mirrors for reliability."
+            )
 
     def ensure_active_mirror(
         self,
@@ -1529,34 +1457,13 @@ class InstallWorker(QThread):
         )
 
         if re.search(
-            r"(?m)^Server\s*=",
+            r"(?m)^\\s*Server\\s*=",
             text,
         ):
             return
 
-        lines = text.splitlines()
-
-        for index, line in enumerate(
-            lines
-        ):
-            if re.match(
-                r"^#\s*Server\s*=",
-                line,
-            ):
-                lines[index] = re.sub(
-                    r"^#\s*",
-                    "",
-                    line,
-                )
-                mirrorlist.write_text(
-                    "\n".join(lines) + "\n",
-                    encoding="utf-8",
-                )
-                return
-
         raise InstallError(
-            "No usable Arch Linux mirror "
-            "was found in the target mirrorlist."
+            "No usable Arch Linux mirror was configured."
         )
 
     def configure_multilib(self):
@@ -1711,25 +1618,62 @@ class InstallWorker(QThread):
         pacman_conf = self.target / "etc/pacman.conf"
 
         # The ISO build uses a host-local [mulios] repository to install
-        # custom packages. That path must never survive into the installed
-        # system because /root/mulios is a build-machine path.
+        # custom packages. That repository must never survive into the
+        # installed system or be queried by the target pacman instance.
         if pacman_conf.exists():
+            backup_dir = (
+                self.target /
+                "var/lib/mulios-installer/pacman-backup"
+            )
+            backup_dir.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+
+            backup_conf = backup_dir / "pacman.conf"
+            shutil.copy2(
+                pacman_conf,
+                backup_conf,
+            )
+
             pacman_text = pacman_conf.read_text(
                 encoding="utf-8",
                 errors="replace",
             )
 
+            # Remove the complete build-only repository section, including
+            # the final section when [mulios] happens to be at EOF.
             pacman_text = re.sub(
-                r"(?ms)^\[mulios\]\n.*?^\n(?=\[)",
+                r"(?ms)^\\[mulios\\]\\s*.*?(?=^\\[|\\Z)",
                 "",
                 pacman_text,
             )
+
+            # Never allow the build-machine path to leak into the target.
+            if re.search(
+                r"(?mi)^\\s*Server\\s*=\\s*file:///root/MuliOS-Arch/profile/packages\\s*$",
+                pacman_text,
+            ) or re.search(
+                r"(?mi)^\\[mulios\\]\\s*$",
+                pacman_text,
+            ):
+                raise InstallError(
+                    "Build-only [mulios] repository remained in target "
+                    "/etc/pacman.conf after cleanup."
+                )
 
             pacman_conf.write_text(
                 pacman_text,
                 encoding="utf-8",
             )
 
+            self.log(
+                "Removed build-only [mulios] repository from target pacman.conf."
+            )
+
+        # A live ISO frequently uses 127.0.0.53 in /etc/resolv.conf.
+        # That address belongs to the live environment and is not reachable
+        # from an arch-chroot. Copy real upstream nameservers instead.
         resolv = (
             self.target /
             "etc/resolv.conf"
@@ -1738,20 +1682,118 @@ class InstallWorker(QThread):
         if resolv.exists() or resolv.is_symlink():
             resolv.unlink()
 
-        live_resolv = Path(
-            "/etc/resolv.conf"
+        nameservers = []
+
+        resolv_candidates = [
+            Path("/run/systemd/resolve/resolv.conf"),
+            Path("/etc/resolv.conf"),
+        ]
+
+        for source in resolv_candidates:
+            if not source.exists():
+                continue
+
+            try:
+                text = source.read_text(
+                    encoding="utf-8",
+                    errors="replace",
+                )
+            except OSError:
+                continue
+
+            for line in text.splitlines():
+                match = re.match(
+                    r"^\\s*nameserver\\s+([^\\s#]+)",
+                    line,
+                )
+
+                if not match:
+                    continue
+
+                address = match.group(1).strip()
+
+                if address in (
+                    "127.0.0.1",
+                    "127.0.0.53",
+                    "::1",
+                ):
+                    continue
+
+                if address not in nameservers:
+                    nameservers.append(address)
+
+            if nameservers:
+                break
+
+        # Stable public DNS fallback. This is only used when the live
+        # environment exposes no usable upstream nameserver.
+        for address in (
+            "1.1.1.1",
+            "8.8.8.8",
+            "9.9.9.9",
+        ):
+            if address not in nameservers:
+                nameservers.append(address)
+
+        nameservers = nameservers[:4]
+
+        resolv.write_text(
+            "# Generated by MuliOS Native Installer.\\n"
+            + "".join(
+                f"nameserver {address}\\n"
+                for address in nameservers
+            ),
+            encoding="utf-8",
         )
 
-        if live_resolv.exists():
-            try:
-                shutil.copy2(
-                    live_resolv,
-                    resolv,
-                )
-            except Exception as exc:
-                self.log(
-                    f"Could not copy resolv.conf: {exc}"
-                )
+        self.log(
+            "Configured target DNS nameservers: "
+            + ", ".join(nameservers)
+        )
+
+        # Verify DNS from inside the target before allowing pacman to run.
+        dns_ok = self.chroot(
+            [
+                "getent",
+                "hosts",
+                "archlinux.org",
+            ],
+            check=False,
+        )
+
+        if not dns_ok.strip():
+            self.log(
+                "Target DNS lookup failed; replacing resolv.conf with "
+                "known public DNS servers and retrying."
+            )
+
+            resolv.write_text(
+                "# MuliOS installer DNS fallback.\\n"
+                "nameserver 1.1.1.1\\n"
+                "nameserver 8.8.8.8\\n"
+                "nameserver 9.9.9.9\\n",
+                encoding="utf-8",
+            )
+
+            dns_ok = self.chroot(
+                [
+                    "getent",
+                    "hosts",
+                    "archlinux.org",
+                ],
+                check=False,
+            )
+
+        if not dns_ok.strip():
+            raise InstallError(
+                "Target DNS is unavailable. "
+                "Could not resolve archlinux.org from the "
+                "installation environment."
+            )
+
+        self.log(
+            "Target DNS lookup verified."
+        )
 
         self.configure_multilib()
 
