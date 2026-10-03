@@ -81,7 +81,7 @@ class InstallWorker(QThread):
 
             raise InstallError(message) from exc
 
-    def log(self, message: str):
+    def log(self, message: str, *, visible=True):
         message = str(message)
 
         try:
@@ -100,7 +100,8 @@ class InstallWorker(QThread):
                 pass
 
         try:
-            self.log_line.emit(message)
+            if visible:
+                self.log_line.emit(message)
         except Exception:
             pass
 
@@ -115,6 +116,7 @@ class InstallWorker(QThread):
         check=True,
         input_text=None,
         env=None,
+        progress_range=None,
     ):
         command = [str(x) for x in command]
 
@@ -123,7 +125,7 @@ class InstallWorker(QThread):
             for x in command
         )
 
-        self.log(f"$ {display_command}")
+        self.log(f"$ {display_command}", visible=False)
 
         try:
             process = subprocess.Popen(
@@ -173,7 +175,28 @@ class InstallWorker(QThread):
                 for line in process.stdout:
                     line = line.rstrip("\n")
                     output.append(line)
-                    self.log(line)
+
+                    # Keep command output in the full log, but never flood
+                    # the active installer view with rsync/pacman byte
+                    # counters, transfer rates, or per-file status.
+                    self.log(line, visible=False)
+
+                    if progress_range is not None:
+                        match = re.search(
+                            r"(?<!\d)([\d,]+)\s+(\d{1,3})%(?:\s|$)",
+                            line,
+                        )
+                        if match:
+                            percent = min(
+                                100,
+                                int(match.group(2)),
+                            )
+                            start, end = progress_range
+                            value = int(
+                                start +
+                                ((end - start) * percent / 100.0)
+                            )
+                            self.progress.emit(value)
 
         except Exception as exc:
             self.log(
@@ -184,7 +207,8 @@ class InstallWorker(QThread):
         process.wait()
 
         self.log(
-            f"[exit code: {process.returncode}]"
+            f"[exit code: {process.returncode}]",
+            visible=False,
         )
 
         result = "\n".join(output)
@@ -559,7 +583,7 @@ class InstallWorker(QThread):
             f"Preparing installation disk: {disk}"
         )
 
-        self.progress.emit(5)
+        self.progress.emit(4)
 
         self.run_command(
             ["swapoff", "-a"],
@@ -640,7 +664,7 @@ class InstallWorker(QThread):
             f"Root partition: {root}"
         )
 
-        self.progress.emit(10)
+        self.progress.emit(8)
 
         return boot, root
 
@@ -846,7 +870,7 @@ class InstallWorker(QThread):
                 ]
             )
 
-        self.progress.emit(15)
+        self.progress.emit(14)
 
     # ------------------------------------------------------------------
     # Filesystem mounting
@@ -953,11 +977,14 @@ class InstallWorker(QThread):
                 "rsync",
                 "-aHAX",
                 "--numeric-ids",
-                "--info=progress2",
                 *excluded,
+                "--info=progress2",
+                "--human-readable",
+                "--stats",
                 f"{source}/",
                 f"{self.target}/",
-            ]
+            ],
+            progress_range=(20, 45),
         )
 
         for directory in (
@@ -986,7 +1013,7 @@ class InstallWorker(QThread):
 
         self.remove_live_environment()
 
-        self.progress.emit(35)
+        self.progress.emit(45)
 
     def remove_live_environment(self):
         self.log(
@@ -2879,7 +2906,7 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             ]
         )
 
-        self.progress.emit(95)
+        self.progress.emit(97)
 
     def finalize(self):
         self.log(
@@ -3057,36 +3084,50 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
                 root,
                 mapped_root,
             )
+            self.progress.emit(48)
 
             self.configure_identity()
+            self.progress.emit(51)
 
             self.configure_initramfs_encryption()
+            self.progress.emit(53)
 
             self.prepare_network()
+            self.progress.emit(56)
 
             self.configure_kernel()
+            self.progress.emit(61)
 
             self.create_user()
+            self.progress.emit(65)
 
             self.configure_root_account()
+            self.progress.emit(67)
 
             self.configure_desktop()
+            self.progress.emit(73)
 
             self.install_extra_packages()
+            self.progress.emit(77)
 
             self.configure_profile()
+            self.progress.emit(81)
 
             self.configure_mupdate()
+            self.progress.emit(84)
 
             self.configure_swap()
+            self.progress.emit(86)
 
             self.configure_bootloader()
 
             self.enable_services()
+            self.progress.emit(93)
 
             self.generate_initramfs()
 
             self.finalize()
+            self.progress.emit(99)
 
             self.cleanup_mounts()
 
