@@ -182,14 +182,14 @@ class InstallWorker(QThread):
                     self.log(line, visible=False)
 
                     if progress_range is not None:
-                        match = re.search(
+                        matches = re.findall(
                             r"(?<!\d)([\d,]+)\s+(\d{1,3})%(?:\s|$)",
                             line,
                         )
-                        if match:
+                        if matches:
                             percent = min(
                                 100,
-                                int(match.group(2)),
+                                int(matches[-1][1]),
                             )
                             start, end = progress_range
                             value = int(
