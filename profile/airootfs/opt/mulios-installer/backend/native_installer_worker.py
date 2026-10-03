@@ -2200,6 +2200,10 @@ class InstallWorker(QThread):
         shutil.copy2(source, kernel_destination)
         os.chmod(kernel_destination, 0o644)
 
+        # The live ISO carries ArchISO-specific mkinitcpio configuration.
+        # It must never be used by the installed system.
+        self.configure_installed_mkinitcpio()
+
         # Keep firmware and encryption support from the live environment;
         # these are optional when offline and will be retained if already
         # present in the copied root filesystem.
@@ -2216,6 +2220,67 @@ class InstallWorker(QThread):
         return (
             "vmlinuz-linux-mulios-generic",
             "initramfs-linux-mulios-generic.img",
+        )
+
+    def configure_installed_mkinitcpio(self):
+        config_dir = self.target / "etc/mkinitcpio.conf.d"
+        config_dir.mkdir(parents=True, exist_ok=True)
+
+        archiso_config = config_dir / "archiso.conf"
+        if archiso_config.exists() or archiso_config.is_symlink():
+            archiso_config.unlink()
+
+        hooks = [
+            "base",
+            "udev",
+            "autodetect",
+            "microcode",
+            "modconf",
+            "kms",
+            "keyboard",
+            "keymap",
+            "consolefont",
+            "block",
+            "filesystems",
+            "fsck",
+        ]
+
+        if self.encryption_enabled():
+            hooks.insert(-2, "encrypt")
+
+        self.write_file(
+            self.target / "etc/mkinitcpio.conf",
+            "\n".join([
+                "# MuliOS installed-system initramfs configuration",
+                "",
+                "MODULES=(virtio_pci virtio_blk virtio_scsi)",
+                "BINARIES=()",
+                "FILES=()",
+                "HOOKS=(" + " ".join(hooks) + ")",
+                'COMPRESSION="zstd"',
+                "",
+            ]),
+        )
+
+        preset = self.target / "etc/mkinitcpio.d/linux-mulios-generic.preset"
+        self.write_file(
+            preset,
+            """# mkinitcpio preset file for linux-mulios-generic
+
+ALL_config="/etc/mkinitcpio.conf"
+ALL_kver="/usr/lib/modules/7.2.3-mulios-generic/vmlinuz"
+
+PRESETS=('default')
+
+default_image="/boot/initramfs-linux-mulios-generic.img"
+""",
+        )
+
+        self.log(
+            "Replaced ArchISO mkinitcpio configuration with the installed MuliOS configuration."
+        )
+        self.log(
+            "Installed-system mkinitcpio hooks: " + " ".join(hooks)
         )
 
     # ------------------------------------------------------------------
@@ -2620,10 +2685,9 @@ class InstallWorker(QThread):
             self.root_partition
         )
 
-        args = [
-            f"root=UUID={root_uuid}",
-            "rw",
-        ]
+        # grub-mkconfig supplies the root=UUID argument itself. Adding the
+        # root UUID here causes duplicate root= arguments in generated GRUB.
+        args = []
 
         if self.encryption_enabled():
             luks_uuid = self.block_uuid(
@@ -2693,12 +2757,26 @@ class InstallWorker(QThread):
                 encoding="utf-8",
                 errors="replace",
             )
+
+            text = re.sub(
+                r'(?m)^#?\s*GRUB_DISTRIBUTOR=.*$',
+                'GRUB_DISTRIBUTOR="MuliOS"',
+                text,
+            )
+
+            if not re.search(r'(?m)^GRUB_DISTRIBUTOR=', text):
+                text += '\nGRUB_DISTRIBUTOR="MuliOS"\n'
+
             line = f'GRUB_CMDLINE_LINUX_DEFAULT="{cmdline}"'
             text = re.sub(
                 r'(?m)^#?\s*GRUB_CMDLINE_LINUX_DEFAULT=.*$',
                 line,
                 text,
             )
+
+            if not re.search(r'(?m)^GRUB_CMDLINE_LINUX_DEFAULT=', text):
+                text += f'\n{line}\n'
+
             grub_default.write_text(text, encoding="utf-8")
 
         self.chroot([
