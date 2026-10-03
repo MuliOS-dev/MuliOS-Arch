@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QHBoxLayout,
 )
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QTimer, QElapsedTimer, Signal
 
 from backend.native_installer_worker import InstallWorker
 from config.settings import INSTALL_LOG
@@ -36,6 +36,10 @@ class InstallPage(QWidget):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
+        self.elapsed_label = QLabel("Installation time: 00:00:00")
+        self.elapsed_label.setObjectName("SubtitleLabel")
+        layout.addWidget(self.elapsed_label)
+
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
@@ -58,10 +62,33 @@ class InstallPage(QWidget):
         layout.addLayout(button_row)
 
         self.worker = None
+        self.elapsed_timer = QElapsedTimer()
+        self.elapsed_clock = QTimer(self)
+        self.elapsed_clock.setInterval(1000)
+        self.elapsed_clock.timeout.connect(self._update_elapsed_time)
+
+    def _update_elapsed_time(self):
+        if not self.elapsed_timer.isValid():
+            return
+
+        total_seconds = self.elapsed_timer.elapsed() // 1000
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+
+        self.elapsed_label.setText(
+            f"Installation time: {hours:02d}:{minutes:02d}:{seconds:02d}"
+        )
+
+    def _stop_elapsed_time(self):
+        self._update_elapsed_time()
+        self.elapsed_clock.stop()
 
     def start(self, state: dict):
         self.log_view.clear()
         self.progress_bar.setValue(0)
+        self.elapsed_label.setText("Installation time: 00:00:00")
+        self.elapsed_timer.start()
+        self.elapsed_clock.start()
         self.status_label.setText(
             f"Installation log: {INSTALL_LOG}"
         )
@@ -108,6 +135,7 @@ class InstallPage(QWidget):
         scrollbar.setValue(scrollbar.maximum())
 
     def _on_success(self):
+        self._stop_elapsed_time()
         self.progress_bar.setValue(100)
         self.status_label.setText(
             f"Installation completed successfully.\n"
@@ -123,6 +151,7 @@ class InstallPage(QWidget):
         self.install_finished.emit(True)
 
     def _on_failure(self, error_message: str):
+        self._stop_elapsed_time()
         self.status_label.setText(
             f"Installation failed.\n"
             f"Full log: {INSTALL_LOG}"
