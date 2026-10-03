@@ -2127,23 +2127,25 @@ class InstallWorker(QThread):
     # ------------------------------------------------------------------
 
     def configure_kernel(self):
+        # MuliOS ships its own kernel in the ISO. The live kernel is outside
+        # the airootfs, so rsync cannot copy it into the installed /boot.
+        # The previous installer selected the generic Arch "linux" package;
+        # in offline installs that package is skipped, leaving an initramfs
+        # without its matching kernel. Install the bundled MuliOS kernel
+        # directly from the live ISO instead.
         kernel = str(
             self.state.get(
                 "kernel",
-                "linux",
+                "linux-mulios-generic",
             )
         ).strip().lower()
 
         allowed = {
-            "linux": "linux",
-            "linux-lts": "linux-lts",
-            "linux-zen": "linux-zen",
-            "linux-hardened": "linux-hardened",
+            "linux": "linux-mulios-generic",
+            "linux-mulios-generic": "linux-mulios-generic",
         }
 
-        package = allowed.get(
-            kernel
-        )
+        package = allowed.get(kernel)
 
         if package is None:
             raise InstallError(
@@ -2151,48 +2153,70 @@ class InstallWorker(QThread):
             )
 
         self.kernel_package = package
+        kernel_name = "vmlinuz-linux-mulios-generic"
+        kernel_destination = self.target / "boot" / kernel_name
 
-        self.log(
-            f"Installing selected kernel: {package}"
-        )
-
-        packages = [
-            package,
-            "linux-firmware",
+        candidates = [
+            Path("/run/archiso/boot/x86_64") / kernel_name,
+            Path("/run/archiso/boot/amd64") / kernel_name,
+            Path("/run/live/boot/x86_64") / kernel_name,
+            Path("/run/live/boot/amd64") / kernel_name,
         ]
 
-        if self.encryption_enabled():
-            packages.append(
-                "cryptsetup"
+        source = next(
+            (path for path in candidates if path.is_file()),
+            None,
+        )
+
+        if source is None:
+            # Some archiso layouts expose the boot tree through a mounted
+            # ISO path. Search only the known live-media roots.
+            for root in (
+                Path("/run/archiso"),
+                Path("/run/live"),
+            ):
+                if not root.is_dir():
+                    continue
+                matches = list(root.glob(
+                    "**/vmlinuz-linux-mulios-generic"
+                ))
+                if matches:
+                    source = matches[0]
+                    break
+
+        if source is None:
+            raise InstallError(
+                "Could not locate the bundled MuliOS kernel "
+                "vmlinuz-linux-mulios-generic on the live media."
             )
 
-        self.pacman_install(
-            packages
+        self.log(
+            f"Installing bundled MuliOS kernel from {source}"
+        )
+        kernel_destination.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+        shutil.copy2(source, kernel_destination)
+        os.chmod(kernel_destination, 0o644)
+
+        # Keep firmware and encryption support from the live environment;
+        # these are optional when offline and will be retained if already
+        # present in the copied root filesystem.
+        packages = ["linux-firmware"]
+        if self.encryption_enabled():
+            packages.append("cryptsetup")
+        self.pacman_install(packages)
+
+        self.log(
+            "Bundled MuliOS kernel installed successfully."
         )
 
     def kernel_paths(self):
-        mapping = {
-            "linux": (
-                "vmlinuz-linux",
-                "initramfs-linux.img",
-            ),
-            "linux-lts": (
-                "vmlinuz-linux-lts",
-                "initramfs-linux-lts.img",
-            ),
-            "linux-zen": (
-                "vmlinuz-linux-zen",
-                "initramfs-linux-zen.img",
-            ),
-            "linux-hardened": (
-                "vmlinuz-linux-hardened",
-                "initramfs-linux-hardened.img",
-            ),
-        }
-
-        return mapping[
-            self.kernel_package
-        ]
+        return (
+            "vmlinuz-linux-mulios-generic",
+            "initramfs-linux-mulios-generic.img",
+        )
 
     # ------------------------------------------------------------------
     # Desktop
