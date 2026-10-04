@@ -59,6 +59,9 @@ sddm-kcm
 
 # KDE apps
 dolphin
+desktop-file-utils
+kservice
+kde-cli-tools
 
 # Audio
 pipewire
