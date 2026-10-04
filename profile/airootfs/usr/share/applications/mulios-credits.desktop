@@ -1,9 +1,11 @@
 [Desktop Entry]
+Type=Application
 Name=MuliOS Credits
+GenericName=Credits
 Comment=MuliOS developers and project information
-Exec=python /opt/credits/main.py
+Exec=/usr/bin/python3 /opt/credits/main.py
+TryExec=/usr/bin/python3
 Icon=/opt/credits/icons/logo.png
 Terminal=false
-Type=Application
 Categories=System;Utility;
 StartupNotify=true
