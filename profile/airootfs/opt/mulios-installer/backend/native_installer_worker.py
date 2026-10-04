@@ -2943,6 +2943,24 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             if not re.search(r'(?m)^GRUB_DISTRIBUTOR=', text):
                 text += '\nGRUB_DISTRIBUTOR="MuliOS"\n'
 
+            # Always show the GRUB menu. Arch defaults may hide the menu,
+            # which makes a successful GRUB installation look like it was
+            # skipped entirely.
+            grub_menu_settings = {
+                "GRUB_DEFAULT": "0",
+                "GRUB_TIMEOUT": "5",
+                "GRUB_TIMEOUT_STYLE": "menu",
+            }
+            for key, value in grub_menu_settings.items():
+                line_value = f"{key}={value}"
+                text = re.sub(
+                    rf"(?m)^#?\\s*{re.escape(key)}=.*$",
+                    line_value,
+                    text,
+                )
+                if not re.search(rf"(?m)^{re.escape(key)}=", text):
+                    text += f"\\n{line_value}\\n"
+
             line = f'GRUB_CMDLINE_LINUX_DEFAULT="{cmdline}"'
             text = re.sub(
                 r'(?m)^#?\s*GRUB_CMDLINE_LINUX_DEFAULT=.*$',
