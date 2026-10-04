@@ -20,7 +20,7 @@ sudo mupdate status
 
 Each file under `profile/airootfs/` maps to the same path under the installed root:
 
-- `profile/airootfs/usr/share/backgrounds/mulios/wallpaper.jpg` maps to `/usr/share/backgrounds/mulios/wallpaper.jpg`.
+- `profile/airootfs/usr/share/backgrounds/mulios/wallpaper.png` maps to `/usr/share/backgrounds/mulios/wallpaper.png`.
 - `profile/airootfs/usr/local/bin/mupdate` maps to `/usr/local/bin/mupdate`.
 - `profile/airootfs/etc/skel/.config/kdeglobals` maps to `/etc/skel/.config/kdeglobals`.
 
