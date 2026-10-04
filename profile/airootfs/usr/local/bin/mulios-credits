@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -u
+
+APP_DIR="/opt/credits"
+LAUNCHER="$APP_DIR/main.py"
+LOG_DIR="$HOME/.local/state/mulios"
+LOG_FILE="$LOG_DIR/credits.log"
+
+mkdir -p "$LOG_DIR"
+
+if [ ! -f "$LAUNCHER" ]; then
+    printf '%s\n' "MuliOS Credits is not installed." | tee -a "$LOG_FILE" >&2
+    exit 1
+fi
+
+if ! command -v python3 >/dev/null 2>&1; then
+    printf '%s\n' "Python 3 is required by MuliOS Credits." | tee -a "$LOG_FILE" >&2
+    exit 1
+fi
+
+cd "$APP_DIR" || exit 1
+exec /usr/bin/python3 "$LAUNCHER" >>"$LOG_FILE" 2>&1
