@@ -51,4 +51,11 @@ install -d -m 0750 /etc/sudoers.d
 cat > /etc/sudoers.d/mulios-installer <<'EOF'
 liveuser ALL=(ALL:ALL) NOPASSWD: ALL
 EOF
+# Guarantee the live installer launcher is executable in the final airootfs.
+# mkarchiso preserves the source-tree mode, so enforce it here as well as in
+# the build script.
+if [ -f /usr/local/bin/mulios-installer ]; then
+    chmod 0755 /usr/local/bin/mulios-installer
+fi
+
 chmod 0440 /etc/sudoers.d/mulios-installer
