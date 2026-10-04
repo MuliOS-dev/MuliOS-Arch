@@ -29,14 +29,14 @@ You will also need:
 Clone the repository from GitHub:
 
 ```bash
-git clone https://github.com/MuliOS/MuliOS-Arch.git
+git clone https://github.com/MuliOS-dev/MuliOS-Arch.git
 cd MuliOS-Arch
 ```
 
 If you are contributing changes, fork the repository first and clone your fork instead, then add the upstream repository as a remote:
 
 ```bash
-git remote add upstream https://github.com/MuliOS/MuliOS-Arch.git
+git remote add upstream https://github.com/MuliOS-dev/MuliOS-Arch.git
 ```
 
 ## Building the ISO
@@ -46,7 +46,7 @@ MuliOS-Arch provides helper scripts under `scripts/` so contributors do not need
 ### 1. Prepare the build environment
 
 ```bash
-sudo ./scripts/prepare.sh
+bash ./scripts/prepare.sh
 ```
 
 This script performs any setup required before a build, such as verifying dependencies are installed, syncing the package database, and preparing working directories used by the build process.
@@ -54,7 +54,7 @@ This script performs any setup required before a build, such as verifying depend
 ### 2. Run the build
 
 ```bash
-sudo ./scripts/build.sh
+bash ./scripts/build.sh
 ```
 
 This script wraps `mkarchiso`, pointing it at the `profile/` directory, and produces a bootable ISO image using the MuliOS-Arch ArchISO profile.
@@ -71,7 +71,7 @@ Depending on your hardware and internet speed, a full build can take anywhere fr
 
 ## Build Output
 
-Once the build completes, the ISO image and related artifacts are placed in the working/output directory used by `mkarchiso` (typically `work/` and `out/` inside the repository root, unless configured otherwise in `scripts/build.sh`).
+Once the build completes, the ISO image and related artifacts are placed in the working/output directory used by `mkarchiso` (typically ``temp/` and `output/` inside the repository root, unless configured otherwise in `scripts/build.sh`).
 
 Expected output includes:
 
@@ -81,7 +81,7 @@ Expected output includes:
 You can test the resulting ISO using a virtual machine (such as QEMU or VirtualBox) before testing on real hardware:
 
 ```bash
-qemu-system-x86_64 -m 2048 -cdrom out/mulios-arch-<version>-x86_64.iso
+qemu-system-x86_64 -m 2048 -cdrom output/MuliOS-<version>-x86_64.iso
 ```
 
 ## Cleaning Build Files
@@ -89,13 +89,13 @@ qemu-system-x86_64 -m 2048 -cdrom out/mulios-arch-<version>-x86_64.iso
 ArchISO builds generate large temporary work directories that should not be committed to the repository. To remove them:
 
 ```bash
-sudo ./scripts/test.sh --clean
+bash ./scripts/test.sh --clean
 ```
 
 If a dedicated clean option is not available in your version of the scripts, you can manually remove the generated directories:
 
 ```bash
-sudo rm -rf work/ out/
+sudo rm -rf temp/ output/
 ```
 
 Always clean your build environment before switching branches or pulling upstream changes, since stale work directories can cause inconsistent or failed builds.
@@ -104,3 +104,20 @@ Always clean your build environment before switching branches or pulling upstrea
 
 - See [`development.md`](development.md) to understand how the repository is organized and how to develop new features.
 - See [`troubleshooting.md`](troubleshooting.md) if your build fails or produces unexpected results.
+
+
+## Static validation
+
+Before building, run:
+
+```bash
+bash scripts/test.sh
+```
+
+This validates required profile files, launcher permissions, Python and shell syntax, the Task Manager Node.js backend when Node.js is available, desktop entries, wallpaper references, and required runtime packages.
+
+To remove generated build artifacts:
+
+```bash
+bash scripts/test.sh --clean
+```
