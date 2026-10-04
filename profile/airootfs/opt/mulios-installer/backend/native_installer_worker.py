@@ -2960,7 +2960,7 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
                 "--label",
                 "MuliOS",
                 "--loader",
-                r"\\EFI\\MuliOS\\grubx64.efi",
+                r"\EFI\MuliOS\grubx64.efi",
             ])
 
         efibootmgr_output = self.chroot(
