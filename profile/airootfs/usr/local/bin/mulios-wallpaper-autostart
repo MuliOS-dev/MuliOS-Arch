@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -u
+
+# Give Plasma and its D-Bus services time to finish initializing.
+sleep 3
+exec /usr/local/bin/mulios-apply-wallpaper
