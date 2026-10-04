@@ -53,6 +53,7 @@ libva
 # KDE Plasma
 plasma-desktop
 plasma-workspace
+plasma-x11-session
 sddm
 sddm-kcm
 
