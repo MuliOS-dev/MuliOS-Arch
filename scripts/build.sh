@@ -44,6 +44,8 @@ build() {
     chmod 0755 "$PROFILE/airootfs/etc/skel/Desktop/mulios-installer.desktop"
     chmod 0755 "$PROFILE/airootfs/usr/share/applications/mulios-installer.desktop"
 
+    bash "$WORK_DIR/scripts/test.sh"
+
     cat > "$PROFILE/airootfs/etc/os-release" <<EOF
 NAME="MuliOS"
 PRETTY_NAME="MuliOS Arch $mulios_version"
