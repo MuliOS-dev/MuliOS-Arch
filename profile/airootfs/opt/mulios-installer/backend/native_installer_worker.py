@@ -2164,7 +2164,16 @@ class InstallWorker(QThread):
         ksplashrc = config / "ksplashrc"
         ksplashrc.write_text(
             "[KSplash]\\n"
-            "Engine=none\\n",
+            "Engine=none\\n"
+            "Theme=None\\n",
+            encoding="utf-8",
+        )
+
+        # Force the Breeze lock-screen implementation explicitly.
+        kscreenlockerrc = config / "kscreenlockerrc"
+        kscreenlockerrc.write_text(
+            "[Greeter]\\n"
+            "Theme=org.kde.breeze.desktop\\n",
             encoding="utf-8",
         )
 
@@ -2187,6 +2196,56 @@ class InstallWorker(QThread):
             )
 
         self.log("Configured modern Plasma lock screen and disabled KDE splash screen.")
+
+        # Plasma wallpaper state is session-owned. Apply the image once after
+        # the installed user's first Plasma session starts.
+        wallpaper_script = self.target / "usr/local/bin/mulios-apply-wallpaper"
+        wallpaper_script.parent.mkdir(parents=True, exist_ok=True)
+        wallpaper_script.write_text(
+            "#!/usr/bin/env bash\\n"
+            "set -u\\n"
+            "WALLPAPER=/usr/share/backgrounds/mulios/wallpaper.jpg\\n"
+            "if [ -f \\"$WALLPAPER\\" ] && command -v plasma-apply-wallpaperimage >/dev/null 2>&1; then\\n"
+            "    plasma-apply-wallpaperimage \\"$WALLPAPER\\" >/dev/null 2>&1 || true\\n"
+            "fi\\n"
+            "rm -f \\"$HOME/.config/autostart/mulios-wallpaper.desktop\\"\\n"
+            "exit 0\\n",
+            encoding="utf-8",
+        )
+        os.chmod(wallpaper_script, 0o755)
+
+        wallpaper_autostart = self.target / "etc/xdg/autostart/mulios-wallpaper.desktop"
+        wallpaper_autostart.parent.mkdir(parents=True, exist_ok=True)
+        wallpaper_autostart.write_text(
+            "[Desktop Entry]\\n"
+            "Type=Application\\n"
+            "Name=MuliOS Wallpaper\\n"
+            "Exec=/usr/local/bin/mulios-apply-wallpaper\\n"
+            "OnlyShowIn=KDE;\\n"
+            "X-GNOME-Autostart-enabled=true\\n",
+            encoding="utf-8",
+        )
+
+        # The installed system must not contain the live installer.
+        for installer_path in (
+            self.target / "opt/mulios-installer",
+            self.target / "usr/share/applications/mulios-installer.desktop",
+            self.target / "etc/xdg/autostart/mulios-installer.desktop",
+        ):
+            if installer_path.is_dir() and not installer_path.is_symlink():
+                shutil.rmtree(installer_path, ignore_errors=True)
+            elif installer_path.exists() or installer_path.is_symlink():
+                try:
+                    installer_path.unlink()
+                except FileNotFoundError:
+                    pass
+
+        # Never carry the live-session autologin into the installed system.
+        autologin = self.target / "etc/sddm.conf.d/autologin.conf"
+        if autologin.exists() or autologin.is_symlink():
+            autologin.unlink()
+
+        self.log("Removed installer files and live-session autologin from installed system.")
 
     def configure_root_account(self):
         password = str(
