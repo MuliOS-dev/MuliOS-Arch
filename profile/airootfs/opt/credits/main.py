@@ -71,7 +71,7 @@ SUPPORT_LINKS = [
     ("github.png", "Main Repository", "https://github.com/MuliOS-dev/MuliOS-Arch"),
     ("github.png", "Organisation", "https://github.com/MuliOS-dev"),
     ("github.png", "Issues", "https://github.com/MuliOS-dev/MuliOS-Arch/issues"),
-    ("discord.png", "Discord", "https://discord.gg/BUrDmvg9CW"),
+    ("discord.png", "Discord", "https://discord.gg/3FzUdGbWMf"),
 ]
 
 
