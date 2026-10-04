@@ -37,7 +37,10 @@ build() {
     # Desktop launchers must be executable for Plasma to treat them as trusted
     # launchable desktop entries in the live session.
     chmod 0755 "$PROFILE/airootfs/usr/local/bin/mulios-installer"
+    chmod 0755 "$PROFILE/airootfs/usr/local/bin/mulios-taskmanager"
+    chmod 0755 "$PROFILE/airootfs/usr/local/bin/mulios-credits"
     chmod 0755 "$PROFILE/airootfs/usr/local/bin/mulios-apply-wallpaper"
+    chmod 0755 "$PROFILE/airootfs/usr/local/bin/mulios-wallpaper-autostart"
     chmod 0755 "$PROFILE/airootfs/etc/skel/Desktop/mulios-installer.desktop"
     chmod 0755 "$PROFILE/airootfs/usr/share/applications/mulios-installer.desktop"
 
