@@ -49,6 +49,53 @@ Rectangle {
             textRole: "name"
             currentIndex: userModel.lastIndex >= 0 ? userModel.lastIndex : 0
             font.pixelSize: 15
+
+            contentItem: Text {
+                leftPadding: 12
+                rightPadding: 12
+                verticalAlignment: Text.AlignVCenter
+                text: userBox.currentText
+                color: "#f5f5f5"
+                elide: Text.ElideRight
+            }
+
+            background: Rectangle {
+                radius: 8
+                color: "#151917"
+                border.color: "#3b443f"
+                border.width: 1
+            }
+
+            popup: Popup {
+                y: userBox.height + 4
+                width: userBox.width
+                padding: 4
+
+                contentItem: ListView {
+                    implicitHeight: Math.min(contentHeight, 240)
+                    clip: true
+                    model: userBox.popup.visible ? userModel : null
+                    currentIndex: userBox.currentIndex
+
+                    delegate: ItemDelegate {
+                        width: ListView.view.width
+                        height: 38
+                        highlighted: ListView.isCurrentItem
+                        text: model.name
+                        onClicked: {
+                            userBox.currentIndex = index
+                            userBox.popup.close()
+                        }
+                    }
+                }
+
+                background: Rectangle {
+                    radius: 8
+                    color: "#151917"
+                    border.color: "#3b443f"
+                    border.width: 1
+                }
+            }
         }
 
         TextField {
@@ -59,6 +106,13 @@ Rectangle {
             selectByMouse: true
             font.pixelSize: 15
             onAccepted: login()
+
+            background: Rectangle {
+                radius: 8
+                color: "#151917"
+                border.color: "#3b443f"
+                border.width: 1
+            }
         }
 
         ComboBox {
@@ -68,6 +122,63 @@ Rectangle {
             textRole: "name"
             currentIndex: sessionModel.lastIndex >= 0 ? sessionModel.lastIndex : 0
             font.pixelSize: 15
+
+            contentItem: Text {
+                leftPadding: 12
+                rightPadding: 12
+                verticalAlignment: Text.AlignVCenter
+                text: sessionBox.currentText
+                color: "#f5f5f5"
+                elide: Text.ElideRight
+            }
+
+            background: Rectangle {
+                radius: 8
+                color: "#151917"
+                border.color: "#3b443f"
+                border.width: 1
+            }
+
+            popup: Popup {
+                y: sessionBox.height + 4
+                width: sessionBox.width
+                padding: 4
+
+                contentItem: ListView {
+                    implicitHeight: Math.min(contentHeight, 240)
+                    clip: true
+                    model: sessionBox.popup.visible ? sessionModel : null
+                    currentIndex: sessionBox.currentIndex
+
+                    delegate: ItemDelegate {
+                        width: ListView.view.width
+                        height: 38
+                        highlighted: ListView.isCurrentItem
+                        text: model.name
+                        onClicked: {
+                            sessionBox.currentIndex = index
+                            sessionBox.popup.close()
+                        }
+                    }
+                }
+
+                background: Rectangle {
+                    radius: 8
+                    color: "#151917"
+                    border.color: "#3b443f"
+                    border.width: 1
+                }
+            }
+        }
+
+        Text {
+            visible: userModel.count < 1 || sessionModel.count < 1
+            Layout.fillWidth: true
+            horizontalAlignment: Text.AlignHCenter
+            color: "#e58b8b"
+            text: userModel.count < 1
+                ? "No user account is available."
+                : "No Plasma session is available."
         }
 
         Button {
@@ -116,12 +227,18 @@ Rectangle {
             message.text = "No desktop session is available."
             return
         }
+
         message.text = ""
-        sddm.login(userBox.currentText, password.text, sessionBox.currentIndex)
+        sddm.login(
+            userBox.currentText,
+            password.text,
+            sessionBox.currentIndex
+        )
     }
 
     Connections {
         target: sddm
+
         function onLoginFailed() {
             message.text = "Login failed."
             password.selectAll()
@@ -129,5 +246,13 @@ Rectangle {
         }
     }
 
-    Component.onCompleted: password.forceActiveFocus()
+    Component.onCompleted: {
+        if (userModel.count > 0)
+            userBox.currentIndex = userModel.lastIndex >= 0 ? userModel.lastIndex : 0
+
+        if (sessionModel.count > 0)
+            sessionBox.currentIndex = sessionModel.lastIndex >= 0 ? sessionModel.lastIndex : 0
+
+        password.forceActiveFocus()
+    }
 }
