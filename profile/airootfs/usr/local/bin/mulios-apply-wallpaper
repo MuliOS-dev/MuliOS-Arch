@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -u
+
+WALLPAPER="/usr/share/backgrounds/mulios/wallpaper.png"
+WALLPAPER_URL="file:///usr/share/backgrounds/mulios/wallpaper.png"
+MARKER="$HOME/.config/.mulios-wallpaper-applied"
+
+[ -f "$WALLPAPER" ] || exit 0
+
+# Plasma 6 stores the desktop wallpaper in the desktop containment
+# configuration. Configure every current desktop through Plasma's own
+# scripting API instead of relying on a transient helper command.
+QDBUS=""
+if command -v qdbus6 >/dev/null 2>&1; then
+    QDBUS="$(command -v qdbus6)"
+elif command -v qdbus >/dev/null 2>&1; then
+    QDBUS="$(command -v qdbus)"
+fi
+
+if [ -n "$QDBUS" ]; then
+    SCRIPT='
+var desktopsList = desktops();
+for (var i = 0; i < desktopsList.length; ++i) {
+    var desktop = desktopsList[i];
+    desktop.wallpaperPlugin = "org.kde.image";
+    desktop.currentConfigGroup = ["Wallpaper", "org.kde.image", "General"];
+    desktop.writeConfig("Image", "file:///usr/share/backgrounds/mulios/wallpaper.png");
+}
+'
+    if "$QDBUS" org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "$SCRIPT" >/dev/null 2>&1; then
+        mkdir -p "$(dirname "$MARKER")"
+        touch "$MARKER"
+        exit 0
+    fi
+fi
+
+# Fallback for systems where the Plasma scripting D-Bus endpoint is not
+# available yet.
+if command -v plasma-apply-wallpaperimage >/dev/null 2>&1; then
+    if plasma-apply-wallpaperimage "$WALLPAPER" >/dev/null 2>&1; then
+        mkdir -p "$(dirname "$MARKER")"
+        touch "$MARKER"
+    fi
+fi
+
+exit 0
