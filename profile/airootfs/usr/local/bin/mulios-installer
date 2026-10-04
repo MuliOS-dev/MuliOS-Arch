@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -e
+
+INSTALLER="/opt/mulios-installer/main.py"
+
+if [ ! -f "$INSTALLER" ]; then
+    printf '%s\n' "MuliOS Installer is not available in this system."
+    exit 1
+fi
+
+exec /usr/bin/python3 "$INSTALLER" "$@"
