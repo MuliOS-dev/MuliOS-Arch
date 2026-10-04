@@ -2114,7 +2114,79 @@ class InstallWorker(QThread):
             mode=0o440,
         )
 
+        self.configure_installed_plasma(username)
         self.progress.emit(60)
+
+    def configure_installed_plasma(self, username):
+        """Seed the installed user's Plasma session from the live MuliOS session."""
+        home = self.target / "home" / username
+        config = home / ".config"
+        config.mkdir(parents=True, exist_ok=True)
+
+        live_config = Path("/home/liveuser/.config")
+        files = [
+            "kdeglobals",
+            "kwinrc",
+            "plasmarc",
+            "plasma-org.kde.plasma.desktop-appletsrc",
+            "kcminputrc",
+            "kglobalshortcutsrc",
+            "kscreenlockerrc",
+        ]
+
+        copied = []
+        if live_config.is_dir():
+            for name in files:
+                source = live_config / name
+                destination = config / name
+                if source.is_file():
+                    shutil.copy2(source, destination)
+                    copied.append(name)
+
+        # Force the modern Plasma/Breeze lock-screen implementation while
+        # keeping the MuliOS ROUNDED-DARK color scheme.
+        kdeglobals = config / "kdeglobals"
+        kde_text = kdeglobals.read_text(encoding="utf-8", errors="replace") if kdeglobals.exists() else ""
+        if "[KDE]" not in kde_text:
+            kde_text += "\\n[KDE]\\n"
+        if re.search(r"(?m)^LookAndFeelPackage=", kde_text):
+            kde_text = re.sub(
+                r"(?m)^LookAndFeelPackage=.*$",
+                "LookAndFeelPackage=org.kde.breeze.desktop",
+                kde_text,
+            )
+        else:
+            kde_text += "LookAndFeelPackage=org.kde.breeze.desktop\\n"
+        kdeglobals.write_text(kde_text.rstrip() + "\\n", encoding="utf-8")
+
+        # The live ISO does not need the installed-session splash. Disable
+        # the KDE splash explicitly for the installed user.
+        ksplashrc = config / "ksplashrc"
+        ksplashrc.write_text(
+            "[KSplash]\\n"
+            "Engine=none\\n",
+            encoding="utf-8",
+        )
+
+        self.chroot([
+            "chown",
+            "-R",
+            f"{username}:{username}",
+            f"/home/{username}/.config",
+        ])
+
+        if copied:
+            self.log(
+                "Applied live MuliOS Plasma configuration to "
+                f"installed user: {', '.join(copied)}"
+            )
+        else:
+            self.log(
+                "Live Plasma user configuration was unavailable; "
+                "installed-user defaults were created."
+            )
+
+        self.log("Configured modern Plasma lock screen and disabled KDE splash screen.")
 
     def configure_root_account(self):
         password = str(
