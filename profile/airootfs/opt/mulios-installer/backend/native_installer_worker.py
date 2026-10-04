@@ -2213,7 +2213,7 @@ class InstallWorker(QThread):
             "[Desktop Entry]\n"
             "Type=Application\n"
             "Name=MuliOS Wallpaper\n"
-            "Exec=/usr/local/bin/mulios-apply-wallpaper\n"
+            "Exec=/usr/local/bin/mulios-wallpaper-autostart\n"
             "OnlyShowIn=KDE;\n"
             "X-GNOME-Autostart-enabled=true\n",
             encoding="utf-8",
