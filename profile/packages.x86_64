@@ -91,6 +91,7 @@ python
 python-psutil
 pyside6
 qt6-webengine
+qt6-tools
 jq
 unzip
 p7zip
