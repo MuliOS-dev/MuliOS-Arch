@@ -16,6 +16,7 @@ mkinitcpio-nfs-utils
 squashfs-tools
 syslinux
 grub
+efibootmgr
 
 # Filesystems / storage
 btrfs-progs
@@ -75,6 +76,7 @@ fastfetch
 zsh
 git
 nano
+nodejs
 
 # Fonts
 noto-fonts
