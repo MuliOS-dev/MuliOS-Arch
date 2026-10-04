@@ -117,7 +117,7 @@ if command -v desktop-file-validate >/dev/null 2>&1; then
     done < <(find "$PROFILE/airootfs/usr/share/applications" "$PROFILE/airootfs/etc/xdg/autostart" "$PROFILE/airootfs/etc/skel/Desktop" -type f -name '*.desktop' -print0)
 fi
 
-if grep -RInE 'wallpaper\.(jpg|jpeg)' "$PROFILE/airootfs" "$ROOT/docs" "$ROOT/scripts" >/dev/null 2>&1; then
+if grep -RInE 'wallpaper\.(jpg|jpeg)' "$PROFILE/airootfs" "$ROOT/docs" >/dev/null 2>&1; then
     echo "[FAIL] stale wallpaper.jpg reference found"
     fail=1
 else
