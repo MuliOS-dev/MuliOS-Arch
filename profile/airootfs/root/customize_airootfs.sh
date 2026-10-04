@@ -54,8 +54,16 @@ EOF
 # Guarantee the live installer launcher is executable in the final airootfs.
 # mkarchiso preserves the source-tree mode, so enforce it here as well as in
 # the build script.
-if [ -f /usr/local/bin/mulios-installer ]; then
-    chmod 0755 /usr/local/bin/mulios-installer
-fi
+for launcher in \
+    /usr/local/bin/mulios-installer \
+    /usr/local/bin/mulios-taskmanager \
+    /usr/local/bin/mulios-credits \
+    /usr/local/bin/mulios-apply-wallpaper \
+    /usr/local/bin/mulios-wallpaper-autostart
+do
+    if [ -f "$launcher" ]; then
+        chmod 0755 "$launcher"
+    fi
+done
 
 chmod 0440 /etc/sudoers.d/mulios-installer
