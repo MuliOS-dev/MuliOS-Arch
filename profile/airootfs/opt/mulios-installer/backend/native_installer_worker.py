@@ -2908,21 +2908,70 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             "efibootmgr",
         ])
 
+        # Install a normal named EFI loader and create a real UEFI NVRAM
+        # boot entry. The previous implementation used --no-nvram together
+        # with --removable, which intentionally prevented a "MuliOS" entry
+        # from being created. Firmware could still boot the fallback path, but
+        # the installed system did not appear in the firmware boot selector.
         self.chroot([
             "grub-install",
             "--target=x86_64-efi",
             "--efi-directory=/boot",
             "--bootloader-id=MuliOS",
-            "--removable",
-            "--no-nvram",
             "--recheck",
         ])
 
+        loader = self.target / "boot/EFI/MuliOS/grubx64.efi"
+        if not loader.is_file():
+            raise InstallError(
+                "GRUB EFI loader was not installed at "
+                "/boot/EFI/MuliOS/grubx64.efi."
+            )
+
+        # Also install the standard removable-media fallback. This keeps the
+        # system bootable on firmware that ignores or loses NVRAM entries.
         fallback = self.target / "boot/EFI/BOOT/BOOTX64.EFI"
-        if not fallback.is_file():
+        fallback.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(loader, fallback)
+
+        if not fallback.is_file() or fallback.stat().st_size == 0:
             raise InstallError(
                 "GRUB fallback EFI loader was not installed at "
                 "/boot/EFI/BOOT/BOOTX64.EFI."
+            )
+
+        # grub-install normally creates the NVRAM entry itself. Verify it and
+        # explicitly create it if firmware variables are available but the
+        # entry was not created. This makes the boot selector behavior
+        # deterministic instead of relying on firmware-specific behavior.
+        efibootmgr_output = self.chroot(
+            ["efibootmgr"],
+            check=False,
+        )
+
+        if "MuliOS" not in efibootmgr_output:
+            self.chroot([
+                "efibootmgr",
+                "--create",
+                "--disk",
+                self.selected_disk,
+                "--part",
+                "1",
+                "--label",
+                "MuliOS",
+                "--loader",
+                r"\\EFI\\MuliOS\\grubx64.efi",
+            ])
+
+        efibootmgr_output = self.chroot(
+            ["efibootmgr"],
+            check=False,
+        )
+
+        if "MuliOS" not in efibootmgr_output:
+            raise InstallError(
+                "The MuliOS UEFI boot entry was not created. "
+                "Firmware NVRAM variables are unavailable."
             )
 
         cmdline = self.kernel_cmdline()
