@@ -1,0 +1,11 @@
+[SddmGreeterTheme]
+Name=MuliOS
+Description=Minimal MuliOS SDDM theme
+Author=MuliOS
+License=GPL-3.0
+Type=sddm-theme
+Version=1.0
+MainScript=Main.qml
+Theme-Id=mulios
+Theme-API=2.0
+QtVersion=6
