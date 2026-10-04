@@ -2227,7 +2227,16 @@ class InstallWorker(QThread):
             encoding="utf-8",
         )
 
-        # The installed system must not contain the live installer.
+        # The installed system must not contain the live installer or
+        # a stale desktop shortcut that points at the removed installer.
+        installed_desktop_shortcut = home / "Desktop" / "mulios-installer.desktop"
+        if installed_desktop_shortcut.exists() or installed_desktop_shortcut.is_symlink():
+            try:
+                installed_desktop_shortcut.unlink()
+                self.log("Removed live installer shortcut from installed user's Desktop.")
+            except FileNotFoundError:
+                pass
+
         for installer_path in (
             self.target / "opt/mulios-installer",
             self.target / "usr/share/applications/mulios-installer.desktop",
