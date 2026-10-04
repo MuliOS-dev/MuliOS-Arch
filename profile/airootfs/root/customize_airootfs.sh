@@ -18,13 +18,6 @@ export XDG_MENU_PREFIX=plasma-
 EOF
 chmod 0644 /etc/profile.d/mulios-kde-menu.sh
 
-# Build the live user's KService database with the Plasma 6 menu prefix.
-if id liveuser >/dev/null 2>&1 && command -v kbuildsycoca6 >/dev/null 2>&1; then
-    install -d -o liveuser -g liveuser /home/liveuser/.cache
-    rm -f /home/liveuser/.cache/ksycoca6_* 2>/dev/null || true
-    runuser -u liveuser -- env         XDG_MENU_PREFIX=plasma-         kbuildsycoca6 --noincremental --global || true
-fi
-
 # Pre-create the live session account while building the ISO.
 if ! id liveuser >/dev/null 2>&1; then
     useradd -m -G wheel,audio,video,network -s /bin/bash liveuser
@@ -45,6 +38,14 @@ if [ -d /etc/skel/Desktop ]; then
 fi
 
 chown -R liveuser:liveuser /home/liveuser/.config /home/liveuser/Desktop 2>/dev/null || true
+
+# Build the live user's KService database after /etc/skel and the live
+# account exist. Plasma 6 expects the plasma- menu prefix.
+if id liveuser >/dev/null 2>&1 && command -v kbuildsycoca6 >/dev/null 2>&1; then
+    install -d -o liveuser -g liveuser /home/liveuser/.cache
+    rm -f /home/liveuser/.cache/ksycoca6_* 2>/dev/null || true
+    runuser -u liveuser -- env         XDG_MENU_PREFIX=plasma-         kbuildsycoca6 --noincremental --global || true
+fi
 
 install -d -m 0750 /etc/sudoers.d
 cat > /etc/sudoers.d/mulios-installer <<'EOF'
