@@ -45,5 +45,10 @@ file_permissions=(
 
   ["/usr/local/bin/mupdate"]="0:0:755"
   ["/usr/local/bin/livecd-sound"]="0:0:755"
+  ["/usr/local/bin/mulios-installer"]="0:0:755"
+  ["/usr/local/bin/mulios-taskmanager"]="0:0:755"
+  ["/usr/local/bin/mulios-credits"]="0:0:755"
+  ["/usr/local/bin/mulios-apply-wallpaper"]="0:0:755"
+  ["/usr/local/bin/mulios-wallpaper-autostart"]="0:0:755"
   ["/usr/share/backgrounds/mulios"]="0:0:755"
 )
