@@ -2,7 +2,7 @@
 Type=Application
 Name=MuliOS Installer
 Comment=Install MuliOS
-Exec=python3 /opt/mulios-installer/main.py
+Exec=/usr/local/bin/mulios-installer
 Icon=system-software-install
 Terminal=false
 Categories=System;
