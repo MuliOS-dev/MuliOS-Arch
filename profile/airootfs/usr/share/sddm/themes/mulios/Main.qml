@@ -10,7 +10,7 @@ Rectangle {
 
     Image {
         anchors.fill: parent
-        source: "file:///usr/share/backgrounds/mulios/wallpaper.jpg"
+        source: "file:///usr/share/backgrounds/mulios/wallpaper.png"
         fillMode: Image.PreserveAspectCrop
         asynchronous: true
         opacity: 0.38
