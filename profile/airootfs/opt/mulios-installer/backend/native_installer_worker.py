@@ -2197,33 +2197,25 @@ class InstallWorker(QThread):
 
         self.log("Configured modern Plasma lock screen and disabled KDE splash screen.")
 
-        # Plasma wallpaper state is session-owned. Apply the image once after
-        # the installed user's first Plasma session starts.
+        # Plasma wallpaper state is session-owned. The live ISO already
+        # ships the authoritative helper under /usr/local/bin; keep that
+        # helper intact so Plasma 6 is configured through its D-Bus scripting
+        # API on first login.
         wallpaper_script = self.target / "usr/local/bin/mulios-apply-wallpaper"
-        wallpaper_script.parent.mkdir(parents=True, exist_ok=True)
-        wallpaper_script.write_text(
-            "#!/usr/bin/env bash\\n"
-            "set -u\\n"
-            "MARKER=\\\"$HOME/.config/.mulios-wallpaper-applied\\\"\\n"
-            "if [ -e \\"$MARKER\\" ]; then exit 0; fi\\n"
-            "WALLPAPER=/usr/share/backgrounds/mulios/wallpaper.jpg\\n"
-            "if [ -f \\"$WALLPAPER\\" ] && command -v plasma-apply-wallpaperimage >/dev/null 2>&1; then\\n"
-            "    if plasma-apply-wallpaperimage \\"$WALLPAPER\\" >/dev/null 2>&1; then touch \\"$MARKER\\"; fi\\n"
-            "fi\\n"
-            "exit 0\\n",
-            encoding="utf-8",
-        )
-        os.chmod(wallpaper_script, 0o755)
+        if wallpaper_script.is_file():
+            os.chmod(wallpaper_script, 0o755)
+        else:
+            self.log("WARNING: MuliOS wallpaper helper is missing from the target filesystem.")
 
         wallpaper_autostart = self.target / "etc/xdg/autostart/mulios-wallpaper.desktop"
         wallpaper_autostart.parent.mkdir(parents=True, exist_ok=True)
         wallpaper_autostart.write_text(
-            "[Desktop Entry]\\n"
-            "Type=Application\\n"
-            "Name=MuliOS Wallpaper\\n"
-            "Exec=/usr/local/bin/mulios-apply-wallpaper\\n"
-            "OnlyShowIn=KDE;\\n"
-            "X-GNOME-Autostart-enabled=true\\n",
+            "[Desktop Entry]\n"
+            "Type=Application\n"
+            "Name=MuliOS Wallpaper\n"
+            "Exec=/usr/local/bin/mulios-apply-wallpaper\n"
+            "OnlyShowIn=KDE;\n"
+            "X-GNOME-Autostart-enabled=true\n",
             encoding="utf-8",
         )
 
