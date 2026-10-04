@@ -34,6 +34,12 @@ build() {
 
     "$WORK_DIR/scripts/install-rounded-theme.sh"
 
+    # Desktop launchers must be executable for Plasma to treat them as trusted
+    # launchable desktop entries in the live session.
+    chmod 0755 "$PROFILE/usr/local/bin/mulios-installer"
+    chmod 0755 "$PROFILE/etc/skel/Desktop/mulios-installer.desktop"
+    chmod 0755 "$PROFILE/usr/share/applications/mulios-installer.desktop"
+
     cat > "$PROFILE/airootfs/etc/os-release" <<EOF
 NAME="MuliOS"
 PRETTY_NAME="MuliOS Arch $mulios_version"
