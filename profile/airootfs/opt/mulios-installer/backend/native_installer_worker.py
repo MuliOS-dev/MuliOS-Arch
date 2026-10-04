@@ -3076,6 +3076,45 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             ]
         )
 
+        # Rebuild the KDE application service cache only after every
+        # package and MuliOS desktop entry has been installed. The installer
+        # used to leave the installed user with a cache generated before
+        # Kitty, Task Manager, Credits and other .desktop files existed.
+        application_entries = self.target / "usr/share/applications"
+        if application_entries.is_dir():
+            for desktop_file in application_entries.glob("*.desktop"):
+                try:
+                    os.chmod(desktop_file, 0o644)
+                except OSError:
+                    pass
+
+        # Remove stale per-user KService/KMenuEdit caches inherited from the
+        # live session. They must be regenerated for the installed system.
+        user_cache = self.target / "home" / str(self.state.get("username", "")) / ".cache"
+        if user_cache.is_dir():
+            for cache_file in user_cache.glob("ksycoca*"):
+                try:
+                    cache_file.unlink()
+                except OSError:
+                    pass
+
+        username = str(self.state.get("username", "")).strip()
+        if username:
+            self.chroot(
+                [
+                    "runuser",
+                    "-u",
+                    username,
+                    "--",
+                    "kbuildsycoca6",
+                    "--noincremental",
+                ],
+                check=False,
+            )
+            self.log(
+                "Rebuilt KDE application cache after installing all MuliOS applications."
+            )
+
         self.write_file(
             self.target /
             "etc/mulios-installer-release",
