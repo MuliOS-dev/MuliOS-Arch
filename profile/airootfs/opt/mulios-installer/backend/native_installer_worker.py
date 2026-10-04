@@ -2204,11 +2204,12 @@ class InstallWorker(QThread):
         wallpaper_script.write_text(
             "#!/usr/bin/env bash\\n"
             "set -u\\n"
+            "MARKER=\\\"$HOME/.config/.mulios-wallpaper-applied\\\"\\n"
+            "if [ -e \\"$MARKER\\" ]; then exit 0; fi\\n"
             "WALLPAPER=/usr/share/backgrounds/mulios/wallpaper.jpg\\n"
             "if [ -f \\"$WALLPAPER\\" ] && command -v plasma-apply-wallpaperimage >/dev/null 2>&1; then\\n"
-            "    plasma-apply-wallpaperimage \\"$WALLPAPER\\" >/dev/null 2>&1 || true\\n"
+            "    if plasma-apply-wallpaperimage \\"$WALLPAPER\\" >/dev/null 2>&1; then touch \\"$MARKER\\"; fi\\n"
             "fi\\n"
-            "rm -f \\"$HOME/.config/autostart/mulios-wallpaper.desktop\\"\\n"
             "exit 0\\n",
             encoding="utf-8",
         )
@@ -2463,6 +2464,21 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             "sddm",
             "dolphin",
         ])
+
+        # configure_desktop() starts from the installed package set, so write
+        # the final SDDM configuration after the package installation step.
+        sddm_conf = self.target / "etc/sddm.conf"
+        sddm_conf.parent.mkdir(parents=True, exist_ok=True)
+        sddm_conf.write_text(
+            "[Theme]\n"
+            "Current=mulios\n",
+            encoding="utf-8",
+        )
+
+        # The live session must never be the installed login user.
+        autologin = self.target / "etc/sddm.conf.d/autologin.conf"
+        if autologin.exists() or autologin.is_symlink():
+            autologin.unlink()
 
         self.chroot(["systemctl", "enable", "sddm"])
         self.progress.emit(70)
