@@ -1,6 +1,30 @@
 #!/usr/bin/env bash
 set -e
 
+# KDE Plasma 6 application menu compatibility
+# Plasma 6 ships its canonical menu as plasma-applications.menu.
+# KService may still resolve applications.menu depending on the session
+# environment. Keep both paths valid so Kickoff never starts with an empty
+# application database in the live ISO.
+install -d -m 0755 /etc/xdg/menus
+if [ -f /etc/xdg/menus/plasma-applications.menu ]; then
+    ln -sfn plasma-applications.menu /etc/xdg/menus/applications.menu
+fi
+
+install -d -m 0755 /etc/profile.d
+cat > /etc/profile.d/mulios-kde-menu.sh <<'EOF'
+# KDE Plasma 6 uses the plasma- XDG menu prefix.
+export XDG_MENU_PREFIX=plasma-
+EOF
+chmod 0644 /etc/profile.d/mulios-kde-menu.sh
+
+# Build the live user's KService database with the Plasma 6 menu prefix.
+if id liveuser >/dev/null 2>&1 && command -v kbuildsycoca6 >/dev/null 2>&1; then
+    install -d -o liveuser -g liveuser /home/liveuser/.cache
+    rm -f /home/liveuser/.cache/ksycoca6_* 2>/dev/null || true
+    runuser -u liveuser -- env         XDG_MENU_PREFIX=plasma-         kbuildsycoca6 --noincremental --global || true
+fi
+
 # Pre-create the live session account while building the ISO.
 if ! id liveuser >/dev/null 2>&1; then
     useradd -m -G wheel,audio,video,network -s /bin/bash liveuser
