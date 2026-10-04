@@ -2239,6 +2239,7 @@ class InstallWorker(QThread):
 
         for installer_path in (
             self.target / "opt/mulios-installer",
+            self.target / "usr/local/bin/mulios-installer",
             self.target / "usr/share/applications/mulios-installer.desktop",
             self.target / "etc/xdg/autostart/mulios-installer.desktop",
         ):
