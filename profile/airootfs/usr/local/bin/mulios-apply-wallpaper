@@ -2,14 +2,26 @@
 set -u
 
 WALLPAPER="/usr/share/backgrounds/mulios/wallpaper.png"
-WALLPAPER_URL="file:///usr/share/backgrounds/mulios/wallpaper.png"
 MARKER="$HOME/.config/.mulios-wallpaper-applied"
 
 [ -f "$WALLPAPER" ] || exit 0
 
-# Plasma 6 stores the desktop wallpaper in the desktop containment
-# configuration. Configure every current desktop through Plasma's own
-# scripting API instead of relying on a transient helper command.
+mkdir -p "$(dirname "$MARKER")"
+
+# plasma-apply-wallpaperimage is provided by plasma-workspace and is the
+# supported command-line path for changing the current Plasma wallpaper.
+# Plasma can take a few seconds to finish starting, so retry for up to 20s.
+if command -v plasma-apply-wallpaperimage >/dev/null 2>&1; then
+    for _ in $(seq 1 20); do
+        if plasma-apply-wallpaperimage "$WALLPAPER" >/dev/null 2>&1; then
+            touch "$MARKER"
+            exit 0
+        fi
+        sleep 1
+    done
+fi
+
+# Fallback for sessions where the helper command is unavailable.
 QDBUS=""
 if command -v qdbus6 >/dev/null 2>&1; then
     QDBUS="$(command -v qdbus6)"
@@ -27,11 +39,8 @@ for (var i = 0; i < desktopsList.length; ++i) {
     desktop.writeConfig("Image", "file:///usr/share/backgrounds/mulios/wallpaper.png");
 }
 '
-    # Plasma may register its scripting endpoint a few seconds after the
-    # KDE session starts. Retry instead of silently failing at login.
-    for _ in 1 2 3 4 5 6 7 8 9 10; do
+    for _ in $(seq 1 10); do
         if "$QDBUS" org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "$SCRIPT" >/dev/null 2>&1; then
-            mkdir -p "$(dirname "$MARKER")"
             touch "$MARKER"
             exit 0
         fi
@@ -39,13 +48,4 @@ for (var i = 0; i < desktopsList.length; ++i) {
     done
 fi
 
-# Fallback for systems where the Plasma scripting D-Bus endpoint is not
-# available yet.
-if command -v plasma-apply-wallpaperimage >/dev/null 2>&1; then
-    if plasma-apply-wallpaperimage "$WALLPAPER" >/dev/null 2>&1; then
-        mkdir -p "$(dirname "$MARKER")"
-        touch "$MARKER"
-    fi
-fi
-
-exit 0
+exit 1
