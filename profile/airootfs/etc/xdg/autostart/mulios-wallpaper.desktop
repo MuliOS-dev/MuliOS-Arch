@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=MuliOS Wallpaper
+Comment=Apply the MuliOS desktop wallpaper after Plasma starts
+Exec=/usr/local/bin/mulios-apply-wallpaper
+OnlyShowIn=KDE;
+X-GNOME-Autostart-enabled=true
+NoDisplay=true
