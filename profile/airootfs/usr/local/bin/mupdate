@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 # MUpdate
-# Version: a1.0.7
+# Version: a1.0.6
 #
 # Source: https://github.com/MuliOS-dev/MuliOS-Arch
 # Source tree: profile/airootfs
@@ -11,7 +11,7 @@ set -Eeuo pipefail
 # Files are never deleted as of now.
 # Machine-specific state is protected.
 
-VERSION="a1.0.7"
+VERSION="a1.0.6"
 GITHUB_OWNER="MuliOS-dev"
 GITHUB_REPO="MuliOS-Arch"
 GITHUB_BRANCH="main"
@@ -305,47 +305,6 @@ sync_repository() {
 }
 
 
-fix_fastfetch() {
-    local config="/etc/fastfetch/config.jsonc"
-    [[ -f "$config" ]] || {
-        warn "MuliOS Fastfetch configuration is missing; skipping Fastfetch migration."
-        return 0
-    }
-
-    info "Applying canonical MuliOS Fastfetch configuration..."
-
-    # MUpdate protects /home from repository replacement because it contains
-    # machine/user state. Fastfetch defaults are an intentional exception:
-    # remove obsolete per-user configs so old output cannot override MuliOS.
-    if [[ -d /home ]]; then
-        while IFS= read -r -d '' home_dir; do
-            local user_name
-            user_name="$(basename "$home_dir")"
-            [[ "$user_name" == "lost+found" ]] && continue
-
-            install -d -m 0755 "$home_dir/.config/fastfetch"
-            install -m 0644 "$config" "$home_dir/.config/fastfetch/config.jsonc"
-            rm -f \
-                "$home_dir/.config/fastfetch/config.conf" \
-                "$home_dir/.config/fastfetch/config.json"
-
-            if id "$user_name" >/dev/null 2>&1; then
-                chown -R "$user_name:$user_name" "$home_dir/.config/fastfetch" 2>/dev/null || true
-            fi
-        done < <(find /home -mindepth 1 -maxdepth 1 -type d -print0)
-    fi
-
-    # Root is not covered by the /home migration above.
-    install -d -m 0755 /root/.config/fastfetch
-    install -m 0644 "$config" /root/.config/fastfetch/config.jsonc
-    rm -f /root/.config/fastfetch/config.conf /root/.config/fastfetch/config.json
-
-    if [[ -f /usr/local/bin/fastfetch ]]; then
-        chmod 0755 /usr/local/bin/fastfetch
-    fi
-
-    ok "Canonical MuliOS Fastfetch configuration applied."
-}
 
 sync_rounded_theme() {
     local installer_script="$WORKDIR/install-rounded-theme.sh"
@@ -407,7 +366,6 @@ cmd_update() {
     fi
 
     sync_repository
-    fix_fastfetch
     sync_rounded_theme
 
     if [[ "$DRY_RUN" == "0" && "$SAFE_MODE" == "0" ]]; then
