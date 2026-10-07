@@ -391,10 +391,22 @@ sync_rounded_theme() {
     fi
 
     local root="$WORKDIR/rounded-$commit"
-    [[ -d "$root/plasma/desktoptheme/ROUNDED-DARK" ]] || { warn "ROUNDED desktop theme is missing from archive."
-    [[ -d "$root/plasma/look-and-feel/com.github.varlesh.rounded-dark" ]] || { warn "ROUNDED Look-and-Feel package is missing from archive."
-    [[ -d "$root/aurorae/themes/ROUNDED-DARK" ]] || { warn "ROUNDED Aurorae decoration is missing from archive."
-    [[ -f "$root/plasma/desktoptheme/ROUNDED-DARK/colors" ]] || { warn "ROUNDED color scheme is missing from archive."
+    if [[ ! -d "$root/plasma/desktoptheme/ROUNDED-DARK" ]]; then
+        warn "ROUNDED desktop theme is missing from archive; skipping."
+        return 0
+    fi
+    if [[ ! -d "$root/plasma/look-and-feel/com.github.varlesh.rounded-dark" ]]; then
+        warn "ROUNDED Look-and-Feel package is missing from archive; skipping."
+        return 0
+    fi
+    if [[ ! -d "$root/aurorae/themes/ROUNDED-DARK" ]]; then
+        warn "ROUNDED Aurorae decoration is missing from archive; skipping."
+        return 0
+    fi
+    if [[ ! -f "$root/plasma/desktoptheme/ROUNDED-DARK/colors" ]]; then
+        warn "ROUNDED color scheme is missing from archive; skipping."
+        return 0
+    fi
 
     install -d /usr/share/plasma/desktoptheme /usr/share/plasma/look-and-feel /usr/share/aurorae/themes /usr/share/color-schemes
     cp -a "$root/plasma/desktoptheme/ROUNDED-DARK" /usr/share/plasma/desktoptheme/
