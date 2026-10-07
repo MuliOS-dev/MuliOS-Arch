@@ -24,6 +24,7 @@ WORKDIR="$(mktemp -d /tmp/mupdate.XXXXXX)"
 ASSUME_YES=1
 SAFE_MODE=0
 DRY_RUN=0
+FORCE_MODE=0
 
 CHANGED_COUNT=0
 ADDED_COUNT=0
@@ -210,8 +211,15 @@ merge_file() {
         downloaded_sha="$(git hash-object "$temp_file")"
     fi
 
-    [[ "$downloaded_sha" == "$remote_sha" ]] ||
-        die "Repository blob verification failed: $repo_path"
+    if [[ "$downloaded_sha" != "$remote_sha" ]]; then
+        if [[ "$FORCE_MODE" == "1" ]]; then
+            warn "Blob verification failed for $repo_path; --force will install the downloaded repository file anyway."
+        else
+            warn "Unable to verify $repo_path; skipping file and continuing."
+            ((SKIPPED_COUNT+=1))
+            return 0
+        fi
+    fi
 
     if [[ "$DRY_RUN" == "1" ]]; then
         printf 'UPDATE %s\n' "$local_path"
@@ -300,7 +308,10 @@ sync_repository() {
             continue
         fi
 
-        merge_file "$path" "$mode" "$remote_sha"
+        if ! merge_file "$path" "$mode" "$remote_sha"; then
+            warn "Skipping /$(printf '%s' "$path" | sed 's#^profile/airootfs/##') and continuing."
+            ((SKIPPED_COUNT+=1))
+        fi
     done < "$manifest"
 
     if [[ -n "$deferred_mupdate_path" ]]; then
@@ -342,11 +353,16 @@ sync_repository() {
 sync_rounded_theme() {
     local installer_script="$WORKDIR/install-rounded-theme.sh"
     local commit
-    curl -fsSL --retry 3 --retry-all-errors -o "$installer_script" "$(raw_url scripts/install-rounded-theme.sh)" ||
-        die "Unable to read the pinned ROUNDED theme version from the repository."
+    if ! curl -fsSL --retry 3 --retry-all-errors -o "$installer_script" "$(raw_url scripts/install-rounded-theme.sh)"; then
+        warn "Unable to read the pinned ROUNDED theme version; skipping ROUNDED theme update."
+        return 0
+    fi
 
     commit="$(sed -n 's/^THEME_COMMIT="\([^"]*\)"/\1/p' "$installer_script" | head -n 1)"
-    [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "Invalid ROUNDED theme commit in scripts/install-rounded-theme.sh."
+    if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
+        warn "Invalid ROUNDED theme commit; skipping ROUNDED theme update."
+        return 0
+    fi
 
     local state_file="$STATE_DIR/rounded-theme-commit"
     if [[ -f "$state_file" && "$(cat "$state_file")" == "$commit" &&
@@ -365,15 +381,20 @@ sync_rounded_theme() {
 
     info "Downloading pinned ROUNDED KDE theme $commit..."
     local archive="$WORKDIR/rounded.tar.gz"
-    curl -fsSL --retry 3 --retry-all-errors -o "$archive" "https://github.com/varlesh/rounded/archive/$commit.tar.gz" ||
-        die "Unable to download the ROUNDED theme archive."
-    tar -xzf "$archive" -C "$WORKDIR" || die "Unable to extract the ROUNDED theme archive."
+    if ! curl -fsSL --retry 3 --retry-all-errors -o "$archive" "https://github.com/varlesh/rounded/archive/$commit.tar.gz"; then
+        warn "Unable to download the ROUNDED theme archive; skipping."
+        return 0
+    fi
+    if ! tar -xzf "$archive" -C "$WORKDIR"; then
+        warn "Unable to extract the ROUNDED theme archive; skipping."
+        return 0
+    fi
 
     local root="$WORKDIR/rounded-$commit"
-    [[ -d "$root/plasma/desktoptheme/ROUNDED-DARK" ]] || die "ROUNDED desktop theme is missing from archive."
-    [[ -d "$root/plasma/look-and-feel/com.github.varlesh.rounded-dark" ]] || die "ROUNDED Look-and-Feel package is missing from archive."
-    [[ -d "$root/aurorae/themes/ROUNDED-DARK" ]] || die "ROUNDED Aurorae decoration is missing from archive."
-    [[ -f "$root/plasma/desktoptheme/ROUNDED-DARK/colors" ]] || die "ROUNDED color scheme is missing from archive."
+    [[ -d "$root/plasma/desktoptheme/ROUNDED-DARK" ]] || { warn "ROUNDED desktop theme is missing from archive."
+    [[ -d "$root/plasma/look-and-feel/com.github.varlesh.rounded-dark" ]] || { warn "ROUNDED Look-and-Feel package is missing from archive."
+    [[ -d "$root/aurorae/themes/ROUNDED-DARK" ]] || { warn "ROUNDED Aurorae decoration is missing from archive."
+    [[ -f "$root/plasma/desktoptheme/ROUNDED-DARK/colors" ]] || { warn "ROUNDED color scheme is missing from archive."
 
     install -d /usr/share/plasma/desktoptheme /usr/share/plasma/look-and-feel /usr/share/aurorae/themes /usr/share/color-schemes
     cp -a "$root/plasma/desktoptheme/ROUNDED-DARK" /usr/share/plasma/desktoptheme/
@@ -433,6 +454,7 @@ UPDATE
 CHECK
   sudo mupdate update --dry-run
   sudo mupdate update --safe
+  sudo mupdate update --force
   mupdate status
 
 SOURCE
@@ -452,6 +474,9 @@ BEHAVIOR
   New or changed files are downloaded and merged.
 
   Files are never deleted.
+
+  Normal updates skip files that cannot be verified or merged and continue.
+  Use --force to overwrite a file when repository blob verification fails.
   New files default to non-executable permissions unless installed under a
   known executable directory. Existing file permissions are preserved.
 
@@ -498,6 +523,9 @@ main() {
                 ;;
             --dry-run)
                 DRY_RUN=1
+                ;;
+            --force|-f)
+                FORCE_MODE=1
                 ;;
             --version|-v)
                 echo "mupdate version $VERSION"
