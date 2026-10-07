@@ -2909,6 +2909,48 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             "os-prober",
         ])
 
+        # Make UEFI NVRAM available inside the target before grub-install and
+        # efibootmgr run. arch-chroot does not guarantee that efivarfs is
+        # mounted at /sys/firmware/efi/efivars in every live environment.
+        # Without it, GRUB may be installed to the EFI partition but MuliOS
+        # will not appear in the firmware boot selector.
+        efivars = self.target / "sys/firmware/efi/efivars"
+        efivars.mkdir(parents=True, exist_ok=True)
+
+        if not self.run_command(
+            ["mountpoint", "-q", str(efivars)],
+            check=False,
+        ):
+            live_efivars = Path(
+                "/sys/firmware/efi/efivars"
+            )
+
+            if not live_efivars.is_dir():
+                raise InstallError(
+                    "UEFI efivarfs is unavailable in the live environment. "
+                    "Cannot create the MuliOS firmware boot entry."
+                )
+
+            self.run_command([
+                "mount",
+                "--bind",
+                str(live_efivars),
+                str(efivars),
+            ])
+
+        if not self.run_command(
+            ["mountpoint", "-q", str(efivars)],
+            check=False,
+        ):
+            raise InstallError(
+                "Could not mount UEFI efivarfs in the installed system. "
+                "Cannot create the MuliOS firmware boot entry."
+            )
+
+        self.log(
+            "UEFI efivarfs mounted for MuliOS NVRAM boot entry."
+        )
+
         # Install a normal named EFI loader and create a real UEFI NVRAM
         # boot entry. The previous implementation used --no-nvram together
         # with --removable, which intentionally prevented a "MuliOS" entry
