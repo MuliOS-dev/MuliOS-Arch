@@ -2908,61 +2908,140 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             "efibootmgr",
         ])
 
-        # Make UEFI NVRAM available inside the target before grub-install and
-        # efibootmgr run. arch-chroot does not guarantee that efivarfs is
-        # mounted at /sys/firmware/efi/efivars in every live environment.
-        # Without it, GRUB may be installed to the EFI partition but MuliOS
-        # will not appear in the firmware boot selector.
-        efivars = self.target / "sys/firmware/efi/efivars"
-        efivars.mkdir(parents=True, exist_ok=True)
+        # UEFI NVRAM is a property of the running firmware session, not the
+        # installed root filesystem. Expose the live system's /sys tree to the
+        # target with a recursive bind mount so efivarfs and all of its
+        # submounts are visible inside arch-chroot.
+        #
+        # A plain bind of /sys/firmware/efi/efivars is fragile: efivarfs is a
+        # special virtual filesystem and some live environments/chroot
+        # combinations do not report that bind mount as expected. A recursive
+        # bind of /sys is the robust Arch-supported approach.
+        live_sys = Path("/sys")
+        target_sys = self.target / "sys"
 
-        efivars_fstype = self.run_command(
-            ["findmnt", "-n", "-o", "FSTYPE", str(efivars)],
+        if not live_sys.is_dir():
+            raise InstallError(
+                "The live environment has no /sys filesystem. "
+                "Cannot configure UEFI boot support."
+            )
+
+        live_efivars = live_sys / "firmware/efi/efivars"
+
+        if not live_efivars.is_dir():
+            raise InstallError(
+                "UEFI efivarfs is unavailable in the live environment. "
+                "Boot the MuliOS installer in UEFI mode."
+            )
+
+        live_efivars_fstype = self.run_command(
+            [
+                "findmnt",
+                "-n",
+                "-o",
+                "FSTYPE",
+                str(live_efivars),
+            ],
             check=False,
         ).strip()
 
-        if efivars_fstype != "efivarfs":
-            live_efivars = Path(
-                "/sys/firmware/efi/efivars"
+        if live_efivars_fstype != "efivarfs":
+            self.log(
+                "efivarfs is not mounted in the live environment; "
+                "attempting to mount it."
+            )
+            self.run_command(
+                [
+                    "mount",
+                    "-t",
+                    "efivarfs",
+                    "efivarfs",
+                    str(live_efivars),
+                ]
             )
 
-            if not live_efivars.is_dir():
-                raise InstallError(
-                    "UEFI efivarfs is unavailable in the live environment. "
-                    "Cannot create the MuliOS firmware boot entry."
-                )
+            live_efivars_fstype = self.run_command(
+                [
+                    "findmnt",
+                    "-n",
+                    "-o",
+                    "FSTYPE",
+                    str(live_efivars),
+                ],
+                check=False,
+            ).strip()
 
-            self.run_command([
-                "mount",
-                "--bind",
-                str(live_efivars),
-                str(efivars),
-            ])
-
-        if not self.run_command(
-            ["mountpoint", "-q", str(efivars)],
-            check=False,
-        ):
+        if live_efivars_fstype != "efivarfs":
             raise InstallError(
-                "Could not mount UEFI efivarfs in the installed system. "
-                "Cannot create the MuliOS firmware boot entry."
+                "UEFI efivarfs could not be mounted in the live "
+                "environment. Cannot access UEFI NVRAM."
+            )
+
+        target_sys.mkdir(parents=True, exist_ok=True)
+
+        target_sys_fstype = self.run_command(
+            [
+                "findmnt",
+                "-n",
+                "-o",
+                "FSTYPE",
+                str(target_sys),
+            ],
+            check=False,
+        ).strip()
+
+        if target_sys_fstype != "sysfs":
+            self.run_command(
+                [
+                    "mount",
+                    "--rbind",
+                    str(live_sys),
+                    str(target_sys),
+                ]
+            )
+
+            self.run_command(
+                [
+                    "mount",
+                    "--make-rslave",
+                    str(target_sys),
+                ],
+                check=False,
+            )
+
+        target_efivars = target_sys / "firmware/efi/efivars"
+        target_efivars_fstype = self.run_command(
+            [
+                "findmnt",
+                "-n",
+                "-o",
+                "FSTYPE",
+                str(target_efivars),
+            ],
+            check=False,
+        ).strip()
+
+        if target_efivars_fstype != "efivarfs":
+            raise InstallError(
+                "UEFI efivarfs is not visible inside the installed "
+                "system. Cannot safely configure firmware boot support."
             )
 
         self.log(
-            "UEFI efivarfs mounted for MuliOS NVRAM boot entry."
+            "UEFI efivarfs is available inside the installer target."
         )
 
-        # Install a normal named EFI loader and create a real UEFI NVRAM
-        # boot entry. The previous implementation used --no-nvram together
-        # with --removable, which intentionally prevented a "MuliOS" entry
-        # from being created. Firmware could still boot the fallback path, but
-        # the installed system did not appear in the firmware boot selector.
+        # Install the EFI files without asking grub-install to modify NVRAM.
+        # This makes the installation resilient: even firmware with broken,
+        # locked, full, or unavailable NVRAM still receives a bootable GRUB
+        # installation and the standard fallback path below.
         self.chroot([
             "grub-install",
             "--target=x86_64-efi",
             "--efi-directory=/boot",
             "--bootloader-id=MuliOS",
             "--recheck",
+            "--no-nvram",
         ])
 
         loader = self.target / "boot/EFI/MuliOS/grubx64.efi"
@@ -2984,60 +3063,61 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
                 "/boot/EFI/BOOT/BOOTX64.EFI."
             )
 
-        # grub-install normally creates the NVRAM entry itself. Verify it and
-        # explicitly create it if firmware variables are available but the
-        # entry was not created. This makes the boot selector behavior
-        # deterministic instead of relying on firmware-specific behavior.
+        # Create the firmware boot entry explicitly. NVRAM failures must not
+        # abort an otherwise bootable installation: the fallback loader is
+        # installed immediately below and is sufficient for firmware that does
+        # not preserve or expose boot variables.
         efibootmgr_output = self.chroot(
-            ["efibootmgr"],
+            ["efibootmgr", "-v"],
             check=False,
         )
 
         if "MuliOS" not in efibootmgr_output:
-            try:
-                self.chroot([
-                    "efibootmgr",
-                    "--create",
-                    "--disk",
-                    self.selected_disk,
-                    "--part",
-                    "1",
-                    "--label",
-                    "MuliOS",
-                    "--loader",
-                    r"\EFI\MuliOS\grubx64.efi",
-                    "--unicode",
-                ])
-            except InstallError:
-                self.log(
-                    "Standard UEFI NVRAM creation failed; "
-                    "retrying with EDD 3 compatibility mode."
+            created = False
+
+            for extra_args in (
+                [],
+                ["-e", "3"],
+            ):
+                try:
+                    self.chroot([
+                        "efibootmgr",
+                        "--create",
+                        "--disk",
+                        self.selected_disk,
+                        "--part",
+                        "1",
+                        "--label",
+                        "MuliOS",
+                        "--loader",
+                        r"\EFI\MuliOS\grubx64.efi",
+                        "--unicode",
+                        *extra_args,
+                    ])
+                    created = True
+                    break
+                except InstallError as exc:
+                    self.log(
+                        "UEFI NVRAM entry creation attempt failed: "
+                        f"{exc}"
+                    )
+
+            if created:
+                efibootmgr_output = self.chroot(
+                    ["efibootmgr", "-v"],
+                    check=False,
                 )
-                self.chroot([
-                    "efibootmgr",
-                    "--create",
-                    "--disk",
-                    self.selected_disk,
-                    "--part",
-                    "1",
-                    "--label",
-                    "MuliOS",
-                    "--loader",
-                    r"\EFI\MuliOS\grubx64.efi",
-                    "--unicode",
-                    "-e",
-                    "3",
-                ])
 
-        efibootmgr_output = self.chroot(
-            ["efibootmgr"],
-            check=False,
-        )
-
-        if "MuliOS" not in efibootmgr_output:
-            raise InstallError(
-                "The MuliOS UEFI boot entry was not created. "
-                "Firmware NVRAM variables are unavailable."
+        if "MuliOS" in efibootmgr_output:
+            self.log(
+                "MuliOS UEFI firmware boot entry created successfully."
+            )
+        else:
+            self.log(
+                "WARNING: UEFI NVRAM boot entry could not be created. "
+                "The installed MuliOS system remains bootable through "
+                "the standard EFI fallback path "
+                "(\\EFI\\BOOT\\BOOTX64.EFI)."
             )
 
         # Enable GRUB's OS detection so installed Linux systems on other
