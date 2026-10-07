@@ -13,11 +13,11 @@ arch-install-scripts
 mkinitcpio
 mkinitcpio-archiso
 mkinitcpio-nfs-utils
+nbd
 squashfs-tools
 syslinux
 grub
 efibootmgr
-os-prober
 
 # Filesystems / storage
 btrfs-progs
