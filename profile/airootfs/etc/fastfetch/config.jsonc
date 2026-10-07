@@ -3,7 +3,7 @@
   "logo": {
     "type": "file",
     "source": "/usr/share/mulios/fastfetch/logo.txt",
-    "padding": { "right": 4 },
+    "padding": { "right": 3 },
     "color": { "1": "white", "2": "green" }
   },
   "display": {
@@ -12,20 +12,14 @@
   },
   "modules": [
     "title",
-    { "type": "os", "key": "OS", "format": "{pretty-name} {arch}" },
-    { "type": "host", "key": "Host" },
-    { "type": "kernel", "key": "Kernel", "format": "{sysname} {release}" },
+    { "type": "os", "key": "OS", "format": "{pretty-name}" },
+    { "type": "kernel", "key": "Kernel", "format": "{release}" },
     { "type": "uptime", "key": "Uptime" },
-    { "type": "packages", "key": "Packages", "format": "{all} (pacman)" },
+    { "type": "packages", "key": "Packages", "format": "{all}" },
     { "type": "shell", "key": "Shell" },
-    { "type": "display", "key": "Display" },
-    { "type": "terminal", "key": "Terminal" },
-    { "type": "cpu", "key": "CPU", "format": "{name} ({cores-physical}) @ {freq-max}" },
+    { "type": "cpu", "key": "CPU", "format": "{name}" },
     { "type": "gpu", "key": "GPU", "format": "{name}" },
     { "type": "memory", "key": "Memory" },
-    { "type": "swap", "key": "Swap" },
-    { "type": "disk", "key": "Disk (/)", "folders": ["/"] },
-    "localip",
-    "locale"
+    { "type": "disk", "key": "Disk", "folders": ["/"] }
   ]
 }
