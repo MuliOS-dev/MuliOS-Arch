@@ -2906,6 +2906,7 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         self.pacman_install([
             "grub",
             "efibootmgr",
+            "os-prober",
         ])
 
         # Install a normal named EFI loader and create a real UEFI NVRAM
@@ -2974,8 +2975,29 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
                 "Firmware NVRAM variables are unavailable."
             )
 
-        cmdline = self.kernel_cmdline()
+        # Enable GRUB's OS detection so installed Linux systems on other
+        # partitions are discovered and added to the boot menu.
         grub_default = self.target / "etc/default/grub"
+
+        if grub_default.exists():
+            text = grub_default.read_text(
+                encoding="utf-8",
+                errors="replace",
+            )
+        else:
+            text = ""
+
+        os_prober_setting = "GRUB_DISABLE_OS_PROBER=false"
+        text = re.sub(
+            r"(?m)^#?\\s*GRUB_DISABLE_OS_PROBER=.*$",
+            os_prober_setting,
+            text,
+        )
+        if not re.search(r"(?m)^GRUB_DISABLE_OS_PROBER=", text):
+            text += "\\n" + os_prober_setting + "\\n"
+        grub_default.write_text(text, encoding="utf-8")
+
+        cmdline = self.kernel_cmdline()
 
         if grub_default.exists():
             text = grub_default.read_text(
