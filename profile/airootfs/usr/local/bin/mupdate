@@ -80,7 +80,38 @@ require_cmd() {
 }
 
 check_dependencies() {
-    require_cmd curl jq git sha1sum sha256sum install mkdir rm mktemp stat chmod readlink flock tar cp sed tr date head cat
+    require_cmd curl jq git sha1sum sha256sum install mkdir rm mktemp stat chmod readlink flock tar cp sed tr date head cat zip
+}
+
+create_backup() {
+    local local_path="$1"
+    local backup_root="$STATE_DIR/backups"
+    local backup_stage="$WORKDIR/backup"
+    local timestamp
+    local archive
+
+    [[ "$DRY_RUN" == "1" ]] && return 0
+    [[ -e "$local_path" || -L "$local_path" ]] || return 0
+
+    timestamp="$(date -u '+%Y%m%dT%H%M%SZ')"
+    archive="$backup_root/mupdate-$timestamp.zip"
+
+    mkdir -p "$backup_root" "$backup_stage"
+    rm -rf "$backup_stage"/*
+    mkdir -p "$backup_stage$(dirname "$local_path")"
+
+    cp -a "$local_path" "$backup_stage$local_path"
+
+    (
+        cd "$backup_stage"
+        zip -q -r "$archive" .
+    ) || {
+        rm -f "$archive"
+        warn "Unable to create backup archive for $local_path; refusing to overwrite it."
+        return 1
+    }
+
+    ok "Backed up $local_path to $archive"
 }
 
 acquire_lock() {
@@ -178,6 +209,11 @@ merge_file() {
             return
         fi
 
+        if ! create_backup "$local_path"; then
+            ((SKIPPED_COUNT+=1))
+            return 0
+        fi
+
         rm -f "$local_path"
         mkdir -p "$(dirname "$local_path")"
         ln -s "$link_target" "$local_path"
@@ -224,6 +260,11 @@ merge_file() {
     if [[ "$DRY_RUN" == "1" ]]; then
         printf 'UPDATE %s\n' "$local_path"
         return
+    fi
+
+    if ! create_backup "$local_path"; then
+        ((SKIPPED_COUNT+=1))
+        return 0
     fi
 
     local install_mode=0644
@@ -484,6 +525,10 @@ BEHAVIOR
       -> /usr/bin/foo
 
   New or changed files are downloaded and merged.
+
+  Before an existing system file is overwritten, MUpdate creates a ZIP backup
+  under /var/lib/mupdate/backups/. Backups contain the original filesystem
+  path and are timestamped per overwritten file.
 
   Files are never deleted.
 
