@@ -2123,8 +2123,33 @@ class InstallWorker(QThread):
             mode=0o440,
         )
 
+        self.configure_installed_fastfetch(username)
         self.configure_installed_plasma(username)
         self.progress.emit(60)
+
+    def configure_installed_fastfetch(self, username):
+        """Install the canonical MuliOS Fastfetch configuration for the new user."""
+        home = self.target / "home" / username
+        fastfetch_dir = home / ".config" / "fastfetch"
+        fastfetch_dir.mkdir(parents=True, exist_ok=True)
+
+        source = self.target / "etc/skel/.config/fastfetch/config.jsonc"
+        destination = fastfetch_dir / "config.jsonc"
+        if source.is_file():
+            shutil.copy2(source, destination)
+
+        # Remove legacy per-user configs so they cannot override MuliOS JSONC.
+        for legacy in (fastfetch_dir / "config.conf", fastfetch_dir / "config.json"):
+            if legacy.exists() or legacy.is_symlink():
+                legacy.unlink()
+
+        self.chroot([
+            "chown", "-R", f"{username}:{username}",
+            f"/home/{username}/.config/fastfetch",
+        ])
+
+        self.log("Installed canonical MuliOS Fastfetch configuration." if source.is_file()
+                 else "MuliOS Fastfetch configuration was unavailable in /etc/skel.")
 
     def configure_installed_plasma(self, username):
         """Seed the installed user's Plasma session from the live MuliOS session."""
