@@ -62,7 +62,7 @@ DARK_THEME = {
 # ---------------------------------------------------------------------------
 MAIN_DEVELOPER = "Jxstaboy"
 LEAD_DEVELOPERS = ["nevskydev", "redstonecoredev"]
-DEVELOPERS = ["archivearther", "xren229", "quoc_baoz", "yuiop74931"]
+DEVELOPERS = ["xren229", "quoc_baoz", "yuiop74931"]
 
 # ---------------------------------------------------------------------------
 # Support links
