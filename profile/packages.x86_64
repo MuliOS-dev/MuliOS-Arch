@@ -17,6 +17,7 @@ squashfs-tools
 syslinux
 grub
 efibootmgr
+os-prober
 
 # Filesystems / storage
 btrfs-progs
