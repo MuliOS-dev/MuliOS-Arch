@@ -41,6 +41,7 @@ build() {
     chmod 0755 "$PROFILE/airootfs/usr/local/bin/mulios-credits"
     chmod 0755 "$PROFILE/airootfs/usr/local/bin/mulios-apply-wallpaper"
     chmod 0755 "$PROFILE/airootfs/usr/local/bin/mulios-wallpaper-autostart"
+    chmod 0755 "$PROFILE/airootfs/usr/local/bin/fastfetch"
     chmod 0755 "$PROFILE/airootfs/etc/skel/Desktop/mulios-installer.desktop"
     chmod 0755 "$PROFILE/airootfs/usr/share/applications/mulios-installer.desktop"
 
