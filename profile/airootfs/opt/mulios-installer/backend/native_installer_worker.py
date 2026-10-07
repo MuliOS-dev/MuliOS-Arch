@@ -6,6 +6,7 @@ import shlex
 import shutil
 import subprocess
 import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
@@ -41,6 +42,8 @@ class InstallWorker(QThread):
         self.root_partition = None
         self.root_device = None
         self.kernel_package = "linux"
+        self.install_started_at = None
+        self.install_finished_at = None
 
     # ------------------------------------------------------------------
     # Logging
@@ -3132,15 +3135,6 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         else:
             text = ""
 
-        os_prober_setting = "GRUB_DISABLE_OS_PROBER=false"
-        text = re.sub(
-            r"(?m)^#?\\s*GRUB_DISABLE_OS_PROBER=.*$",
-            os_prober_setting,
-            text,
-        )
-        if not re.search(r"(?m)^GRUB_DISABLE_OS_PROBER=", text):
-            text += "\\n" + os_prober_setting + "\\n"
-        grub_default.write_text(text, encoding="utf-8")
 
         cmdline = self.kernel_cmdline()
 
@@ -3189,11 +3183,33 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
 
             grub_default.write_text(text, encoding="utf-8")
 
+        # Generate GRUB configuration. A stale executable in /etc/grub.d can
+        # return 127 and abort an otherwise valid installation. MuliOS does
+        # not ship os-prober, so disable a stale 30_os-prober script and retry
+        # if one was copied into the target from the live environment.
         self.chroot([
+            "sh",
+            "-c",
+            "command -v grub-mkconfig >/dev/null && command -v grub-probe >/dev/null",
+        ])
+
+        grub_config_command = [
             "grub-mkconfig",
             "-o",
             "/boot/grub/grub.cfg",
-        ])
+        ]
+
+        try:
+            self.chroot(grub_config_command)
+        except InstallError as exc:
+            stale_os_prober = self.target / "etc/grub.d/30_os-prober"
+            if stale_os_prober.exists() and os.access(stale_os_prober, os.X_OK):
+                mode = stale_os_prober.stat().st_mode
+                stale_os_prober.chmod(mode & ~0o111)
+                self.log("Disabled stale /etc/grub.d/30_os-prober and retrying grub-mkconfig.")
+                self.chroot(grub_config_command)
+            else:
+                raise exc
 
         grub_cfg = self.target / "boot/grub/grub.cfg"
         if not grub_cfg.is_file() or grub_cfg.stat().st_size == 0:
@@ -3440,9 +3456,15 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
     def run(self):
         self.initialize_log()
 
+        self.install_started_at = datetime.now(timezone.utc)
+
         try:
             self.log("=== MuliOS Native Installer ===")
             self.log("Starting installation.")
+            self.log(
+                "Start time (UTC): "
+                f"{self.install_started_at.isoformat(timespec='seconds')}"
+            )
             self.log(f"Installer PID: {os.getpid()}")
             self.log(f"Running as UID: {os.geteuid()}")
             self.log(f"Target mountpoint: {self.target}")
@@ -3603,4 +3625,18 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             self.failed.emit(
                 f"{error_type}: {error_message}"
             )
+
+        finally:
+            self.install_finished_at = datetime.now(timezone.utc)
+            started = self.install_started_at
+            if started is not None:
+                duration = self.install_finished_at - started
+                status = "FAILED" if "error_type" in locals() else "SUCCESS"
+                self.log("=== Installation end ===")
+                self.log(
+                    "End time (UTC): "
+                    f"{self.install_finished_at.isoformat(timespec='seconds')}"
+                )
+                self.log(f"Final status: {status}")
+                self.log(f"Duration: {duration.total_seconds():.1f} seconds")
 
