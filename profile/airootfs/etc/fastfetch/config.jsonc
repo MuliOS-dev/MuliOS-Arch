@@ -1,0 +1,31 @@
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/master/doc/json_schema.json",
+  "logo": {
+    "type": "file",
+    "source": "/usr/share/mulios/fastfetch/logo.txt",
+    "padding": { "right": 4 },
+    "color": { "1": "white", "2": "green" }
+  },
+  "display": {
+    "separator": ": ",
+    "color": { "keys": "green" }
+  },
+  "modules": [
+    "title",
+    { "type": "os", "key": "OS", "format": "{pretty-name} {arch}" },
+    { "type": "host", "key": "Host" },
+    { "type": "kernel", "key": "Kernel", "format": "{sysname} {release}" },
+    { "type": "uptime", "key": "Uptime" },
+    { "type": "packages", "key": "Packages", "format": "{all} (pacman)" },
+    { "type": "shell", "key": "Shell" },
+    { "type": "display", "key": "Display" },
+    { "type": "terminal", "key": "Terminal" },
+    { "type": "cpu", "key": "CPU", "format": "{name} ({cores-physical}) @ {freq-max}" },
+    { "type": "gpu", "key": "GPU", "format": "{name}" },
+    { "type": "memory", "key": "Memory" },
+    { "type": "swap", "key": "Swap" },
+    { "type": "disk", "key": "Disk (/)", "folders": ["/"] },
+    "localip",
+    "locale"
+  ]
+}
