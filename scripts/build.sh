@@ -48,7 +48,7 @@ build() {
 
     cat > "$PROFILE/airootfs/etc/os-release" <<EOF
 NAME="MuliOS"
-PRETTY_NAME="MuliOS Arch $mulios_version"
+PRETTY_NAME="MULIOS Linux"
 ID=mulios
 ID_LIKE=arch
 VERSION="$mulios_version"
