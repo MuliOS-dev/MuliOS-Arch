@@ -1698,6 +1698,12 @@ class InstallWorker(QThread):
                 "Removed build-only [mulios] repository."
             )
 
+        # Always leave a usable Arch mirrorlist behind, even when the
+        # installation was performed while the live session was offline.
+        # Otherwise the installed system can boot successfully but pacman
+        # has no configured servers.
+        self.configure_mirrors()
+
         resolv = self.target / "etc/resolv.conf"
 
         if resolv.exists() or resolv.is_symlink():
