@@ -238,6 +238,7 @@ sync_repository() {
     local deferred_mupdate_path=""
     local deferred_mupdate_mode=""
     local deferred_mupdate_sha=""
+    local self_updated=0
 
     info "Checking MuliOS-Arch..."
     get_tree > "$tree_file" ||
@@ -304,10 +305,21 @@ sync_repository() {
 
     if [[ -n "$deferred_mupdate_path" ]]; then
         if [[ "$SAFE_MODE" == "0" ]]; then
-            merge_file "$deferred_mupdate_path" "$deferred_mupdate_mode" "$deferred_mupdate_sha"
+            local current_mupdate_sha=""
+            current_mupdate_sha="$(local_blob_sha "$deferred_mupdate_path" "$deferred_mupdate_mode" 2>/dev/null || true)"
+
+            if [[ "$current_mupdate_sha" != "$deferred_mupdate_sha" ]]; then
+                merge_file "$deferred_mupdate_path" "$deferred_mupdate_mode" "$deferred_mupdate_sha"
+                self_updated=1
+            fi
         else
             echo "UPDATE /usr/local/bin/mupdate (deferred until other files are checked)"
         fi
+    fi
+
+    if [[ "$self_updated" == "1" && "$SAFE_MODE" == "0" && "$DRY_RUN" == "0" ]]; then
+        info "MUpdate itself was updated; restarting with the new version..."
+        exec /usr/local/bin/mupdate update
     fi
 
     if [[ "$DRY_RUN" == "0" && "$SAFE_MODE" == "0" ]]; then
