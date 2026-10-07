@@ -93,11 +93,12 @@ create_backup() {
     [[ "$DRY_RUN" == "1" ]] && return 0
     [[ -e "$local_path" || -L "$local_path" ]] || return 0
 
-    timestamp="$(date -u '+%Y%m%dT%H%M%SZ')"
-    archive="$backup_root/mupdate-$timestamp.zip"
+    timestamp="$(date -u '+%Y%m%dT%H%M%S%NZ')"
+    path_id="$(printf '%s' "$local_path" | sha256sum | sed 's/ .*//' | sed 's/^\(.\{12\}\).*$/\1/')"
+    archive="$backup_root/mupdate-$timestamp-$path_id.zip"
 
-    mkdir -p "$backup_root" "$backup_stage"
-    rm -rf "$backup_stage"/*
+    mkdir -p "$backup_root"
+    rm -rf "$backup_stage"
     mkdir -p "$backup_stage$(dirname "$local_path")"
 
     cp -a "$local_path" "$backup_stage$local_path"
