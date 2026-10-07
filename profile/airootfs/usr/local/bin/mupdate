@@ -189,8 +189,29 @@ merge_file() {
 
     local downloaded_sha
     downloaded_sha="$(git hash-object "$temp_file")"
+
+    if [[ "$downloaded_sha" != "$remote_sha" ]]; then
+        warn "Raw download hash mismatch for $repo_path; retrying from GitHub blob API..."
+
+        local blob_json blob_encoding blob_content
+        blob_json="$WORKDIR/blob.json"
+        curl -fsSL --retry 3 --retry-all-errors             -H "Accept: application/vnd.github+json"             -H "X-GitHub-Api-Version: 2022-11-28"             "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/git/blobs/$remote_sha"             > "$blob_json" ||
+            die "Failed retrieving GitHub blob: $repo_path"
+
+        blob_encoding="$(jq -r '.encoding // empty' "$blob_json")"
+        blob_content="$(jq -r '.content // empty' "$blob_json")"
+
+        [[ "$blob_encoding" == "base64" && -n "$blob_content" ]] ||
+            die "GitHub returned an invalid blob for: $repo_path"
+
+        printf '%s' "$blob_content" | tr -d '\n' | base64 -d > "$temp_file" ||
+            die "Failed decoding GitHub blob: $repo_path"
+
+        downloaded_sha="$(git hash-object "$temp_file")"
+    fi
+
     [[ "$downloaded_sha" == "$remote_sha" ]] ||
-        die "Repository changed or download was corrupted: $repo_path"
+        die "Repository blob verification failed: $repo_path"
 
     if [[ "$DRY_RUN" == "1" ]]; then
         printf 'UPDATE %s\n' "$local_path"
