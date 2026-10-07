@@ -2906,7 +2906,6 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         self.pacman_install([
             "grub",
             "efibootmgr",
-            "os-prober",
         ])
 
         # Make UEFI NVRAM available inside the target before grub-install and
