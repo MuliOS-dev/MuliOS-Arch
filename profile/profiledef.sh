@@ -16,7 +16,7 @@ buildmodes=('iso')
 
 bootmodes=(
   'bios.syslinux'
-  'uefi.systemd-boot'
+  'uefi.grub'
 )
 
 pacman_conf="pacman.conf"
