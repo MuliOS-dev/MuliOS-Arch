@@ -2917,10 +2917,12 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         efivars = self.target / "sys/firmware/efi/efivars"
         efivars.mkdir(parents=True, exist_ok=True)
 
-        if not self.run_command(
-            ["mountpoint", "-q", str(efivars)],
+        efivars_fstype = self.run_command(
+            ["findmnt", "-n", "-o", "FSTYPE", str(efivars)],
             check=False,
-        ):
+        ).strip()
+
+        if efivars_fstype != "efivarfs":
             live_efivars = Path(
                 "/sys/firmware/efi/efivars"
             )
@@ -2993,18 +2995,40 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         )
 
         if "MuliOS" not in efibootmgr_output:
-            self.chroot([
-                "efibootmgr",
-                "--create",
-                "--disk",
-                self.selected_disk,
-                "--part",
-                "1",
-                "--label",
-                "MuliOS",
-                "--loader",
-                r"\EFI\MuliOS\grubx64.efi",
-            ])
+            try:
+                self.chroot([
+                    "efibootmgr",
+                    "--create",
+                    "--disk",
+                    self.selected_disk,
+                    "--part",
+                    "1",
+                    "--label",
+                    "MuliOS",
+                    "--loader",
+                    r"\EFI\MuliOS\grubx64.efi",
+                    "--unicode",
+                ])
+            except InstallError:
+                self.log(
+                    "Standard UEFI NVRAM creation failed; "
+                    "retrying with EDD 3 compatibility mode."
+                )
+                self.chroot([
+                    "efibootmgr",
+                    "--create",
+                    "--disk",
+                    self.selected_disk,
+                    "--part",
+                    "1",
+                    "--label",
+                    "MuliOS",
+                    "--loader",
+                    r"\EFI\MuliOS\grubx64.efi",
+                    "--unicode",
+                    "-e",
+                    "3",
+                ])
 
         efibootmgr_output = self.chroot(
             ["efibootmgr"],
