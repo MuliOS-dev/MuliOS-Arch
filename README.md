@@ -3,36 +3,84 @@
 </p>
 
 # MuliOS Arch
-MuliOS Arch is the Arch Linux-based edition of **MuliOS**, built using **ArchISO**.
 
-This repository contains the source files, configurations, and tools required to build the MuliOS Arch ISO.
+MuliOS Arch is the **Arch Linux-based edition of MuliOS**, built with **Archiso**.
+
+This repository contains the source files, configurations, packages, scripts, and system components used to build MuliOS Arch installation media.
+
+MuliOS Arch is designed around **choice, performance, customization, and simplicity**.
+
+> **People change, your OS too.**
+
+---
 
 ## About
 
-MuliOS Arch aims to provide a modern, customizable, and reliable Linux experience while keeping the flexibility and performance of Arch Linux.
+MuliOS Arch combines the flexibility of Arch Linux with a customized MuliOS desktop and system experience.
 
 The project includes:
 
-* Custom ArchISO configuration
+* Custom Archiso configuration
 * KDE Plasma desktop environment
-* MuliOS branding and customization
-* MuliOS system tools
-* Custom system configurations
+* Custom MuliOS branding and theming
+* MuliOS Installer
+* MUpdate
+* MuliOS Welcome and changelog
+* Built-in system tools
+* Custom Fastfetch integration
+* Custom SDDM login experience
+* Profile infrastructure
+* Custom kernel and system configuration
+* Customized boot and UEFI configuration
+
+---
 
 ## System Information
 
-| Component | Details |
-|-----------|---------|
-| Base Distribution | Arch Linux |
-| ISO Builder | ArchISO |
-| Desktop Environment | KDE Plasma |
-| Installer | MuliOS Installer |
-| Architecture | x86_64 |
-| Init System | systemd |
-| Package Manager | pacman |
-| Development Status | In Development |
-| License | GNU GPL v3.0 |
-| Repository Type | Open Source |
+| Component           | Details            |
+| ------------------- | ------------------ |
+| Base Distribution   | Arch Linux         |
+| ISO Builder         | Archiso            |
+| Desktop Environment | KDE Plasma         |
+| Installer           | MuliOS Installer   |
+| Architecture        | x86_64             |
+| Init System         | systemd            |
+| Package Manager     | pacman             |
+| Update System       | MUpdate            |
+| Profiles            | MuliOS Profiles    |
+| Development Status  | Active Development |
+| License             | GNU GPL v3.0       |
+| Repository Type     | Open Source        |
+
+---
+
+## Repository Structure
+
+```text
+MuliOS-Arch/
+├── profile/
+│   ├── airootfs/
+│   ├── efiboot/
+│   ├── grub/
+│   ├── syslinux/
+│   ├── packages.x86_64
+│   ├── pacman.conf
+│   ├── profiledef.sh
+│   └── version
+│
+├── scripts/
+│   ├── build.sh
+│   ├── prepare.sh
+│   └── test.sh
+│
+├── docs/
+├── temp/
+└── output/
+```
+
+The `profile/airootfs/` directory contains the filesystem that is installed into the live environment and provides many of the components included in the final system.
+
+---
 
 ## Building for Developers
 
@@ -40,10 +88,10 @@ The project includes:
 
 A working Arch Linux environment is required.
 
-Install dependencies:
+Install the required build tools:
 
 ```bash
-sudo pacman -S --needed archiso git base-devel squashfs-tools mtools dosfstools libisoburn curl
+sudo pacman -S --needed archiso git base-devel squashfs-tools mtools dosfstools libisoburn curl nbd
 ```
 
 Clone the repository:
@@ -59,38 +107,144 @@ Build the ISO:
 ./scripts/build.sh
 ```
 
-The generated ISO will be available in the `output/` directory.
+The generated ISO will be placed in:
 
-## Updating an installed MuliOS system
+```text
+output/
+```
 
-MUpdate updates an installed system directly from this repository. It does not download or reconstruct an ISO and does not use a recovery environment.
+For a clean rebuild:
+
+```bash
+sudo rm -rf temp output
+./scripts/build.sh
+```
+
+Do not commit generated `temp/` or `output/` build data.
+
+---
+
+## Testing
+
+MuliOS Arch can be tested in a virtual machine before being deployed to physical hardware.
+
+The repository includes testing scripts and the ISO can be booted using QEMU or another compatible virtualization platform.
+
+Always test major changes to:
+
+* Boot configuration
+* Installer functionality
+* Package configuration
+* Desktop configuration
+* MUpdate
+* Profiles
+* Hardware support
+
+before considering them ready for release.
+
+---
+
+## MUpdate
+
+MuliOS Arch uses **MUpdate** to update supported files on an installed MuliOS system.
 
 ```bash
 sudo mupdate update
 ```
 
-MUpdate compares Git blob hashes for files under `profile/airootfs/` against the corresponding installed paths. It downloads and merges only new or changed files. It does not delete files.
+MUpdate synchronizes files from:
 
-Live-ISO-only configuration is excluded, including live-user autologin, live installer shortcuts, ArchISO initramfs settings, and live systemd unit links. Machine-specific account, host, storage, SSH, user-data, and boot files are protected.
+```text
+profile/airootfs/
+```
 
-Preview changes before applying them:
+with their corresponding installed locations.
+
+The current system uses Git blob verification to identify files that have changed.
+
+MUpdate also supports:
+
+* `--dry-run`
+* `--safe`
+* `--force` / `-f`
+* Automatic backups of replaced files
+* Git blob verification
+* Self-updating
+* Resilient update handling
+* MuliOS desktop/theme synchronization
+
+Example:
 
 ```bash
 sudo mupdate update --dry-run
 ```
 
-See [`docs/mupdate.md`](docs/mupdate.md) for details and limitations.
+MUpdate does **not** reconstruct or flash an ISO when performing a normal system update.
+
+Machine-specific and sensitive system files are protected from synchronization.
+
+See [`docs/mupdate.md`](docs/mupdate.md) for detailed information.
+
+---
+
+## MuliOS Components
+
+MuliOS Arch contains several custom components developed specifically for the distribution.
+
+### MuliOS Installer
+
+A standalone graphical installer used to install and configure MuliOS Arch.
+
+### MuliOS Welcome
+
+A local application that introduces users to MuliOS and displays important release and changelog information.
+
+### Task Manager
+
+A built-in system monitoring application providing information about CPU, memory, GPU, disk, network, and running processes.
+
+### MuliOS Credits
+
+Displays project contributors and MuliOS project information.
+
+### Desktop Integration
+
+MuliOS includes customized KDE Plasma configuration, themes, wallpapers, Fastfetch integration, SDDM configuration, and other desktop components.
+
+---
+
+## Profiles
+
+MuliOS Arch is designed around configurable system profiles.
+
+Current profile concepts include:
+
+* **Game Focused**
+* **Code**
+* **AI**
+* **Study**
+* **Privacy**
+* **Casual**
+
+Profiles can influence installed software, system configuration, and performance-related settings.
+
+The profile system is actively evolving.
+
+---
 
 ## Development
 
-MuliOS Arch is developed using a structured workflow:
+MuliOS Arch follows a build-and-test development workflow:
 
 1. Changes are made in the repository.
-2. The ISO is built and tested.
-3. Issues are identified and fixed.
-4. Changes are reviewed before integration.
+2. The ISO is built with Archiso.
+3. The resulting system is tested.
+4. Problems are identified and corrected.
+5. Changes are reviewed before release.
 
-Please read the documentation in the `docs/` folder before contributing.
+Development is primarily focused on improving reliability, usability, customization, and hardware compatibility.
+
+---
 
 ## Contributing
 
@@ -98,32 +252,55 @@ Contributions are welcome.
 
 Before contributing:
 
-* Read the development guidelines.
+* Read the documentation in `docs/`.
 * Test your changes.
 * Keep commits clear and descriptive.
-* Avoid breaking existing functionality.
+* Avoid unnecessary changes.
+* Do not commit generated build files.
+* Test changes to the installer, boot system, and desktop environment carefully.
 
-For major changes, discuss them with the development team before implementation.
+For major architectural changes, discuss the change with the development team before implementation.
 
-## Related Projects to MuliOS Arch
+---
 
+## Related Projects
 
-* core-arch — Base system components
-* installer-arch — Installation tools
-* update — Update management
-* kernel-arch — Kernel development
-* profiles — custom linux adaptative system
+MuliOS Arch is part of the wider MuliOS ecosystem.
 
-You can find more projects under the "MuliOS-dev" Organisation.
+* **MuliOS** — Main project and organization
+* **MuliOS Installer** — Graphical installation system
+* **MUpdate** — MuliOS update system
+* **MuliOS-Ubuntu** — Ubuntu-based MuliOS edition
+* **MuliOS Profiles** — Profile and configuration infrastructure
+
+Additional projects are available under the [MuliOS-dev organization](https://github.com/MuliOS-dev).
+
+---
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0.
+MuliOS Arch is licensed under the **GNU General Public License v3.0**.
 
-See the `LICENSE` file for more information.
+See the `LICENSE` file for the full license text.
+
+---
 
 ## Status
 
-MuliOS Arch is currently under active development.
+**MuliOS Arch is under active development.**
 
-Features, components, and structure may change as the project evolves.
+The project is continuously evolving. Features, system components, profiles, installer behavior, and internal structure may change between releases.
+
+The Arch edition is currently the primary actively developed MuliOS distribution.
+
+---
+
+<div align="center">
+
+## MuliOS Arch
+
+**People change, your OS too.**
+
+`Build • Customize • Experiment • Use`
+
+</div>
