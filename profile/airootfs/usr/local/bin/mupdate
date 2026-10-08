@@ -15,6 +15,7 @@ VERSION="a1.0.6"
 GITHUB_OWNER="MuliOS-dev"
 GITHUB_REPO="MuliOS-Arch"
 GITHUB_BRANCH="main"
+BETA_MODE=0
 
 STATE_DIR="/var/lib/mupdate"
 LOG_FILE="/var/log/mupdate.log"
@@ -372,7 +373,11 @@ sync_repository() {
 
     if [[ "$self_updated" == "1" && "$SAFE_MODE" == "0" && "$DRY_RUN" == "0" ]]; then
         info "MUpdate itself was updated; restarting with the new version..."
-        exec /usr/local/bin/mupdate update
+        if [[ "$BETA_MODE" == "1" ]]; then
+            exec /usr/local/bin/mupdate update beta
+        else
+            exec /usr/local/bin/mupdate update
+        fi
     fi
 
     if [[ "$DRY_RUN" == "0" && "$SAFE_MODE" == "0" ]]; then
@@ -677,9 +682,22 @@ cmd_update() {
     require_root
     check_dependencies
     verify_os
-    acquire_lock
 
-    info "MUpdate $VERSION — direct repository merge"
+    if [[ "$BETA_MODE" == "1" ]]; then
+        local os_version=""
+        os_version="$(sed -n 's/^VERSION_ID=//p' /etc/os-release | tr -d '"')"
+        [[ "$os_version" == *C ]] || {
+            err "unable to fetch from beta: your version is not a canary build."
+            exit 1
+        }
+        GITHUB_BRANCH="beta"
+        info "MUpdate $VERSION — direct repository merge (beta/canary)"
+    else
+        GITHUB_BRANCH="main"
+        info "MUpdate $VERSION — direct repository merge"
+    fi
+
+    acquire_lock
 
     if [[ "$DRY_RUN" == "1" ]]; then
         warn "Dry-run: no files will be changed."
@@ -718,6 +736,16 @@ UPDATE
   sudo mupdate update
   sudo mupdate sync
   sudo mupdate update -y
+
+BETA / CANARY
+  sudo mupdate update beta
+
+  Beta updates target only:
+    https://github.com/MuliOS-dev/MuliOS-Arch/tree/beta
+
+  Beta updates are available only on Canary builds (C suffix).
+  Otherwise MUpdate aborts with:
+    unable to fetch from beta: your version is not a canary build.
 
 PROFILE
   sudo mupdate profile
@@ -802,6 +830,10 @@ main() {
         case "$1" in
             update|sync)
                 command="update"
+                if [[ "${2:-}" == "beta" ]]; then
+                    BETA_MODE=1
+                    shift
+                fi
                 ;;
             profile)
                 command="profile"
