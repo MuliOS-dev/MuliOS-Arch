@@ -392,6 +392,220 @@ sync_repository() {
 
 
 
+
+profile_name_from_path() {
+    local path="$1"
+    local remainder="\${path#"$PROFILE_ROOT"/}"
+    printf '%s' "\${remainder%%/*}"
+}
+
+profile_zip_is_direct_child() {
+    local path="$1"
+    local profile="$2"
+    local remainder="\${path#"$PROFILE_ROOT/$profile"/}"
+
+    [[ "$remainder" != "$path" ]] || return 1
+    [[ "$remainder" == *.zip ]] || return 1
+    [[ "$remainder" != */* ]] || return 1
+}
+
+download_verified_profile_zip() {
+    local path="$1"
+    local expected_sha="$2"
+    local destination="$3"
+    local raw="$WORKDIR/profile.raw"
+    local blob_json="$WORKDIR/profile-blob.json"
+
+    info "Downloading profile package: \$(basename "$path")"
+
+    curl -fsSL --retry 3 --retry-all-errors \
+        -o "$raw" \
+        "https://raw.githubusercontent.com/$UPDATE_OWNER/$UPDATE_REPO/$UPDATE_BRANCH/$path" ||
+        die "Failed to download profile package: $path"
+
+    local actual_sha
+    actual_sha="\$(git hash-object "$raw")"
+
+    if [[ "$actual_sha" != "$expected_sha" ]]; then
+        warn "Raw profile download hash mismatch; retrieving the Git blob..."
+
+        curl -fsSL --retry 3 --retry-all-errors \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$UPDATE_OWNER/$UPDATE_REPO/git/blobs/$expected_sha" \
+            > "$blob_json" ||
+            die "Failed retrieving profile Git blob: $path"
+
+        [[ "\$(jq -r '.encoding // empty' "$blob_json")" == "base64" ]] ||
+            die "GitHub returned an unsupported blob encoding for $path"
+
+        jq -r '.content // empty' "$blob_json" |
+            tr -d '\\n' |
+            base64 -d > "$raw" ||
+            die "Failed decoding profile Git blob: $path"
+
+        actual_sha="\$(git hash-object "$raw")"
+    fi
+
+    [[ "$actual_sha" == "$expected_sha" ]] ||
+        die "Profile package verification failed: $path"
+
+    mv "$raw" "$destination"
+    ok "Verified profile package: \$(basename "$path")"
+}
+
+validate_profile_archive() {
+    local archive="$1"
+    local extract_dir="$2"
+
+    info "Validating profile archive..."
+
+    unzip -tq "$archive" ||
+        die "Profile archive is corrupt: \$(basename "$archive")"
+
+    rm -rf "$extract_dir"
+    mkdir -p "$extract_dir"
+    unzip -q "$archive" -d "$extract_dir" ||
+        die "Failed to extract profile archive."
+
+    [[ -f "$extract_dir/sh/install.sh" ]] ||
+        die "Profile archive is missing sh/install.sh"
+
+    [[ -f "$extract_dir/sh/packages.sh" ]] ||
+        die "Profile archive is missing sh/packages.sh"
+
+    chmod +x "$extract_dir/sh/install.sh" "$extract_dir/sh/packages.sh"
+
+    bash -n "$extract_dir/sh/install.sh" ||
+        die "Profile sh/install.sh failed shell syntax validation."
+
+    bash -n "$extract_dir/sh/packages.sh" ||
+        die "Profile sh/packages.sh failed shell syntax validation."
+
+    local package_count
+    package_count="\$(find "$extract_dir" -maxdepth 1 -type f \
+        \( -name '*.pkg.tar.zst' -o -name '*.pkg.tar.xz' -o -name '*.pkg.tar.gz' \) |
+        wc -l)"
+
+    [[ "$package_count" -gt 0 ]] ||
+        die "Profile archive contains no Arch package files."
+
+    info "Profile archive is valid."
+    echo "    install script : sh/install.sh"
+    echo "    package script : sh/packages.sh"
+    echo "    package files  : $package_count"
+}
+
+cmd_profile() {
+    require_root
+    require_cmd curl jq git sha1sum sha256sum unzip mktemp mkdir rm mv cp chmod find sort wc
+    verify_os
+    acquire_lock
+
+    local tree_file="$WORKDIR/update-tree.json"
+    local manifest="$WORKDIR/profiles.tsv"
+
+    info "Checking MuliOS profile repository..."
+    curl -fsSL --retry 3 --retry-all-errors \
+        -H "Accept: application/vnd.github+json" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
+        "https://api.github.com/repos/$UPDATE_OWNER/$UPDATE_REPO/git/trees/$UPDATE_BRANCH?recursive=1" \
+        > "$tree_file" ||
+        die "Unable to read the MuliOS update repository."
+
+    jq -e '.tree | type == "array"' "$tree_file" >/dev/null ||
+        die "GitHub returned an invalid profile repository tree."
+
+    [[ "\$(jq -r '.truncated // false' "$tree_file")" == "false" ]] ||
+        die "GitHub returned a truncated profile tree; refusing an incomplete profile list."
+
+    info "Profile tree verified: \$(jq -r '.sha' "$tree_file")"
+    : > "$manifest"
+
+    # Only a ZIP directly inside profiles/<name>/ qualifies.
+    # Anything deeper, including profiles/<name>/old/, is ignored.
+    while IFS="\$(printf '\\t')" read -r path mode type sha; do
+        [[ "$type" == "blob" ]] || continue
+        [[ "$path" == profiles/* ]] || continue
+
+        local remainder="\${path#profiles/}"
+        local profile="\${remainder%%/*}"
+        [[ -n "$profile" ]] || continue
+        local inside="\${path#profiles/$profile/}"
+
+        [[ "$inside" != "$path" ]] || continue
+        [[ "$inside" == *.zip ]] || continue
+        [[ "$inside" != */* ]] || continue
+
+        printf '%s\\t%s\\t%s\\n' "$profile" "$path" "$sha" >> "$manifest"
+    done < <(jq -r '.tree[] | [.path,.mode,.type,.sha] | @tsv' "$tree_file")
+
+    [[ -s "$manifest" ]] || die "No installable MuliOS profiles were found."
+
+    mapfile -t PROFILE_ROWS < "$manifest"
+
+    echo
+    info "Available MuliOS profiles:"
+    echo
+
+    local i=1 row profile path sha
+    for row in "\${PROFILE_ROWS[@]}"; do
+        IFS="\$(printf '\\t')" read -r profile path sha <<< "$row"
+        printf '  %d: %s\\n' "$i" "$profile"
+        ((i+=1))
+    done
+
+    echo
+    local choice
+    while true; do
+        read -r -p "Select a profile [1-\${#PROFILE_ROWS[@]}]: " choice
+        [[ "$choice" =~ ^[0-9]+$ ]] || { warn "Enter a number."; continue; }
+        (( choice >= 1 && choice <= \${#PROFILE_ROWS[@]} )) || { warn "Invalid profile selection."; continue; }
+        break
+    done
+
+    row="\${PROFILE_ROWS[\$((choice-1))]}"
+    IFS="\$(printf '\\t')" read -r profile path sha <<< "$row"
+
+    echo
+    info "Selected profile: $profile"
+    info "Package: \$(basename "$path")"
+
+    local archive="$WORKDIR/$profile.zip"
+    local extract_dir="$WORKDIR/$profile"
+
+    download_verified_profile_zip "$path" "$sha" "$archive"
+    validate_profile_archive "$archive" "$extract_dir"
+
+    echo
+    warn "sh/install.sh will always run before sh/packages.sh."
+    echo
+
+    if ! confirm "Install the $profile profile?"; then
+        warn "Profile installation cancelled."
+        return 0
+    fi
+
+    info "Running sh/install.sh first..."
+    ( cd "$extract_dir" && ./sh/install.sh ) ||
+        die "Profile kernel/image installation failed."
+    ok "sh/install.sh completed."
+
+    info "Running sh/packages.sh second..."
+    ( cd "$extract_dir" && ./sh/packages.sh ) ||
+        die "Profile package installation failed."
+    ok "sh/packages.sh completed."
+
+    mkdir -p "$STATE_DIR/profiles"
+    printf '%s\\n' "$profile" > "$STATE_DIR/profiles/active"
+    printf '%s\\n' "$sha" > "$STATE_DIR/profiles/$profile.sha"
+    printf '%s\\n' "\$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$STATE_DIR/profiles/last-install"
+
+    echo
+    ok "MuliOS $profile profile installation complete."
+    warn "Reboot if the profile installed a new kernel."
+}
+
 sync_rounded_theme() {
     local installer_script="$WORKDIR/install-rounded-theme.sh"
     local commit
@@ -505,6 +719,25 @@ UPDATE
   sudo mupdate sync
   sudo mupdate update -y
 
+PROFILE
+  sudo mupdate profile
+
+  Profiles are discovered from the complete recursive Git tree of:
+    https://github.com/MuliOS-dev/update/tree/main/profiles
+
+  Only a ZIP directly inside profiles/<name>/ is listed.
+  Nested files such as profiles/gaming/old/... are ignored.
+
+  The selected ZIP is verified against its Git blob SHA and tested before
+  installation.
+
+  Installation order:
+    1. sh/install.sh
+    2. sh/packages.sh
+
+  sh/install.sh is responsible for installing kernel packages and must install
+  kernel headers before kernel/image packages.
+
 CHECK
   sudo mupdate update --dry-run
   sudo mupdate update --safe
@@ -570,6 +803,9 @@ main() {
             update|sync)
                 command="update"
                 ;;
+            profile)
+                command="profile"
+                ;;
             status)
                 command="status"
                 ;;
@@ -602,6 +838,7 @@ main() {
 
     case "$command" in
         update) cmd_update ;;
+        profile) cmd_profile ;;
         status) cmd_status ;;
     esac
 }
