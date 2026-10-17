@@ -246,6 +246,11 @@ class MuliOSInstaller(QMainWindow):
             if not self.account_page.validate():
                 return
 
+        elif idx == IDX_PACKAGES and not has_connected_wifi():
+            self.profile_page.refresh_availability(wifi_available=False, force=True)
+            self._goto_step(IDX_ADVANCED)
+            return
+
         elif idx == IDX_SUMMARY:
             if TEST_MODE:
                 QMessageBox.information(
