@@ -24,7 +24,8 @@ from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt
 
 from theme import stylesheet
-from config.settings import LOGO_PATH, APP_NAME, DISTRO_NAME\nfrom utils.profile_catalog import has_connected_wifi
+from config.settings import LOGO_PATH, APP_NAME, DISTRO_NAME
+from utils.profile_catalog import has_connected_wifi
 
 
 TEST_MODE = "--test" in sys.argv or os.environ.get("MULIOS_INSTALLER_TEST") == "1"
@@ -284,7 +285,8 @@ class MuliOSInstaller(QMainWindow):
             "enable_swap": self.partitioning_page.swap_enabled(),
             "bootloader": self.bootloader_page.selected_bootloader(),
             **self.account_page.data(),
-            "desktop_environment": self.desktop_page.selected_desktop(),\n            "desktop_effect": self.desktop_page.selected_effect(),
+            "desktop_environment": self.desktop_page.selected_desktop(),
+            "desktop_effect": self.desktop_page.selected_effect(),
             "extra_packages": self.packages_page.selected_packages(),
             "profile": self.profile_page.selected_profile(),
             "profile_name": self.profile_page.selected_profile_name(),
