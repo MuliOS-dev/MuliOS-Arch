@@ -2573,10 +2573,75 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
                 f"{type(exc).__name__}: {exc}. Continuing with default KWin effects."
             )
             return
-        self.log(
-            f"{display_name} installed. Enable it from System Settings > Desktop Effects "
-            "after the first login; do not enable it alongside another blur fork."
+        if effect == "glass":
+            self.configure_glass_effect()
+            self.log(
+                "KWin Effects Glass installed and enabled for the installed user. "
+                "Disabled conflicting built-in blur, alternate blur, and translucency effects."
+            )
+        else:
+            self.log(
+                f"{display_name} installed. Enable it from System Settings > Desktop Effects "
+                "after the first login; do not enable it alongside another blur fork."
+            )
+
+    def configure_glass_effect(self):
+        """Enable Glass in the installed user's KWin config and disable conflicting effects."""
+        username = str(self.state.get("username", "")).strip()
+        if not username:
+            self.log("WARNING: No installed username; Glass was installed but could not be enabled automatically.")
+            return
+
+        config_path = self.target / "home" / username / ".config" / "kwinrc"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        text = config_path.read_text(encoding="utf-8") if config_path.is_file() else ""
+        lines = text.splitlines()
+
+        section_start = next(
+            (i for i, line in enumerate(lines) if line.strip() == "[Plugins]"),
+            None,
         )
+        if section_start is None:
+            if lines and lines[-1].strip():
+                lines.append("")
+            lines.extend(["[Plugins]"])
+            section_start = len(lines) - 1
+
+        section_end = next(
+            (
+                i for i in range(section_start + 1, len(lines))
+                if lines[i].strip().startswith("[") and lines[i].strip().endswith("]")
+            ),
+            len(lines),
+        )
+
+        settings = {
+            "glassEnabled": "true",
+            "blurEnabled": "false",
+            "blurplusEnabled": "false",
+            "forceblurEnabled": "false",
+            "translucencyEnabled": "false",
+        }
+        for key, value in settings.items():
+            pattern = re.compile(rf"^\\s*{re.escape(key)}\\s*=.*$", re.IGNORECASE)
+            matches = [
+                i for i in range(section_start + 1, section_end)
+                if pattern.match(lines[i])
+            ]
+            if matches:
+                lines[matches[0]] = f"{key}={value}"
+                for duplicate in reversed(matches[1:]):
+                    del lines[duplicate]
+                    section_end -= 1
+            else:
+                lines.insert(section_end, f"{key}={value}")
+                section_end += 1
+
+        config_path.write_text("\\n".join(lines).rstrip() + "\\n", encoding="utf-8")
+        self.chroot([
+            "chown", f"{username}:{username}",
+            f"/home/{username}/.config/kwinrc",
+        ])
 
     # ------------------------------------------------------------------
     # Extra packages
