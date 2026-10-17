@@ -100,7 +100,7 @@ build() {
         exit 1
     fi
 
-    "$WORK_DIR/scripts/install-rounded-theme.sh"
+    bash "$WORK_DIR/scripts/install-rounded-theme.sh"
     prepare_version_templates
 
     # Desktop launchers must be executable for Plasma to treat them as trusted
