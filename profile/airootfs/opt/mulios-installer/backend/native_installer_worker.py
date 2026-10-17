@@ -2773,20 +2773,10 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             self.log("Generic profile selected; keeping the default system configuration.")
             return
 
-        # The profile page only exposes specialized choices with Wi-Fi and
-        # internet. Recheck here because connectivity may have changed.
-        wifi = subprocess.run(
-            ["nmcli", "-t", "-f", "TYPE,STATE", "device"],
-            capture_output=True, text=True, timeout=5, check=False,
-        )
-        wifi_connected = wifi.returncode == 0 and any(
-            line.strip() == "wifi:connected" for line in wifi.stdout.splitlines()
-        )
-        if not wifi_connected or not self.network_available:
-            self.log("Wi-Fi/internet is no longer available; falling back to Generic.")
-            self.write_file(self.target / "var/lib/mupdate/initial-profile", "generic\\n")
-            return
-
+        # Do not infer connectivity from the Network page, Wi-Fi state, or
+        # an earlier DNS preflight. The live MuliOS session's direct request to
+        # the official profile API below is the source of truth. This also
+        # supports Ethernet and other working network connections.
         try:
             request = urllib.request.Request(
                 "https://api.github.com/repos/MuliOS-dev/update/git/trees/main?recursive=1",
