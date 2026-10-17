@@ -2521,6 +2521,62 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         self.chroot(["systemctl", "enable", "sddm"])
         self.progress.emit(70)
 
+    def install_desktop_effect(self):
+        effect = str(self.state.get("desktop_effect", "default")).strip().lower()
+        sources = {
+            "forceblur": (
+                "https://github.com/taj-ny/kwin-effects-forceblur",
+                "Better Blur (Force Blur)",
+            ),
+            "glass": (
+                "https://github.com/4v3ngR/kwin-effects-glass",
+                "KWin Effects Glass",
+            ),
+        }
+        if effect == "default" or not effect:
+            self.log("Keeping the default KWin effects.")
+            return
+        if effect not in sources:
+            raise InstallError(f"Unknown desktop effect selection: {effect}")
+        if not self.network_available:
+            raise InstallError(
+                "A desktop effect was selected, but internet access is unavailable. "
+                "Go back and choose Keep default, or reconnect and retry."
+            )
+
+        repository, display_name = sources[effect]
+        self.log(f"Building {display_name} for the installed KDE/ KWin version...")
+        # Build against the exact KWin/Qt libraries installed on the target.
+        # CMake performs the upstream compatibility checks and fails clearly
+        # if the chosen effect does not support this Plasma/KWin version.
+        build_script = (
+            "set -euo pipefail; "
+            "pacman -S --needed --noconfirm base-devel git cmake "
+            "extra-cmake-modules qt6-tools kwin; "
+            "rm -rf /tmp/mulios-kwin-effect; "
+            f"git clone --depth 1 {shlex.quote(repository)} /tmp/mulios-kwin-effect; "
+            "cmake -S /tmp/mulios-kwin-effect -B /tmp/mulios-kwin-effect/build "
+            "-DCMAKE_INSTALL_PREFIX=/usr; "
+            "cmake --build /tmp/mulios-kwin-effect/build --parallel; "
+            "cmake --install /tmp/mulios-kwin-effect/build; "
+            "rm -rf /tmp/mulios-kwin-effect"
+        )
+        try:
+            self.chroot(["bash", "-lc", build_script])
+        except Exception as exc:
+            self.log(
+                f"{display_name} installation failed: {type(exc).__name__}: {exc}"
+            )
+            raise InstallError(
+                f"Could not build {display_name} for the installed KDE Plasma version. "
+                "The default KWin effects were not intentionally replaced. "
+                "See the installer log for build output."
+            ) from exc
+        self.log(
+            f"{display_name} installed. Enable it from System Settings > Desktop Effects "
+            "after the first login; do not enable it alongside another blur fork."
+        )
+
     # ------------------------------------------------------------------
     # Extra packages
     # ------------------------------------------------------------------
@@ -3600,6 +3656,7 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             self.progress.emit(73)
 
             self.install_extra_packages()
+            self.install_desktop_effect()
             self.progress.emit(77)
 
             self.configure_profile()
