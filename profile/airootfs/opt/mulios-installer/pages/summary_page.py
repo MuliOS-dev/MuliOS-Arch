@@ -29,6 +29,14 @@ class SummaryPage(QWidget):
 
         self._state = None
 
+    @staticmethod
+    def _effect_label(value: str) -> str:
+        return {
+            "default": "KDE Plasma default",
+            "forceblur": "Better Blur",
+            "glass": "KWin Effects Glass",
+        }.get(str(value or "default").lower(), "KDE Plasma default")
+
     def set_state(self, state: dict, internet_connected: bool):
         self._state = dict(state)
         self._state["_internet_connected"] = internet_connected
@@ -45,6 +53,7 @@ class SummaryPage(QWidget):
             f"Username:             {state.get('username', '')}",
             f"Root login:           {'Enabled' if state.get('root_password') else 'Disabled'}",
             f"Desktop environment:  {state.get('desktop_environment') or 'None / minimal'}",
+            f"Desktop effect:        {self._effect_label(state.get('desktop_effect', 'default'))}",
             f"Language:             {state.get('locale', '')}",
             f"Keyboard layout:      {state.get('keyboard_layout', '')}",
             f"Timezone:             {state.get('timezone', '')}",
