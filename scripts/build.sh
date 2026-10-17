@@ -28,11 +28,57 @@ setup() {
 
 setup
 
+VERSION_TEMPLATE_FILES=(
+    "$PROFILE/grub/grub.cfg"
+    "$PROFILE/efiboot/loader/entries/01-archiso-linux.conf"
+    "$PROFILE/efiboot/loader/entries/02-archiso-speech-linux.conf"
+    "$PROFILE/syslinux/archiso_sys-linux.cfg"
+)
+VERSION_TEMPLATE_BACKUP_DIR=""
+
+restore_version_templates() {
+    [[ -n "$VERSION_TEMPLATE_BACKUP_DIR" && -d "$VERSION_TEMPLATE_BACKUP_DIR" ]] || return 0
+
+    local index=0
+    local file
+    for file in "${VERSION_TEMPLATE_FILES[@]}"; do
+        cp "$VERSION_TEMPLATE_BACKUP_DIR/$index" "$file"
+        index=$((index + 1))
+    done
+
+    rm -rf "$VERSION_TEMPLATE_BACKUP_DIR"
+    VERSION_TEMPLATE_BACKUP_DIR=""
+}
+
+trap restore_version_templates EXIT
+
+prepare_version_templates() {
+    VERSION_TEMPLATE_BACKUP_DIR="$(mktemp -d "$WORK_DIR/.version-templates.XXXXXX")"
+
+    local index=0
+    local file
+    for file in "${VERSION_TEMPLATE_FILES[@]}"; do
+        cp "$file" "$VERSION_TEMPLATE_BACKUP_DIR/$index"
+        index=$((index + 1))
+    done
+
+    for file in "${VERSION_TEMPLATE_FILES[@]}"; do
+        sed -i "s/@MULIOS_VERSION@/$mulios_version/g" "$file"
+    done
+}
+
 build() {
     local mulios_version
     mulios_version="$(cat "$PROFILE/version")"
 
+    if [[ ! "$mulios_version" =~ ^[0-9]{2}\.[0-9]{2}\.[0-9]{2}-(stable|beta|dev)(\.[0-9]+)?$ ]]; then
+        echo "[ERROR]: invalid MuliOS version '$mulios_version'." >&2
+        echo "[ERROR]: expected YY.MM.DD-stable, -beta, or -dev, optionally followed by .N." >&2
+        exit 1
+    fi
+
     "$WORK_DIR/scripts/install-rounded-theme.sh"
+    prepare_version_templates
 
     # Desktop launchers must be executable for Plasma to treat them as trusted
     # launchable desktop entries in the live session.
@@ -49,7 +95,7 @@ build() {
 
     cat > "$PROFILE/airootfs/etc/os-release" <<EOF
 NAME="MuliOS"
-PRETTY_NAME="MULIOS Linux"
+PRETTY_NAME="MuliOS Arch $mulios_version"
 ID=mulios
 ID_LIKE=arch
 VERSION="$mulios_version"
