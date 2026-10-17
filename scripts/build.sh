@@ -13,7 +13,7 @@ fi
 while true; do
     read -r -p "Enter release channel/suffix (e.g. stable, beta, indev, indev.11): " release_channel
 
-    if [[ "$release_channel" =~ ^[a-z][a-z0-9-]*(\.[0-9]+)?$ ]]; then
+    if [[ "$release_channel" =~ ^[a-z][a-z0-9-]*$ || "$release_channel" =~ ^[a-z][a-z0-9-]*\.[0-9]+$ ]]; then
         break
     fi
 
@@ -94,7 +94,7 @@ build() {
     local mulios_version
     mulios_version="$(cat "$PROFILE/version")"
 
-    if [[ ! "$mulios_version" =~ ^[0-9]{2}\.[0-9]{2}\.[0-9]{2}-[a-z][a-z0-9-]*(\.[0-9]+)?$ ]]; then
+    if [[ ! "$mulios_version" =~ ^[0-9]{2}\.[0-9]{2}\.[0-9]{2}-[a-z][a-z0-9-]*$ && ! "$mulios_version" =~ ^[0-9]{2}\.[0-9]{2}\.[0-9]{2}-[a-z][a-z0-9-]*\.[0-9]+$ ]]; then
         echo "[ERROR]: invalid MuliOS version '$mulios_version'." >&2
         echo "[ERROR]: expected YY.MM.DD-CHANNEL, optionally followed by .N." >&2
         exit 1
