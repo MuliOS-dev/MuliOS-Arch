@@ -2,7 +2,7 @@ STEPS = [
     {
         "id": "step_debute",
         "title": "Welcome to MuliOS",
-        "description": "Welcome to MuliOS 26.07.03 Stable! \n\nExplore your new operating system and discover its features. and changes.",
+        "description": "Welcome to MuliOS! \n\nExplore your new operating system and discover its features. and changes.",
         "image": "step_debute.png",
     },
     {
