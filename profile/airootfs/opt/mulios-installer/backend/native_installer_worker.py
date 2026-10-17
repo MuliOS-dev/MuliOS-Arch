@@ -2564,14 +2564,15 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         try:
             self.chroot(["bash", "-lc", build_script])
         except Exception as exc:
+            # This is an optional desktop customization. A compatibility or
+            # build failure must not turn an otherwise successful OS install
+            # into a failed install; make the fallback explicit in the log.
+            self.state["desktop_effect"] = "default"
             self.log(
-                f"{display_name} installation failed: {type(exc).__name__}: {exc}"
+                f"WARNING: Could not install {display_name}: "
+                f"{type(exc).__name__}: {exc}. Continuing with default KWin effects."
             )
-            raise InstallError(
-                f"Could not build {display_name} for the installed KDE Plasma version. "
-                "The default KWin effects were not intentionally replaced. "
-                "See the installer log for build output."
-            ) from exc
+            return
         self.log(
             f"{display_name} installed. Enable it from System Settings > Desktop Effects "
             "after the first login; do not enable it alongside another blur fork."
