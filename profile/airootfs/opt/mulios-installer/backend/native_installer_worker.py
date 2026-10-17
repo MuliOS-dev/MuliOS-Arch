@@ -2604,7 +2604,7 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         if section_start is None:
             if lines and lines[-1].strip():
                 lines.append("")
-            lines.extend(["[Plugins]"])
+            lines.append("[Plugins]")
             section_start = len(lines) - 1
 
         section_end = next(
@@ -2623,7 +2623,7 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             "translucencyEnabled": "false",
         }
         for key, value in settings.items():
-            pattern = re.compile(rf"^\\s*{re.escape(key)}\\s*=.*$", re.IGNORECASE)
+            pattern = re.compile(rf"^\s*{re.escape(key)}\s*=.*$", re.IGNORECASE)
             matches = [
                 i for i in range(section_start + 1, section_end)
                 if pattern.match(lines[i])
@@ -2637,7 +2637,7 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
                 lines.insert(section_end, f"{key}={value}")
                 section_end += 1
 
-        config_path.write_text("\\n".join(lines).rstrip() + "\\n", encoding="utf-8")
+        config_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
         self.chroot([
             "chown", f"{username}:{username}",
             f"/home/{username}/.config/kwinrc",
