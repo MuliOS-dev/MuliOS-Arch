@@ -2612,6 +2612,11 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         ).strip().lower()
 
         profiles = {
+            "game": [
+                "steam",
+                "gamemode",
+                "gamescope",
+            ],
             "gaming": [
                 "steam",
                 "gamemode",
@@ -2633,6 +2638,11 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
                 "libreoffice-fresh",
                 "evince",
             ],
+            "study": [
+                "libreoffice-fresh",
+                "evince",
+            ],
+            "server": [],
             "privacy": [
                 "firejail",
                 "tor",
@@ -2654,7 +2664,7 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             f"{profile}"
         )
 
-        if profile == "gaming":
+        if profile in ("game", "gaming"):
             self.log(
                 "Gaming profile requires multilib."
             )
