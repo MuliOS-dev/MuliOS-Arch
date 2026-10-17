@@ -2573,11 +2573,11 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
                 f"{type(exc).__name__}: {exc}. Continuing with default KWin effects."
             )
             return
-        if effect == "glass":
-            self.configure_glass_effect()
+        if effect in {"glass", "forceblur"}:
+            self.configure_desktop_effect(effect)
             self.log(
-                "KWin Effects Glass installed and enabled for the installed user. "
-                "Disabled conflicting built-in blur, alternate blur, and translucency effects."
+                f"{display_name} installed and enabled for the installed user. "
+                "Disabled conflicting blur effects."
             )
         else:
             self.log(
@@ -2585,11 +2585,14 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
                 "after the first login; do not enable it alongside another blur fork."
             )
 
-    def configure_glass_effect(self):
-        """Enable Glass in the installed user's KWin config and disable conflicting effects."""
+    def configure_desktop_effect(self, effect):
+        """Persist the selected KWin blur fork and disable incompatible alternatives."""
         username = str(self.state.get("username", "")).strip()
         if not username:
-            self.log("WARNING: No installed username; Glass was installed but could not be enabled automatically.")
+            self.log(
+                f"WARNING: No installed username; {effect} was installed but "
+                "could not be enabled automatically."
+            )
             return
 
         config_path = self.target / "home" / username / ".config" / "kwinrc"
@@ -2615,13 +2618,17 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             len(lines),
         )
 
+        # Better Blur installs the KWin plugin as "forceblur". Blur forks
+        # cannot be enabled together; Glass also conflicts with translucency.
         settings = {
-            "glassEnabled": "true",
+            "glassEnabled": "true" if effect == "glass" else "false",
+            "forceblurEnabled": "true" if effect == "forceblur" else "false",
             "blurEnabled": "false",
             "blurplusEnabled": "false",
-            "forceblurEnabled": "false",
-            "translucencyEnabled": "false",
         }
+        if effect == "glass":
+            settings["translucencyEnabled"] = "false"
+
         for key, value in settings.items():
             pattern = re.compile(rf"^\s*{re.escape(key)}\s*=.*$", re.IGNORECASE)
             matches = [
