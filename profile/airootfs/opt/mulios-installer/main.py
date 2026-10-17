@@ -210,6 +210,11 @@ class MuliOSInstaller(QMainWindow):
         self.back_button.setEnabled(0 < index < IDX_INSTALL)
         self.next_button.setVisible(index < IDX_INSTALL)
 
+        if index == IDX_PROFILE:
+            self.profile_page.refresh_availability(
+                wifi_available=has_connected_wifi(),
+            )
+
         if index == IDX_SUMMARY:
             self.next_button.setText("Install")
             self.summary_page.set_state(
