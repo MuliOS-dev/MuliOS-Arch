@@ -682,12 +682,12 @@ cmd_update() {
     if [[ "$BETA_MODE" == "1" ]]; then
         local os_version=""
         os_version="$(sed -n 's/^VERSION_ID=//p' /etc/os-release | tr -d '"')"
-        [[ "$os_version" == *C ]] || {
-            err "unable to fetch from beta: your version is not a canary build."
+        [[ "$os_version" =~ ^[0-9]{2}\.[0-9]{2}\.[0-9]{2}-beta(\.[0-9]+)?$ ]] || {
+            err "unable to fetch from beta: your version is not a beta build (expected YYYY.MM.DD-beta or YYYY.MM.DD-beta.N)."
             exit 1
         }
         GITHUB_BRANCH="beta"
-        info "MUpdate $VERSION — direct repository merge (beta/canary)"
+        info "MUpdate $VERSION — direct repository merge (beta)"
     else
         GITHUB_BRANCH="main"
         info "MUpdate $VERSION — direct repository merge"
@@ -741,7 +741,7 @@ BETA / CANARY
 
   Beta updates are available only on Canary builds (C suffix).
   Otherwise MUpdate aborts with:
-    unable to fetch from beta: your version is not a canary build.
+    unable to fetch from beta: your version is not a beta build.
 
 PROFILE
   sudo mupdate profile
