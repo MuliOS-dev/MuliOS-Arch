@@ -733,13 +733,15 @@ UPDATE
   sudo mupdate sync
   sudo mupdate update -y
 
-BETA / CANARY
+BETA CHANNEL
   sudo mupdate update beta
 
   Beta updates target only:
     https://github.com/MuliOS-dev/MuliOS-Arch/tree/beta
 
-  Beta updates are available only on Canary builds (C suffix).
+  Beta updates are available only on versions ending in -beta, optionally
+  followed by a numeric sequence (for example, 26.10.17-beta.22).
+  Stable and dev versions cannot use the beta channel.
   Otherwise MUpdate aborts with:
     unable to fetch from beta: your version is not a beta build.
 
