@@ -275,6 +275,7 @@ class MuliOSInstaller(QMainWindow):
             "bootloader": self.bootloader_page.selected_bootloader(),
             **self.account_page.data(),
             "desktop_environment": self.desktop_page.selected_desktop(),
+            "desktop_effect": self.desktop_page.selected_effect(),
             "extra_packages": self.packages_page.selected_packages(),
             "profile": self.profile_page.selected_profile(),
             "profile_name": self.profile_page.selected_profile_name(),
