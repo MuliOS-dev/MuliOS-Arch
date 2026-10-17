@@ -4,6 +4,17 @@ This document describes how MuliOS-Arch releases are prepared, tested, and publi
 
 A release of MuliOS-Arch consists of a built and verified ISO image, along with accompanying release notes and documentation updates, made available to the community.
 
+## Version Naming
+
+MuliOS OS releases use a date followed by an explicit channel:
+
+- `YY.MM.DD-stable` — stable releases, for example `26.10.17-stable`.
+- `YY.MM.DD-beta` — beta releases, for example `26.10.17-beta`.
+- `YY.MM.DD-dev` — development builds, for example `26.10.17-dev`.
+- An optional numeric sequence may follow the channel for multiple builds on the same date, such as `26.10.17-beta.22` or `26.10.17-dev.1`.
+
+Use the same version value in `profile/version`, the ISO filename and metadata, and boot-menu labels. The build script validates this format and injects the version into boot menus. MUpdate's beta channel accepts only `-beta` versions, optionally followed by a numeric sequence; stable and dev versions cannot use the beta channel.
+
 ## Overview of the Release Cycle
 
 ```
