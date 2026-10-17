@@ -2501,6 +2501,8 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             "dolphin",
         ])
 
+        self.install_selected_desktop_effect()
+
         # configure_desktop() starts from the installed package set, so write
         # the final SDDM configuration after the package installation step.
         sddm_conf = self.target / "etc/sddm.conf"
@@ -2518,6 +2520,64 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
 
         self.chroot(["systemctl", "enable", "sddm"])
         self.progress.emit(70)
+
+    def install_selected_desktop_effect(self):
+        """Build the one optional KWin effect selected in the Desktop page.
+
+        A failed optional effect build is logged but does not invalidate the
+        base OS installation. Both projects are blur-effect forks, so only one
+        is ever built.
+        """
+        effect = str(self.state.get("desktop_effect", "default")).strip().lower()
+        repositories = {
+            "forceblur": (
+                "https://github.com/taj-ny/kwin-effects-forceblur.git",
+                "kwin-effects-forceblur",
+            ),
+            "glass": (
+                "https://github.com/4v3ngR/kwin-effects-glass.git",
+                "kwin-effects-glass",
+            ),
+        }
+
+        if effect in ("", "default", "none"):
+            self.log("Keeping the default KDE Plasma blur effect.")
+            return
+        if effect not in repositories:
+            self.log(f"Unknown desktop effect '{effect}'; keeping KDE defaults.")
+            return
+
+        repository_url, directory = repositories[effect]
+        self.log(f"Installing selected KWin effect: {effect}")
+
+        try:
+            self.pacman_install([
+                "git",
+                "cmake",
+                "base-devel",
+                "extra-cmake-modules",
+                "qt6-tools",
+            ])
+            script = (
+                "set -eu; "
+                f"rm -rf /tmp/{directory}; "
+                f"git clone --depth 1 {shlex.quote(repository_url)} /tmp/{directory}; "
+                f"cmake -S /tmp/{directory} -B /tmp/{directory}/build "
+                "-DCMAKE_INSTALL_PREFIX=/usr; "
+                f"cmake --build /tmp/{directory}/build --parallel 2; "
+                f"cmake --install /tmp/{directory}/build; "
+                f"rm -rf /tmp/{directory}"
+            )
+            self.chroot(["bash", "-lc", script])
+            self.log(
+                f"Selected KWin effect '{effect}' was built and installed. "
+                "Enable it from System Settings > Desktop Effects after first boot."
+            )
+        except Exception as exc:
+            self.log(
+                f"WARNING: Could not install optional KWin effect '{effect}': "
+                f"{type(exc).__name__}: {exc}. The default KDE blur remains available."
+            )
 
     # ------------------------------------------------------------------
     # Extra packages
