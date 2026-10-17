@@ -1,6 +1,29 @@
 #!/bin/bash
 set -Eeuo pipefail
 
+# Set the version from the current build date and the channel entered by the user.
+BUILD_DATE="$(date +%y.%m.%d)"
+PROFILE_VERSION_FILE="$(pwd)/profile/version"
+
+if [[ ! -f "$PROFILE_VERSION_FILE" ]]; then
+    echo "[ERROR]: profile/version was not found. Run this script from the repository root." >&2
+    exit 1
+fi
+
+while true; do
+    read -r -p "Enter release channel/suffix (e.g. stable, beta, indev, indev.11): " release_channel
+
+    if [[ "$release_channel" =~ ^[a-z][a-z0-9-]*(\.[0-9]+)?$ ]]; then
+        break
+    fi
+
+    echo "[ERROR]: invalid channel. Use lowercase letters/numbers/hyphens, optionally followed by .N (e.g. indev.11)." >&2
+done
+
+mulios_version="${BUILD_DATE}-${release_channel}"
+printf '%s\\n' "$mulios_version" > "$PROFILE_VERSION_FILE"
+echo "[INFO]: building MuliOS version $mulios_version"
+
 install_dependencies() {
     echo "[INFO]: installing dependencies"
 
@@ -73,7 +96,7 @@ build() {
 
     if [[ ! "$mulios_version" =~ ^[0-9]{2}\.[0-9]{2}\.[0-9]{2}-(stable|beta|dev)(\.[0-9]+)?$ ]]; then
         echo "[ERROR]: invalid MuliOS version '$mulios_version'." >&2
-        echo "[ERROR]: expected YY.MM.DD-stable, -beta, or -dev, optionally followed by .N." >&2
+        echo "[ERROR]: expected YY.MM.DD-CHANNEL, optionally followed by .N." >&2
         exit 1
     fi
 
