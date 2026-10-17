@@ -521,7 +521,7 @@ validate_profile_archive() {
 
 cmd_profile() {
     require_root
-    require_cmd curl jq git sha1sum sha256sum unzip mktemp mkdir rm mv cp chmod find sort wc
+    require_cmd curl jq git sha1sum sha256sum unzip mktemp mkdir rm mv cp chmod find sort wc stat cut grep base64
     verify_os
     acquire_lock
 
