@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
 import shutil
 import subprocess
 import traceback
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -2544,77 +2546,26 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
     # ------------------------------------------------------------------
 
     def profile_packages(self):
-        profile = str(
-            self.state.get(
-                "profile",
-                "generic",
-            )
-        ).strip().lower()
-
-        profiles = {
-            "gaming": [
-                "steam",
-                "gamemode",
-                "gamescope",
-            ],
-            "code": [
-                "git",
-                "base-devel",
-                "python",
-                "gcc",
-                "clang",
-            ],
-            "ai": [
-                "git",
-                "python",
-                "python-pip",
-            ],
-            "school": [
-                "libreoffice-fresh",
-                "evince",
-            ],
-            "privacy": [
-                "firejail",
-                "tor",
-            ],
-            "generic": [],
-        }
-
-        return profile, profiles.get(
-            profile
-        )
+        profile = str(self.state.get("profile", "generic")).strip().lower()
+        allowed = {"ai", "code", "gaming", "generic", "privacy", "server", "study"}
+        if profile not in allowed:
+            self.log(f"Unknown profile '{profile}'; falling back to Generic.")
+            profile = "generic"
+        return profile, []
 
     def configure_profile(self):
-        profile, packages = (
-            self.profile_packages()
-        )
+        profile, _ = self.profile_packages()
+        self.log(f"Selected MuliOS profile: {profile}")
 
-        self.log(
-            f"Configuring MuliOS profile: "
-            f"{profile}"
-        )
-
+        # Specialized profile package installation is handled by MUpdate from
+        # MuliOS-dev/update. Do not install a second, stale set of local packages.
         if profile == "gaming":
-            self.log(
-                "Gaming profile requires multilib."
-            )
-
-            self.state[
-                "enable_multilib"
-            ] = True
-
+            self.state["enable_multilib"] = True
             self.configure_multilib()
 
-        if packages:
-            self.pacman_install(
-                packages
-            )
-
         self.write_file(
-            self.target /
-            "var/lib/mupdate/"
-            "initial-profile",
-            profile + "\n",
+            self.target / "var/lib/mupdate/initial-profile",
+            profile + "\\n",
         )
 
     # ------------------------------------------------------------------
@@ -2683,6 +2634,72 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         self.log(
             f"Installed MUpdate from {source}"
         )
+
+        self.install_selected_profile()
+
+    def install_selected_profile(self):
+        profile = str(self.state.get("profile", "generic")).strip().lower()
+        if profile == "generic":
+            self.log("Generic profile selected; keeping the default system configuration.")
+            return
+
+        # The profile page only exposes specialized choices with Wi-Fi and
+        # internet. Recheck here because connectivity may have changed.
+        wifi = subprocess.run(
+            ["nmcli", "-t", "-f", "TYPE,STATE", "device"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+        wifi_connected = wifi.returncode == 0 and any(
+            line.strip() == "wifi:connected" for line in wifi.stdout.splitlines()
+        )
+        if not wifi_connected or not self.network_available:
+            self.log("Wi-Fi/internet is no longer available; falling back to Generic.")
+            self.write_file(self.target / "var/lib/mupdate/initial-profile", "generic\\n")
+            return
+
+        try:
+            request = urllib.request.Request(
+                "https://api.github.com/repos/MuliOS-dev/update/git/trees/main?recursive=1",
+                headers={"Accept": "application/vnd.github+json",
+                         "User-Agent": "MuliOS-Installer"},
+            )
+            with urllib.request.urlopen(request, timeout=8) as response:
+                tree = json.loads(response.read().decode("utf-8"))
+            if tree.get("truncated") or not isinstance(tree.get("tree"), list):
+                raise InstallError("The MuliOS profile repository tree is incomplete.")
+
+            available = set()
+            for item in tree["tree"]:
+                path = item.get("path", "")
+                if item.get("type") != "blob" or not path.startswith("profiles/"):
+                    continue
+                parts = path.split("/")
+                if len(parts) == 3 and parts[2].endswith(".zip"):
+                    available.add(parts[1])
+
+            ordered = sorted(available)
+            if profile not in ordered:
+                raise InstallError(
+                    f"The selected profile '{profile}' is not currently available "
+                    "in the MuliOS profile repository."
+                )
+
+            choice = ordered.index(profile) + 1
+            self.log(
+                f"Installing the {profile} profile through MUpdate "
+                f"(discovered menu entry {choice})."
+            )
+            self.chroot(
+                ["/usr/local/bin/mupdate", "profile"],
+                input_text=f"{choice}\\ny\\n",
+            )
+            self.log(f"MUpdate installed the {profile} profile.")
+        except Exception as exc:
+            self.log(f"Profile installation failed: {type(exc).__name__}: {exc}")
+            raise InstallError(
+                f"Could not install the selected MuliOS profile '{profile}'. "
+                "Check the installer log and internet connection."
+            ) from exc
 
     # ------------------------------------------------------------------
     # Swap
