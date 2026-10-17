@@ -521,109 +521,82 @@ validate_profile_archive() {
 
 cmd_profile() {
     require_root
-    require_cmd curl jq git sha1sum sha256sum unzip mktemp mkdir rm mv cp chmod find sort wc stat cut grep base64
+    require_cmd curl jq git sha1sum sha256sum unzip mktemp mkdir rm mv cp chmod find sort wc stat cut grep base64 sed tr
     verify_os
     acquire_lock
 
     local tree_file="$WORKDIR/update-tree.json"
     local manifest="$WORKDIR/profiles.tsv"
-
     info "Checking MuliOS profile repository..."
     curl -fsSL --retry 3 --retry-all-errors \
         -H "Accept: application/vnd.github+json" \
         -H "X-GitHub-Api-Version: 2022-11-28" \
         "https://api.github.com/repos/$UPDATE_OWNER/$UPDATE_REPO/git/trees/$UPDATE_BRANCH?recursive=1" \
-        > "$tree_file" ||
-        die "Unable to read the MuliOS update repository."
+        > "$tree_file" || die "Unable to read the MuliOS update repository."
 
     jq -e '.tree | type == "array"' "$tree_file" >/dev/null ||
         die "GitHub returned an invalid profile repository tree."
-
-    [[ "\$(jq -r '.truncated // false' "$tree_file")" == "false" ]] ||
+    [[ "$(jq -r '.truncated // false' "$tree_file")" == "false" ]] ||
         die "GitHub returned a truncated profile tree; refusing an incomplete profile list."
 
-    info "Profile tree verified: \$(jq -r '.sha' "$tree_file")"
+    info "Profile tree verified: $(jq -r '.sha' "$tree_file")"
     : > "$manifest"
 
-    # Only a ZIP directly inside profiles/<name>/ qualifies.
-    # Anything deeper, including profiles/<name>/old/, is ignored.
-    while IFS="\$(printf '\\t')" read -r path mode type sha; do
-        [[ "$type" == "blob" ]] || continue
-        [[ "$path" == profiles/* ]] || continue
-
-        local remainder="\${path#profiles/}"
-        local profile="\${remainder%%/*}"
-        [[ -n "$profile" ]] || continue
-        local inside="\${path#profiles/$profile/}"
-
-        [[ "$inside" != "$path" ]] || continue
-        [[ "$inside" == *.zip ]] || continue
-        [[ "$inside" != */* ]] || continue
-
-        printf '%s\\t%s\\t%s\\n' "$profile" "$path" "$sha" >> "$manifest"
+    # Only a ZIP directly inside profiles/<name>/ qualifies. Empty folders
+    # and nested historical files are deliberately not listed.
+    while IFS="$(printf '\t')" read -r path mode type sha; do
+        [[ "$type" == "blob" && "$path" == profiles/* ]] || continue
+        profile="$(printf '%s\n' "$path" | cut -d/ -f2)"
+        inside="$(printf '%s\n' "$path" | cut -d/ -f3-)"
+        [[ -n "$profile" && "$inside" == *.zip && "$inside" != */* ]] || continue
+        printf '%s\t%s\t%s\n' "$profile" "$path" "$sha" >> "$manifest"
     done < <(jq -r '.tree[] | [.path,.mode,.type,.sha] | @tsv' "$tree_file")
 
     [[ -s "$manifest" ]] || die "No installable MuliOS profiles were found."
-
-    mapfile -t PROFILE_ROWS < "$manifest"
-
+    sort -t "$(printf '\t')" -k1,1 "$manifest" -o "$manifest"
+    local count
+    count="$(wc -l < "$manifest" | tr -d ' ')"
     echo
     info "Available MuliOS profiles:"
+    cut -f1 "$manifest" | awk '{ print "  " NR ": " $0 }'
     echo
 
-    local i=1 row profile path sha
-    for row in "\${PROFILE_ROWS[@]}"; do
-        IFS="\$(printf '\\t')" read -r profile path sha <<< "$row"
-        printf '  %d: %s\\n' "$i" "$profile"
-        ((i+=1))
-    done
-
-    echo
-    local choice
+    local choice row profile path sha
     while true; do
-        read -r -p "Select a profile [1-\${#PROFILE_ROWS[@]}]: " choice
+        read -r -p "Select a profile [1-$count]: " choice
         [[ "$choice" =~ ^[0-9]+$ ]] || { warn "Enter a number."; continue; }
-        (( choice >= 1 && choice <= \${#PROFILE_ROWS[@]} )) || { warn "Invalid profile selection."; continue; }
+        (( choice >= 1 && choice <= count )) || { warn "Invalid profile selection."; continue; }
         break
     done
 
-    row="\${PROFILE_ROWS[\$((choice-1))]}"
-    IFS="\$(printf '\\t')" read -r profile path sha <<< "$row"
-
-    echo
+    row="$(sed -n "$choice"'p' "$manifest")"
+    IFS="$(printf '\t')" read -r profile path sha <<< "$row"
     info "Selected profile: $profile"
-    info "Package: \$(basename "$path")"
+    info "Package: $(basename "$path")"
 
     local archive="$WORKDIR/$profile.zip"
     local extract_dir="$WORKDIR/$profile"
-
     download_verified_profile_zip "$path" "$sha" "$archive"
     validate_profile_archive "$archive" "$extract_dir"
 
     echo
-    warn "sh/install.sh will always run before sh/packages.sh."
-    echo
-
+    warn "sh/install.sh runs before sh/packages.sh."
     if ! confirm "Install the $profile profile?"; then
         warn "Profile installation cancelled."
         return 0
     fi
 
     info "Running sh/install.sh first..."
-    ( cd "$extract_dir" && ./sh/install.sh ) ||
-        die "Profile kernel/image installation failed."
+    ( cd "$extract_dir" && ./sh/install.sh ) || die "Profile kernel/image installation failed."
     ok "sh/install.sh completed."
-
     info "Running sh/packages.sh second..."
-    ( cd "$extract_dir" && ./sh/packages.sh ) ||
-        die "Profile package installation failed."
+    ( cd "$extract_dir" && ./sh/packages.sh ) || die "Profile package installation failed."
     ok "sh/packages.sh completed."
 
     mkdir -p "$STATE_DIR/profiles"
-    printf '%s\\n' "$profile" > "$STATE_DIR/profiles/active"
-    printf '%s\\n' "$sha" > "$STATE_DIR/profiles/$profile.sha"
-    printf '%s\\n' "\$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$STATE_DIR/profiles/last-install"
-
+    printf '%s\n' "$profile" > "$STATE_DIR/profiles/active"
+    printf '%s\n' "$sha" > "$STATE_DIR/profiles/$profile.sha"
+    printf '%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$STATE_DIR/profiles/last-install"
     echo
     ok "MuliOS $profile profile installation complete."
     warn "Reboot if the profile installed a new kernel."
