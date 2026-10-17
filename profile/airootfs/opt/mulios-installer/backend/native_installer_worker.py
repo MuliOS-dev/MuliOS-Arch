@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
 import shutil
 import subprocess
 import traceback
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -2519,6 +2521,63 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         self.chroot(["systemctl", "enable", "sddm"])
         self.progress.emit(70)
 
+    def install_desktop_effect(self):
+        effect = str(self.state.get("desktop_effect", "default")).strip().lower()
+        sources = {
+            "forceblur": (
+                "https://github.com/taj-ny/kwin-effects-forceblur",
+                "Better Blur (Force Blur)",
+            ),
+            "glass": (
+                "https://github.com/4v3ngR/kwin-effects-glass",
+                "KWin Effects Glass",
+            ),
+        }
+        if effect == "default" or not effect:
+            self.log("Keeping the default KWin effects.")
+            return
+        if effect not in sources:
+            raise InstallError(f"Unknown desktop effect selection: {effect}")
+        if not self.network_available:
+            raise InstallError(
+                "A desktop effect was selected, but internet access is unavailable. "
+                "Go back and choose Keep default, or reconnect and retry."
+            )
+
+        repository, display_name = sources[effect]
+        self.log(f"Building {display_name} for the installed KDE/ KWin version...")
+        # Build against the exact KWin/Qt libraries installed on the target.
+        # CMake performs the upstream compatibility checks and fails clearly
+        # if the chosen effect does not support this Plasma/KWin version.
+        build_script = (
+            "set -euo pipefail; "
+            "pacman -S --needed --noconfirm base-devel git cmake "
+            "extra-cmake-modules qt6-tools kwin; "
+            "rm -rf /tmp/mulios-kwin-effect; "
+            f"git clone --depth 1 {shlex.quote(repository)} /tmp/mulios-kwin-effect; "
+            "cmake -S /tmp/mulios-kwin-effect -B /tmp/mulios-kwin-effect/build "
+            "-DCMAKE_INSTALL_PREFIX=/usr; "
+            "cmake --build /tmp/mulios-kwin-effect/build --parallel; "
+            "cmake --install /tmp/mulios-kwin-effect/build; "
+            "rm -rf /tmp/mulios-kwin-effect"
+        )
+        try:
+            self.chroot(["bash", "-lc", build_script])
+        except Exception as exc:
+            # This is an optional desktop customization. A compatibility or
+            # build failure must not turn an otherwise successful OS install
+            # into a failed install; make the fallback explicit in the log.
+            self.state["desktop_effect"] = "default"
+            self.log(
+                f"WARNING: Could not install {display_name}: "
+                f"{type(exc).__name__}: {exc}. Continuing with default KWin effects."
+            )
+            return
+        self.log(
+            f"{display_name} installed. Enable it from System Settings > Desktop Effects "
+            "after the first login; do not enable it alongside another blur fork."
+        )
+
     # ------------------------------------------------------------------
     # Extra packages
     # ------------------------------------------------------------------
@@ -2544,77 +2603,26 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
     # ------------------------------------------------------------------
 
     def profile_packages(self):
-        profile = str(
-            self.state.get(
-                "profile",
-                "generic",
-            )
-        ).strip().lower()
-
-        profiles = {
-            "gaming": [
-                "steam",
-                "gamemode",
-                "gamescope",
-            ],
-            "code": [
-                "git",
-                "base-devel",
-                "python",
-                "gcc",
-                "clang",
-            ],
-            "ai": [
-                "git",
-                "python",
-                "python-pip",
-            ],
-            "school": [
-                "libreoffice-fresh",
-                "evince",
-            ],
-            "privacy": [
-                "firejail",
-                "tor",
-            ],
-            "generic": [],
-        }
-
-        return profile, profiles.get(
-            profile
-        )
+        profile = str(self.state.get("profile", "generic")).strip().lower()
+        allowed = {"ai", "code", "gaming", "generic", "privacy", "server", "study"}
+        if profile not in allowed:
+            self.log(f"Unknown profile '{profile}'; falling back to Generic.")
+            profile = "generic"
+        return profile, []
 
     def configure_profile(self):
-        profile, packages = (
-            self.profile_packages()
-        )
+        profile, _ = self.profile_packages()
+        self.log(f"Selected MuliOS profile: {profile}")
 
-        self.log(
-            f"Configuring MuliOS profile: "
-            f"{profile}"
-        )
-
+        # Specialized profile package installation is handled by MUpdate from
+        # MuliOS-dev/update. Do not install a second, stale set of local packages.
         if profile == "gaming":
-            self.log(
-                "Gaming profile requires multilib."
-            )
-
-            self.state[
-                "enable_multilib"
-            ] = True
-
+            self.state["enable_multilib"] = True
             self.configure_multilib()
 
-        if packages:
-            self.pacman_install(
-                packages
-            )
-
         self.write_file(
-            self.target /
-            "var/lib/mupdate/"
-            "initial-profile",
-            profile + "\n",
+            self.target / "var/lib/mupdate/initial-profile",
+            profile + "\\n",
         )
 
     # ------------------------------------------------------------------
@@ -2634,14 +2642,15 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             return
 
         candidates = [
+            # Prefer the current profile-aware MUpdate installed in the live ISO.
             Path(
-                "/opt/mulios-installer/mupdate"
+                "/usr/local/bin/mupdate"
             ),
             Path(
                 "/opt/mupdate"
             ),
             Path(
-                "/usr/local/bin/mupdate"
+                "/opt/mulios-installer/mupdate"
             ),
             Path(__file__).resolve().parent.parent /
             "mupdate",
@@ -2683,6 +2692,72 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         self.log(
             f"Installed MUpdate from {source}"
         )
+
+        self.install_selected_profile()
+
+    def install_selected_profile(self):
+        profile = str(self.state.get("profile", "generic")).strip().lower()
+        if profile == "generic":
+            self.log("Generic profile selected; keeping the default system configuration.")
+            return
+
+        # The profile page only exposes specialized choices with Wi-Fi and
+        # internet. Recheck here because connectivity may have changed.
+        wifi = subprocess.run(
+            ["nmcli", "-t", "-f", "TYPE,STATE", "device"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+        wifi_connected = wifi.returncode == 0 and any(
+            line.strip() == "wifi:connected" for line in wifi.stdout.splitlines()
+        )
+        if not wifi_connected or not self.network_available:
+            self.log("Wi-Fi/internet is no longer available; falling back to Generic.")
+            self.write_file(self.target / "var/lib/mupdate/initial-profile", "generic\\n")
+            return
+
+        try:
+            request = urllib.request.Request(
+                "https://api.github.com/repos/MuliOS-dev/update/git/trees/main?recursive=1",
+                headers={"Accept": "application/vnd.github+json",
+                         "User-Agent": "MuliOS-Installer"},
+            )
+            with urllib.request.urlopen(request, timeout=8) as response:
+                tree = json.loads(response.read().decode("utf-8"))
+            if tree.get("truncated") or not isinstance(tree.get("tree"), list):
+                raise InstallError("The MuliOS profile repository tree is incomplete.")
+
+            available = set()
+            for item in tree["tree"]:
+                path = item.get("path", "")
+                if item.get("type") != "blob" or not path.startswith("profiles/"):
+                    continue
+                parts = path.split("/")
+                if len(parts) == 3 and parts[2].endswith(".zip"):
+                    available.add(parts[1])
+
+            ordered = sorted(available)
+            if profile not in ordered:
+                raise InstallError(
+                    f"The selected profile '{profile}' is not currently available "
+                    "in the MuliOS profile repository."
+                )
+
+            choice = ordered.index(profile) + 1
+            self.log(
+                f"Installing the {profile} profile through MUpdate "
+                f"(discovered menu entry {choice})."
+            )
+            self.chroot(
+                ["/usr/local/bin/mupdate", "profile"],
+                input_text=f"{choice}\\ny\\n",
+            )
+            self.log(f"MUpdate installed the {profile} profile.")
+        except Exception as exc:
+            self.log(f"Profile installation failed: {type(exc).__name__}: {exc}")
+            raise InstallError(
+                f"Could not install the selected MuliOS profile '{profile}'. "
+                "Check the installer log and internet connection."
+            ) from exc
 
     # ------------------------------------------------------------------
     # Swap
@@ -3583,6 +3658,7 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             self.progress.emit(73)
 
             self.install_extra_packages()
+            self.install_desktop_effect()
             self.progress.emit(77)
 
             self.configure_profile()

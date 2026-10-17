@@ -15,6 +15,10 @@ VERSION="a1.0.6"
 GITHUB_OWNER="MuliOS-dev"
 GITHUB_REPO="MuliOS-Arch"
 GITHUB_BRANCH="main"
+UPDATE_OWNER="MuliOS-dev"
+UPDATE_REPO="update"
+UPDATE_BRANCH="main"
+PROFILE_ROOT="profiles"
 BETA_MODE=0
 
 STATE_DIR="/var/lib/mupdate"
@@ -400,16 +404,17 @@ sync_repository() {
 
 profile_name_from_path() {
     local path="$1"
-    local remainder="\${path#"$PROFILE_ROOT"/}"
-    printf '%s' "\${remainder%%/*}"
+    printf '%s' "$path" | cut -d/ -f2
 }
 
 profile_zip_is_direct_child() {
     local path="$1"
     local profile="$2"
-    local remainder="\${path#"$PROFILE_ROOT/$profile"/}"
+    local candidate_profile="$(printf '%s' "$path" | cut -d/ -f2)"
+    local remainder="$(printf '%s' "$path" | cut -d/ -f3-)"
 
-    [[ "$remainder" != "$path" ]] || return 1
+    [[ "$candidate_profile" == "$profile" ]] || return 1
+    [[ "$path" == "$PROFILE_ROOT/"* ]] || return 1
     [[ "$remainder" == *.zip ]] || return 1
     [[ "$remainder" != */* ]] || return 1
 }
@@ -420,43 +425,61 @@ download_verified_profile_zip() {
     local destination="$3"
     local raw="$WORKDIR/profile.raw"
     local blob_json="$WORKDIR/profile-blob.json"
+    local pointer="$WORKDIR/profile-pointer"
 
-    info "Downloading profile package: \$(basename "$path")"
-
-    curl -fsSL --retry 3 --retry-all-errors \
-        -o "$raw" \
-        "https://raw.githubusercontent.com/$UPDATE_OWNER/$UPDATE_REPO/$UPDATE_BRANCH/$path" ||
+    info "Downloading profile package: $(basename "$path")"
+    curl -fsSL --retry 3 --retry-all-errors -o "$raw"         "https://raw.githubusercontent.com/$UPDATE_OWNER/$UPDATE_REPO/$UPDATE_BRANCH/$path" ||
         die "Failed to download profile package: $path"
 
     local actual_sha
-    actual_sha="\$(git hash-object "$raw")"
-
-    if [[ "$actual_sha" != "$expected_sha" ]]; then
-        warn "Raw profile download hash mismatch; retrieving the Git blob..."
-
-        curl -fsSL --retry 3 --retry-all-errors \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/$UPDATE_OWNER/$UPDATE_REPO/git/blobs/$expected_sha" \
-            > "$blob_json" ||
-            die "Failed retrieving profile Git blob: $path"
-
-        [[ "\$(jq -r '.encoding // empty' "$blob_json")" == "base64" ]] ||
-            die "GitHub returned an unsupported blob encoding for $path"
-
-        jq -r '.content // empty' "$blob_json" |
-            tr -d '\\n' |
-            base64 -d > "$raw" ||
-            die "Failed decoding profile Git blob: $path"
-
-        actual_sha="\$(git hash-object "$raw")"
+    actual_sha="$(git hash-object "$raw")"
+    if [[ "$actual_sha" == "$expected_sha" ]]; then
+        mv "$raw" "$destination"
+        ok "Verified profile package: $(basename "$path")"
+        return 0
     fi
 
-    [[ "$actual_sha" == "$expected_sha" ]] ||
-        die "Profile package verification failed: $path"
+    # Git LFS files are represented by a small pointer blob in the Git tree,
+    # while raw.githubusercontent.com serves the actual large ZIP. Verify both
+    # the pointer's Git blob SHA and the downloaded payload's LFS SHA-256/size.
+    warn "Raw profile download is not the Git tree blob; checking for Git LFS..."
+    curl -fsSL --retry 3 --retry-all-errors         -H "Accept: application/vnd.github+json"         -H "X-GitHub-Api-Version: 2022-11-28"         "https://api.github.com/repos/$UPDATE_OWNER/$UPDATE_REPO/git/blobs/$expected_sha"         > "$blob_json" ||
+        die "Failed retrieving profile Git blob: $path"
+
+    [[ "$(jq -r '.encoding // empty' "$blob_json")" == "base64" ]] ||
+        die "GitHub returned an unsupported blob encoding for $path"
+
+    jq -r '.content // empty' "$blob_json" | tr -d '\n' | base64 -d > "$pointer" ||
+        die "Failed decoding profile Git blob: $path"
+
+    local pointer_sha
+    pointer_sha="$(git hash-object "$pointer")"
+    [[ "$pointer_sha" == "$expected_sha" ]] ||
+        die "Profile pointer verification failed: $path"
+
+    if grep -q '^version https://git-lfs.github.com/spec/v1$' "$pointer"; then
+        local expected_lfs_sha expected_size actual_lfs_sha actual_size
+        expected_lfs_sha="$(sed -n 's/^oid sha256://p' "$pointer")"
+        expected_size="$(sed -n 's/^size //p' "$pointer")"
+        actual_lfs_sha="$(sha256sum "$raw" | cut -d ' ' -f 1)"
+        actual_size="$(stat -c '%s' "$raw")"
+
+        [[ "$expected_lfs_sha" =~ ^[0-9a-f]{64}$ ]] ||
+            die "Invalid Git LFS SHA-256 pointer for $path"
+        [[ "$expected_size" =~ ^[0-9]+$ ]] ||
+            die "Invalid Git LFS size pointer for $path"
+        [[ "$actual_lfs_sha" == "$expected_lfs_sha" && "$actual_size" == "$expected_size" ]] ||
+            die "Git LFS profile package integrity check failed: $path"
+    else
+        # Non-LFS fallback: use the Git blob content itself and verify its SHA.
+        cp "$pointer" "$raw"
+        actual_sha="$(git hash-object "$raw")"
+        [[ "$actual_sha" == "$expected_sha" ]] ||
+            die "Profile package verification failed: $path"
+    fi
 
     mv "$raw" "$destination"
-    ok "Verified profile package: \$(basename "$path")"
+    ok "Verified profile package: $(basename "$path")"
 }
 
 validate_profile_archive() {
@@ -466,7 +489,7 @@ validate_profile_archive() {
     info "Validating profile archive..."
 
     unzip -tq "$archive" ||
-        die "Profile archive is corrupt: \$(basename "$archive")"
+        die "Profile archive is corrupt: $(basename "$archive")"
 
     rm -rf "$extract_dir"
     mkdir -p "$extract_dir"
@@ -488,7 +511,7 @@ validate_profile_archive() {
         die "Profile sh/packages.sh failed shell syntax validation."
 
     local package_count
-    package_count="\$(find "$extract_dir" -maxdepth 1 -type f \
+    package_count="$(find "$extract_dir" -maxdepth 1 -type f \
         \( -name '*.pkg.tar.zst' -o -name '*.pkg.tar.xz' -o -name '*.pkg.tar.gz' \) |
         wc -l)"
 
@@ -503,109 +526,82 @@ validate_profile_archive() {
 
 cmd_profile() {
     require_root
-    require_cmd curl jq git sha1sum sha256sum unzip mktemp mkdir rm mv cp chmod find sort wc
+    require_cmd curl jq git sha1sum sha256sum unzip mktemp mkdir rm mv cp chmod find sort wc stat cut grep base64 sed tr
     verify_os
     acquire_lock
 
     local tree_file="$WORKDIR/update-tree.json"
     local manifest="$WORKDIR/profiles.tsv"
-
     info "Checking MuliOS profile repository..."
     curl -fsSL --retry 3 --retry-all-errors \
         -H "Accept: application/vnd.github+json" \
         -H "X-GitHub-Api-Version: 2022-11-28" \
         "https://api.github.com/repos/$UPDATE_OWNER/$UPDATE_REPO/git/trees/$UPDATE_BRANCH?recursive=1" \
-        > "$tree_file" ||
-        die "Unable to read the MuliOS update repository."
+        > "$tree_file" || die "Unable to read the MuliOS update repository."
 
     jq -e '.tree | type == "array"' "$tree_file" >/dev/null ||
         die "GitHub returned an invalid profile repository tree."
-
-    [[ "\$(jq -r '.truncated // false' "$tree_file")" == "false" ]] ||
+    [[ "$(jq -r '.truncated // false' "$tree_file")" == "false" ]] ||
         die "GitHub returned a truncated profile tree; refusing an incomplete profile list."
 
-    info "Profile tree verified: \$(jq -r '.sha' "$tree_file")"
+    info "Profile tree verified: $(jq -r '.sha' "$tree_file")"
     : > "$manifest"
 
-    # Only a ZIP directly inside profiles/<name>/ qualifies.
-    # Anything deeper, including profiles/<name>/old/, is ignored.
-    while IFS="\$(printf '\\t')" read -r path mode type sha; do
-        [[ "$type" == "blob" ]] || continue
-        [[ "$path" == profiles/* ]] || continue
-
-        local remainder="\${path#profiles/}"
-        local profile="\${remainder%%/*}"
-        [[ -n "$profile" ]] || continue
-        local inside="\${path#profiles/$profile/}"
-
-        [[ "$inside" != "$path" ]] || continue
-        [[ "$inside" == *.zip ]] || continue
-        [[ "$inside" != */* ]] || continue
-
-        printf '%s\\t%s\\t%s\\n' "$profile" "$path" "$sha" >> "$manifest"
+    # Only a ZIP directly inside profiles/<name>/ qualifies. Empty folders
+    # and nested historical files are deliberately not listed.
+    while IFS="$(printf '\t')" read -r path mode type sha; do
+        [[ "$type" == "blob" && "$path" == profiles/* ]] || continue
+        profile="$(printf '%s\n' "$path" | cut -d/ -f2)"
+        inside="$(printf '%s\n' "$path" | cut -d/ -f3-)"
+        [[ -n "$profile" && "$inside" == *.zip && "$inside" != */* ]] || continue
+        printf '%s\t%s\t%s\n' "$profile" "$path" "$sha" >> "$manifest"
     done < <(jq -r '.tree[] | [.path,.mode,.type,.sha] | @tsv' "$tree_file")
 
     [[ -s "$manifest" ]] || die "No installable MuliOS profiles were found."
-
-    mapfile -t PROFILE_ROWS < "$manifest"
-
+    sort -t "$(printf '\t')" -k1,1 "$manifest" -o "$manifest"
+    local count
+    count="$(wc -l < "$manifest" | tr -d ' ')"
     echo
     info "Available MuliOS profiles:"
+    cut -f1 "$manifest" | awk '{ print "  " NR ": " $0 }'
     echo
 
-    local i=1 row profile path sha
-    for row in "\${PROFILE_ROWS[@]}"; do
-        IFS="\$(printf '\\t')" read -r profile path sha <<< "$row"
-        printf '  %d: %s\\n' "$i" "$profile"
-        ((i+=1))
-    done
-
-    echo
-    local choice
+    local choice row profile path sha
     while true; do
-        read -r -p "Select a profile [1-\${#PROFILE_ROWS[@]}]: " choice
+        read -r -p "Select a profile [1-$count]: " choice
         [[ "$choice" =~ ^[0-9]+$ ]] || { warn "Enter a number."; continue; }
-        (( choice >= 1 && choice <= \${#PROFILE_ROWS[@]} )) || { warn "Invalid profile selection."; continue; }
+        (( choice >= 1 && choice <= count )) || { warn "Invalid profile selection."; continue; }
         break
     done
 
-    row="\${PROFILE_ROWS[\$((choice-1))]}"
-    IFS="\$(printf '\\t')" read -r profile path sha <<< "$row"
-
-    echo
+    row="$(sed -n "$choice"'p' "$manifest")"
+    IFS="$(printf '\t')" read -r profile path sha <<< "$row"
     info "Selected profile: $profile"
-    info "Package: \$(basename "$path")"
+    info "Package: $(basename "$path")"
 
     local archive="$WORKDIR/$profile.zip"
     local extract_dir="$WORKDIR/$profile"
-
     download_verified_profile_zip "$path" "$sha" "$archive"
     validate_profile_archive "$archive" "$extract_dir"
 
     echo
-    warn "sh/install.sh will always run before sh/packages.sh."
-    echo
-
+    warn "sh/install.sh runs before sh/packages.sh."
     if ! confirm "Install the $profile profile?"; then
         warn "Profile installation cancelled."
         return 0
     fi
 
     info "Running sh/install.sh first..."
-    ( cd "$extract_dir" && ./sh/install.sh ) ||
-        die "Profile kernel/image installation failed."
+    ( cd "$extract_dir" && ./sh/install.sh ) || die "Profile kernel/image installation failed."
     ok "sh/install.sh completed."
-
     info "Running sh/packages.sh second..."
-    ( cd "$extract_dir" && ./sh/packages.sh ) ||
-        die "Profile package installation failed."
+    ( cd "$extract_dir" && ./sh/packages.sh ) || die "Profile package installation failed."
     ok "sh/packages.sh completed."
 
     mkdir -p "$STATE_DIR/profiles"
-    printf '%s\\n' "$profile" > "$STATE_DIR/profiles/active"
-    printf '%s\\n' "$sha" > "$STATE_DIR/profiles/$profile.sha"
-    printf '%s\\n' "\$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$STATE_DIR/profiles/last-install"
-
+    printf '%s\n' "$profile" > "$STATE_DIR/profiles/active"
+    printf '%s\n' "$sha" > "$STATE_DIR/profiles/$profile.sha"
+    printf '%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$STATE_DIR/profiles/last-install"
     echo
     ok "MuliOS $profile profile installation complete."
     warn "Reboot if the profile installed a new kernel."

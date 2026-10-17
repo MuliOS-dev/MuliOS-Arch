@@ -6,7 +6,7 @@ import os
 
 APP_NAME = "MuliOS Installer"
 DISTRO_NAME = "MuliOS"
-VERSION_STRING = "1.0.1"
+VERSION_STRING = "1.0.2"
 
 INSTALLER_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BRANDING_DIR = os.path.join(INSTALLER_ROOT, "branding")
@@ -19,19 +19,22 @@ SETUP_LOG = os.path.join(LOG_DIR, "setup.log")
 INSTALL_MOUNTPOINT = "/mnt"
 RELEASE_NOTES_URL = "https://github.com/MuliOS-dev"
 
+# The installer discovers which of these profiles actually contain a ZIP
+# directly inside profiles/<slug>/ in MuliOS-dev/update. These descriptions
+# are deliberately local and do not depend on repository metadata.
+PROFILE_DESCRIPTIONS = {
+    "ai": ("AI", "For AI development and machine-learning workloads."),
+    "code": ("Code", "For programming, software development, and build tools."),
+    "gaming": ("Gaming", "For gaming workloads and gaming-focused kernel packages."),
+    "generic": ("Generic", "A balanced default configuration for everyday use."),
+    "privacy": ("Privacy", "For users who prioritize privacy-focused configuration."),
+    "server": ("Server", "For server workloads and service-oriented systems."),
+    "study": ("Study", "For studying, learning, and everyday schoolwork."),
+}
+
 PROFILES = [
-    ("gaming", "Gaming",
-     "Custom gaming kernel, performance tweaks, and gaming software.", ""),
-    ("code", "Coding",
-     "Compilers, Git, IDEs, SDKs, and container tools.", ""),
-    ("ai", "AI Training",
-     "AI frameworks, CUDA support, Python and ML libraries.", ""),
-    ("school", "School",
-     "Office suite, PDF tools, browsers, and educational apps.", ""),
-    ("generic", "Casual",
-     "A lightweight, balanced set of everyday applications.", ""),
-    ("privacy", "Privacy",
-     "Privacy-focused tools and hardened default settings.", ""),
+    (slug, name, description, "")
+    for slug, (name, description) in PROFILE_DESCRIPTIONS.items()
 ]
 
 DEFAULT_PROFILE_SLUG = "generic"

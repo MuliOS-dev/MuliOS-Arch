@@ -45,6 +45,7 @@ class SummaryPage(QWidget):
             f"Username:             {state.get('username', '')}",
             f"Root login:           {'Enabled' if state.get('root_password') else 'Disabled'}",
             f"Desktop environment:  {state.get('desktop_environment') or 'None / minimal'}",
+            f"Desktop effect:       {dict(default='Keep default', forceblur='Better Blur (Force Blur)', glass='KWin Effects Glass').get(state.get('desktop_effect', 'default'), 'Keep default')}",
             f"Language:             {state.get('locale', '')}",
             f"Keyboard layout:      {state.get('keyboard_layout', '')}",
             f"Timezone:             {state.get('timezone', '')}",
