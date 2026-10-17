@@ -15,6 +15,10 @@ VERSION="a1.0.6"
 GITHUB_OWNER="MuliOS-dev"
 GITHUB_REPO="MuliOS-Arch"
 GITHUB_BRANCH="main"
+UPDATE_OWNER="MuliOS-dev"
+UPDATE_REPO="update"
+UPDATE_BRANCH="main"
+PROFILE_ROOT="profiles"
 BETA_MODE=0
 
 STATE_DIR="/var/lib/mupdate"
@@ -400,16 +404,17 @@ sync_repository() {
 
 profile_name_from_path() {
     local path="$1"
-    local remainder="\${path#"$PROFILE_ROOT"/}"
-    printf '%s' "\${remainder%%/*}"
+    printf '%s' "$path" | cut -d/ -f2
 }
 
 profile_zip_is_direct_child() {
     local path="$1"
     local profile="$2"
-    local remainder="\${path#"$PROFILE_ROOT/$profile"/}"
+    local candidate_profile="$(printf '%s' "$path" | cut -d/ -f2)"
+    local remainder="$(printf '%s' "$path" | cut -d/ -f3-)"
 
-    [[ "$remainder" != "$path" ]] || return 1
+    [[ "$candidate_profile" == "$profile" ]] || return 1
+    [[ "$path" == "$PROFILE_ROOT/"* ]] || return 1
     [[ "$remainder" == *.zip ]] || return 1
     [[ "$remainder" != */* ]] || return 1
 }
@@ -484,7 +489,7 @@ validate_profile_archive() {
     info "Validating profile archive..."
 
     unzip -tq "$archive" ||
-        die "Profile archive is corrupt: \$(basename "$archive")"
+        die "Profile archive is corrupt: $(basename "$archive")"
 
     rm -rf "$extract_dir"
     mkdir -p "$extract_dir"
@@ -506,7 +511,7 @@ validate_profile_archive() {
         die "Profile sh/packages.sh failed shell syntax validation."
 
     local package_count
-    package_count="\$(find "$extract_dir" -maxdepth 1 -type f \
+    package_count="$(find "$extract_dir" -maxdepth 1 -type f \
         \( -name '*.pkg.tar.zst' -o -name '*.pkg.tar.xz' -o -name '*.pkg.tar.gz' \) |
         wc -l)"
 
