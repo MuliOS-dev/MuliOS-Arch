@@ -2641,14 +2641,15 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             return
 
         candidates = [
+            # Prefer the current profile-aware MUpdate installed in the live ISO.
             Path(
-                "/opt/mulios-installer/mupdate"
+                "/usr/local/bin/mupdate"
             ),
             Path(
                 "/opt/mupdate"
             ),
             Path(
-                "/usr/local/bin/mupdate"
+                "/opt/mulios-installer/mupdate"
             ),
             Path(__file__).resolve().parent.parent /
             "mupdate",
