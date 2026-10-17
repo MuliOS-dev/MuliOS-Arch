@@ -6,14 +6,15 @@ A release of MuliOS-Arch consists of a built and verified ISO image, along with 
 
 ## Version Naming
 
-MuliOS OS releases use a date followed by an explicit channel:
+MuliOS OS versions use the date on which the ISO build is started, followed by a user-entered channel/suffix. At the start of `scripts/build.sh`, the builder prompts for this value and writes the generated version to `profile/version`.
 
-- `YY.MM.DD-stable` — stable releases, for example `26.10.17-stable`.
-- `YY.MM.DD-beta` — beta releases, for example `26.10.17-beta`.
-- `YY.MM.DD-dev` — development builds, for example `26.10.17-dev`.
-- An optional numeric sequence may follow the channel for multiple builds on the same date, such as `26.10.17-beta.22` or `26.10.17-dev.1`.
+Examples:
+- Enter `stable` → `YY.MM.DD-stable`, for example `26.10.17-stable`.
+- Enter `beta` → `YY.MM.DD-beta`, for example `26.10.17-beta`.
+- Enter `indev` → `YY.MM.DD-indev`, for example `26.10.17-indev`.
+- Enter a numbered suffix such as `indev.11` → `YY.MM.DD-indev.11`.
 
-Use the same version value in `profile/version`, the ISO filename and metadata, and boot-menu labels. The build script validates this format and injects the version into boot menus. MUpdate's beta channel accepts only `-beta` versions, optionally followed by a numeric sequence; stable and dev versions cannot use the beta channel.
+The channel must start with a lowercase letter and may contain lowercase letters, numbers, and hyphens; an optional numeric sequence can follow after a dot. Use the generated version in the ISO metadata and boot-menu labels. MUpdate's beta channel accepts only `-beta` versions, optionally followed by a numeric sequence.
 
 ## Overview of the Release Cycle
 
