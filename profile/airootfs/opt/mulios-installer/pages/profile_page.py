@@ -9,6 +9,30 @@ from config.settings import PROFILE_DESCRIPTIONS, DEFAULT_PROFILE_SLUG
 PROFILE_TREE_URL = "https://api.github.com/repos/MuliOS-dev/update/git/trees/main?recursive=1"
 
 
+def _profile_slug_from_path(path: str):
+    """Resolve a supported profile ZIP path from the update repository."""
+    if not path.startswith("profiles/") or not path.endswith(".zip"):
+        return None
+
+    parts = path.split("/")
+
+    # Current repository layout: profiles/latest-ai.zip, profiles/latest-game.zip, etc.
+    if len(parts) == 2:
+        filename = parts[1]
+        if not filename.startswith("latest-"):
+            return None
+        slug = filename[len("latest-"):-len(".zip")]
+        if slug == "game":
+            slug = "gaming"
+        return slug
+
+    # Also accept profile ZIPs nested under profiles/<slug>/ for compatibility.
+    if len(parts) == 3:
+        return parts[1]
+
+    return None
+
+
 def _available_profiles():
     request = urllib.request.Request(PROFILE_TREE_URL, headers={
         "Accept": "application/vnd.github+json",
@@ -21,13 +45,13 @@ def _available_profiles():
 
     slugs = set()
     for item in data["tree"]:
-        path = item.get("path", "")
-        if item.get("type") == "blob" and path.startswith("profiles/"):
-            parts = path.split("/")
-            if len(parts) == 3 and parts[2].endswith(".zip"):
-                slugs.add(parts[1])
+        if item.get("type") != "blob":
+            continue
+        slug = _profile_slug_from_path(item.get("path", ""))
+        if slug in PROFILE_DESCRIPTIONS:
+            slugs.add(slug)
 
-    return sorted(slug for slug in slugs if slug in PROFILE_DESCRIPTIONS)
+    return sorted(slugs)
 
 
 class ProfilePage(QWidget):
@@ -59,9 +83,8 @@ class ProfilePage(QWidget):
         self._name_by_slug = {}
         self._available_slugs = [DEFAULT_PROFILE_SLUG]
 
-        # Query the actual profile API directly. A separate Wi-Fi preflight can
-        # incorrectly reject working internet connections; the API request is
-        # the definitive test. On failure, keep Generic available and continue.
+        # Query the profile repository directly. Do not rely on a separate
+        # network-page check; the live API request is the definitive test.
         try:
             discovered = _available_profiles()
             if DEFAULT_PROFILE_SLUG in discovered:
