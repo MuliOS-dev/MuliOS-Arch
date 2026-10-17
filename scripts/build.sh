@@ -21,7 +21,7 @@ while true; do
 done
 
 mulios_version="${BUILD_DATE}-${release_channel}"
-printf '%s\\n' "$mulios_version" > "$PROFILE_VERSION_FILE"
+printf '%s\n' "$mulios_version" > "$PROFILE_VERSION_FILE"
 echo "[INFO]: building MuliOS version $mulios_version"
 
 install_dependencies() {
