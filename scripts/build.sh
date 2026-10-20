@@ -30,7 +30,7 @@ install_dependencies() {
     if command -v pacman >/dev/null 2>&1; then
         sudo pacman -S --needed --noconfirm \
             archiso git base-devel squashfs-tools mtools dosfstools libisoburn curl \
-            cmake extra-cmake-modules qt6-tools kwin
+            cmake extra-cmake-modules qt6-tools vulkan-headers kwin
     else
         echo "[ERROR]: not in an Arch Linux environment"
         exit 1
