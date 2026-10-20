@@ -187,17 +187,22 @@ else
     echo "[OK] Installer checks the bundled kernel package image and logs search paths"
 fi
 
+expected_version="$(cat "$ROOT/profile/version" 2>/dev/null || true)"
 for template in \
     "$PROFILE/grub/grub.cfg" \
     "$PROFILE/efiboot/loader/entries/01-archiso-linux.conf" \
     "$PROFILE/efiboot/loader/entries/02-archiso-speech-linux.conf" \
     "$PROFILE/syslinux/archiso_sys-linux.cfg"
 do
-    if ! grep -q '@MULIOS_VERSION@' "$template"; then
-        echo "[FAIL] Boot menu template is missing the dynamic version placeholder: $template"
-        fail=1
-    else
+    if grep -q '@MULIOS_VERSION@' "$template"; then
         echo "[OK] dynamic version placeholder: $template"
+    elif [[ -n "$expected_version" ]] && grep -Fq "$expected_version" "$template"; then
+        # During a build, build.sh temporarily substitutes the version before
+        # running these checks, then restores the original source templates.
+        echo "[OK] substituted build version: $template"
+    else
+        echo "[FAIL] Boot menu template has neither the version placeholder nor the current build version: $template"
+        fail=1
     fi
 done
 
