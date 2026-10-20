@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-ROOT="$(cd "$(dirname "\${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="${MULIOS_ROOT:-$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || true)}"
+if [[ -z "$ROOT" ]]; then
+    ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+fi
 PROFILE="$ROOT/profile"
 
 usage() {
