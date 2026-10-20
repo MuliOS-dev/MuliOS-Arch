@@ -2353,11 +2353,18 @@ class InstallWorker(QThread):
         kernel_name = "vmlinuz-linux-mulios-generic"
         kernel_destination = self.target / "boot" / kernel_name
 
+        # Depending on how the ISO was booted, the media mount can be
+        # exposed below bootmnt (sometimes through a symlink) or the kernel
+        # package image may be available directly in the live root filesystem.
+        # Check the known media paths first, then the package-owned kernel image.
         candidates = [
             Path("/run/archiso/boot/x86_64") / kernel_name,
             Path("/run/archiso/boot/amd64") / kernel_name,
+            Path("/run/archiso/bootmnt/arch/boot/x86_64") / kernel_name,
+            Path("/run/archiso/bootmnt/arch/boot/amd64") / kernel_name,
             Path("/run/live/boot/x86_64") / kernel_name,
             Path("/run/live/boot/amd64") / kernel_name,
+            Path("/boot") / kernel_name,
         ]
 
         source = next(
@@ -2366,25 +2373,76 @@ class InstallWorker(QThread):
         )
 
         if source is None:
-            # Some archiso layouts expose the boot tree through a mounted
-            # ISO path. Search only the known live-media roots.
+            # The MuliOS PKGBUILD installs the bootable image as
+            # /usr/lib/modules/<kernel-release>/vmlinuz in the live rootfs.
+            # Prefer the directory matching the running live kernel.
+            running_release = ""
+            try:
+                running_release = subprocess.run(
+                    ["uname", "-r"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+            except (OSError, subprocess.CalledProcessError):
+                pass
+
+            module_roots = [Path("/usr/lib/modules") / running_release / "vmlinuz"]
+            modules_dir = Path("/usr/lib/modules")
+            if modules_dir.is_dir():
+                module_roots.extend(
+                    directory / "vmlinuz"
+                    for directory in sorted(modules_dir.iterdir())
+                    if directory.is_dir()
+                    and "mulios-generic" in directory.name
+                    and directory.name != running_release
+                )
+
+            source = next(
+                (path for path in module_roots if path.is_file()),
+                None,
+            )
+
+        if source is None:
+            # Some live-media layouts expose the ISO tree through a mount
+            # that pathlib's recursive glob may not follow. Try explicit
+            # mount roots, then search the live-media trees for the exact name.
             for root in (
+                Path("/run/archiso/bootmnt"),
                 Path("/run/archiso"),
                 Path("/run/live"),
             ):
                 if not root.is_dir():
                     continue
-                matches = list(root.glob(
-                    "**/vmlinuz-linux-mulios-generic"
-                ))
+                try:
+                    matches = list(root.glob("**/" + kernel_name))
+                except OSError:
+                    matches = []
                 if matches:
                     source = matches[0]
                     break
 
         if source is None:
+            searched = [
+                str(path) for path in candidates
+            ] + [
+                "/usr/lib/modules/<release>/vmlinuz",
+                "/run/archiso/bootmnt/**/" + kernel_name,
+                "/run/archiso/**/" + kernel_name,
+                "/run/live/**/" + kernel_name,
+            ]
+            self.log("Kernel search paths checked: " + "; ".join(searched))
+            module_dirs = (
+                sorted(path.name for path in Path("/usr/lib/modules").iterdir() if path.is_dir())
+                if Path("/usr/lib/modules").is_dir()
+                else []
+            )
+            self.log("Available module directories: " + (", ".join(module_dirs) or "(none)"))
             raise InstallError(
                 "Could not locate the bundled MuliOS kernel "
-                "vmlinuz-linux-mulios-generic on the live media."
+                "vmlinuz-linux-mulios-generic. Checked the ISO boot paths "
+                "and /usr/lib/modules/*/vmlinuz; see the install log for "
+                "the exact search paths and available module directories."
             )
 
         self.log(
