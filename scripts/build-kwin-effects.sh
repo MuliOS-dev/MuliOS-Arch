@@ -27,7 +27,14 @@ build_effect() {
     git clone --depth 1 "$repo" "$source"
 
     echo "[INFO] Configuring $name against the build host's installed KWin/Qt libraries"
-    cmake -S "$source" -B "$build" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+    local -a cmake_options=(-DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr)
+    # Arch's current KWin development setup targets Wayland. Avoid enabling
+    # the optional X11 plugin path, which requires a separate KWinX11 package.
+    case "$name" in
+        forceblur) cmake_options+=(-DBETTERBLUR_X11=OFF) ;;
+        glass)     cmake_options+=(-DGLASS_X11=OFF) ;;
+    esac
+    cmake -S "$source" -B "$build" "${cmake_options[@]}"
 
     echo "[INFO] Compiling $name"
     cmake --build "$build" --parallel "$(nproc)"
