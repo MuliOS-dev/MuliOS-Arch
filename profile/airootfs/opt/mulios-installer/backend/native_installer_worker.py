@@ -2538,34 +2538,35 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             return
         if effect not in sources:
             raise InstallError(f"Unknown desktop effect selection: {effect}")
-        if not self.network_available:
-            # The live ISO bundles these effects. Reuse the already-copied
-            # plugin when offline instead of trying to clone/build it again.
-            plugin_tokens = {
-                "forceblur": ("forceblur",),
-                "glass": ("glass",),
-            }[effect]
-            plugin_dirs = (
-                self.target / "usr/lib/qt6/plugins/kwin/effects/plugins",
-                self.target / "usr/lib/kwin/plugins",
+        # The live ISO bundles these effects. Reuse the plugin already copied
+        # to the target on both online and offline installs; only build from
+        # source when this image does not contain a compatible plugin.
+        plugin_tokens = {
+            "forceblur": ("forceblur",),
+            "glass": ("glass",),
+        }[effect]
+        plugin_dirs = (
+            self.target / "usr/lib/qt6/plugins/kwin/effects/plugins",
+            self.target / "usr/lib/kwin/plugins",
+        )
+        bundled_plugin = any(
+            directory.is_dir()
+            and any(
+                token in plugin.name.lower()
+                for plugin in directory.glob("*.so")
+                for token in plugin_tokens
             )
-            bundled_plugin = any(
-                directory.is_dir()
-                and any(
-                    token in plugin.name.lower()
-                    for plugin in directory.glob("*.so")
-                    for token in plugin_tokens
-                )
-                for directory in plugin_dirs
+            for directory in plugin_dirs
+        )
+        if bundled_plugin:
+            self.configure_desktop_effect(effect)
+            self.log(
+                f"{sources[effect][1]} is bundled in the live image and was "
+                "enabled without rebuilding it."
             )
-            if bundled_plugin:
-                self.configure_desktop_effect(effect)
-                self.log(
-                    f"{sources[effect][1]} is bundled in the live image and was "
-                    "enabled without an internet connection."
-                )
-                return
+            return
 
+        if not self.network_available:
             # Desktop effects are optional. An offline installation must still
             # succeed if a compatible plugin was not bundled into the image.
             self.state["desktop_effect"] = "default"
