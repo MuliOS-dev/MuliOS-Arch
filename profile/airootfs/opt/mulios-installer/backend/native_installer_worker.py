@@ -2539,13 +2539,40 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         if effect not in sources:
             raise InstallError(f"Unknown desktop effect selection: {effect}")
         if not self.network_available:
+            # The live ISO bundles these effects. Reuse the already-copied
+            # plugin when offline instead of trying to clone/build it again.
+            plugin_tokens = {
+                "forceblur": ("forceblur",),
+                "glass": ("glass",),
+            }[effect]
+            plugin_dirs = (
+                self.target / "usr/lib/qt6/plugins/kwin/effects/plugins",
+                self.target / "usr/lib/kwin/plugins",
+            )
+            bundled_plugin = any(
+                directory.is_dir()
+                and any(
+                    token in plugin.name.lower()
+                    for plugin in directory.glob("*.so")
+                    for token in plugin_tokens
+                )
+                for directory in plugin_dirs
+            )
+            if bundled_plugin:
+                self.configure_desktop_effect(effect)
+                self.log(
+                    f"{sources[effect][1]} is bundled in the live image and was "
+                    "enabled without an internet connection."
+                )
+                return
+
             # Desktop effects are optional. An offline installation must still
-            # succeed; keep the live/default configuration and report the
-            # fallback instead of aborting the whole OS installation.
+            # succeed if a compatible plugin was not bundled into the image.
             self.state["desktop_effect"] = "default"
             self.log(
-                f"WARNING: {sources[effect][1]} was selected, but internet access "
-                "is unavailable. Continuing with the default desktop effects."
+                f"WARNING: {sources[effect][1]} was selected, but the plugin is not "
+                "available locally and internet access is unavailable. "
+                "Continuing with the default desktop effects."
             )
             return
 
