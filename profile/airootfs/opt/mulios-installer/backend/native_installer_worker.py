@@ -2539,10 +2539,15 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         if effect not in sources:
             raise InstallError(f"Unknown desktop effect selection: {effect}")
         if not self.network_available:
-            raise InstallError(
-                "A desktop effect was selected, but internet access is unavailable. "
-                "Go back and choose Keep default, or reconnect and retry."
+            # Desktop effects are optional. An offline installation must still
+            # succeed; keep the live/default configuration and report the
+            # fallback instead of aborting the whole OS installation.
+            self.state["desktop_effect"] = "default"
+            self.log(
+                f"WARNING: {sources[effect][1]} was selected, but internet access "
+                "is unavailable. Continuing with the default desktop effects."
             )
+            return
 
         repository, display_name = sources[effect]
         self.log(f"Building {display_name} for the installed KDE/ KWin version...")
