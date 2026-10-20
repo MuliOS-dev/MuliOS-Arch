@@ -2524,9 +2524,9 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
     def install_desktop_effect(self):
         effect = str(self.state.get("desktop_effect", "default")).strip().lower()
         sources = {
-            "forceblur": (
-                "https://github.com/taj-ny/kwin-effects-forceblur",
-                "Better Blur (Force Blur)",
+            "betterblur_dx": (
+                "https://github.com/xarblu/kwin-effects-better-blur-dx",
+                "Better Blur DX (Force Blur)",
             ),
             "glass": (
                 "https://github.com/4v3ngR/kwin-effects-glass",
@@ -2542,7 +2542,7 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         # to the target on both online and offline installs; only build from
         # source when this image does not contain a compatible plugin.
         plugin_tokens = {
-            "forceblur": ("forceblur",),
+            "betterblur_dx": ("better_blur_dx",),
             "glass": ("glass",),
         }[effect]
         plugin_dirs = (
@@ -2606,7 +2606,7 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
                 f"{type(exc).__name__}: {exc}. Continuing with default KWin effects."
             )
             return
-        if effect in {"glass", "forceblur"}:
+        if effect in {"glass", "betterblur_dx"}:
             self.configure_desktop_effect(effect)
             self.log(
                 f"{display_name} installed and enabled for the installed user. "
@@ -2651,11 +2651,11 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             len(lines),
         )
 
-        # Better Blur installs the KWin plugin as "forceblur". Blur forks
+        # Better Blur DX installs the KWin plugin as "better_blur_dx". Blur forks
         # cannot be enabled together; Glass also conflicts with translucency.
         settings = {
             "glassEnabled": "true" if effect == "glass" else "false",
-            "forceblurEnabled": "true" if effect == "forceblur" else "false",
+            "better_blur_dxEnabled": "true" if effect == "betterblur_dx" else "false",
             "blurEnabled": "false",
             "blurplusEnabled": "false",
         }
