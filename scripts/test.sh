@@ -156,6 +156,30 @@ else
     echo "[OK] Desktop effect preview handler exists"
 fi
 
+for template in \
+    "$PROFILE/grub/grub.cfg" \
+    "$PROFILE/efiboot/loader/entries/01-archiso-linux.conf" \
+    "$PROFILE/efiboot/loader/entries/02-archiso-speech-linux.conf" \
+    "$PROFILE/syslinux/archiso_sys-linux.cfg"
+do
+    if ! grep -q '@MULIOS_VERSION@' "$template"; then
+        echo "[FAIL] Boot menu template is missing the dynamic version placeholder: $template"
+        fail=1
+    else
+        echo "[OK] dynamic version placeholder: $template"
+    fi
+done
+
+if grep -RIn '26\.10\.20-indev\.11' \
+    "$PROFILE/grub/grub.cfg" \
+    "$PROFILE/efiboot/loader/entries" \
+    "$PROFILE/syslinux/archiso_sys-linux.cfg" >/dev/null 2>&1; then
+    echo "[FAIL] hardcoded stale version found in a boot menu template"
+    fail=1
+else
+    echo "[OK] no hardcoded stale version in boot menu templates"
+fi
+
 if ! grep -q 'xarblu/kwin-effects-better-blur-dx' "$ROOT/scripts/build-kwin-effects.sh" ||
    ! grep -q 'Better Blur DX (Force Blur)' "$PROFILE/airootfs/opt/mulios-installer/pages/desktop_page.py"; then
     echo "[FAIL] Better Blur DX build or installer selection is missing"
