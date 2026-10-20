@@ -285,7 +285,7 @@ class MuliOSInstaller(QMainWindow):
                     check=True, capture_output=True, text=True,
                 )
             subprocess.run(
-                ["qdbus", "org.kde.KWin", "/KWin", "org.kde.KWin.reconfigure"],
+                ["qdbus", "org.kde.KWin", "/KWin", "reconfigure"],
                 check=True, capture_output=True, text=True,
             )
         except (OSError, subprocess.CalledProcessError) as exc:
