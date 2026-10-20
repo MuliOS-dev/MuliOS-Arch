@@ -195,16 +195,22 @@ class MuliOSInstaller(QMainWindow):
         nav_layout.addWidget(self.back_button)
         nav_layout.addStretch()
 
+        action_layout = QVBoxLayout()
+        action_layout.setContentsMargins(0, 0, 0, 0)
+        action_layout.setSpacing(6)
+
         self.preview_button = QPushButton("Preview")
         self.preview_button.setObjectName("SecondaryButton")
         self.preview_button.clicked.connect(self.preview_desktop_effect)
         self.preview_button.setVisible(False)
-        nav_layout.addWidget(self.preview_button)
+        action_layout.addWidget(self.preview_button)
 
         self.next_button = QPushButton("Next")
         self.next_button.setObjectName("PrimaryButton")
         self.next_button.clicked.connect(self.go_next)
-        nav_layout.addWidget(self.next_button)
+        action_layout.addWidget(self.next_button)
+
+        nav_layout.addLayout(action_layout)
 
         content_layout.addWidget(nav_bar)
 
