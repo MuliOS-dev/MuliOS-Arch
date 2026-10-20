@@ -131,11 +131,46 @@ else
     echo "[OK] application desktop entries use MuliOS launch wrappers"
 fi
 
-if ! grep -q '^nodejs$' "$PROFILE/packages.x86_64"; then
+if ! grep -q '^nodejs
+if [[ "$fail" -ne 0 ]]; then
+    echo "Static checks failed."
+    exit 1
+fi
+
+echo "All static checks passed."
+ "$PROFILE/packages.x86_64"; then
     echo "[FAIL] nodejs is missing from the live package set"
     fail=1
 else
     echo "[OK] nodejs is included"
+fi
+
+if ! head -n 1 "$PROFILE/airootfs/opt/credits/main.py" | grep -q '^#!/usr/bin/env python3
+if [[ "$fail" -ne 0 ]]; then
+    echo "Static checks failed."
+    exit 1
+fi
+
+echo "All static checks passed."
+; then
+    echo "[FAIL] Credits must declare its Python interpreter"
+    fail=1
+else
+    echo "[OK] Credits declares its Python interpreter"
+fi
+
+if ! grep -q 'def preview_desktop_effect' "$PROFILE/airootfs/opt/mulios-installer/main.py"; then
+    echo "[FAIL] Desktop effect preview handler is missing"
+    fail=1
+else
+    echo "[OK] Desktop effect preview handler exists"
+fi
+
+if ! grep -q 'Continuing with the default desktop effects' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"; then
+    echo "[FAIL] Offline desktop effect fallback is missing"
+    fail=1
+else
+    echo "[OK] Offline desktop effect fallback exists"
 fi
 
 if [[ "$fail" -ne 0 ]]; then
