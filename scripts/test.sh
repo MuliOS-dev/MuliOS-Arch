@@ -135,11 +135,93 @@ else
     echo "[OK] application desktop entries use MuliOS launch wrappers"
 fi
 
-if ! grep -q '^nodejs$' "$PROFILE/packages.x86_64"; then
+if ! grep -q '^nodejs
+if ! head -n 1 "$PROFILE/airootfs/opt/credits/main.py" | grep -q '^#!/usr/bin/env python3$'; then
+    echo "[FAIL] Credits must declare its Python interpreter"
+    fail=1
+else
+    echo "[OK] Credits declares its Python interpreter"
+fi
+
+if ! grep -q 'def preview_desktop_effect' "$PROFILE/airootfs/opt/mulios-installer/main.py"; then
+    echo "[FAIL] Desktop effect preview handler is missing"
+    fail=1
+else
+    echo "[OK] Desktop effect preview handler exists"
+fi
+
+for template in \
+    "$PROFILE/grub/grub.cfg" \
+    "$PROFILE/efiboot/loader/entries/01-archiso-linux.conf" \
+    "$PROFILE/efiboot/loader/entries/02-archiso-speech-linux.conf" \
+    "$PROFILE/syslinux/archiso_sys-linux.cfg"
+do
+    if ! grep -q '@MULIOS_VERSION@' "$template"; then
+        echo "[FAIL] Boot menu template is missing the dynamic version placeholder: $template"
+        fail=1
+    else
+        echo "[OK] dynamic version placeholder: $template"
+    fi
+done
+
+if grep -RIn '26\.10\.20-indev\.11' \
+    "$PROFILE/grub/grub.cfg" \
+    "$PROFILE/efiboot/loader/entries" \
+    "$PROFILE/syslinux/archiso_sys-linux.cfg" >/dev/null 2>&1; then
+    echo "[FAIL] hardcoded stale version found in a boot menu template"
+    fail=1
+else
+    echo "[OK] no hardcoded stale version in boot menu templates"
+fi
+
+if ! grep -q 'xarblu/kwin-effects-better-blur-dx' "$ROOT/scripts/build-kwin-effects.sh" ||
+   ! grep -q 'Better Blur DX (Force Blur)' "$PROFILE/airootfs/opt/mulios-installer/pages/desktop_page.py"; then
+    echo "[FAIL] Better Blur DX build or installer selection is missing"
+    fail=1
+else
+    echo "[OK] Better Blur DX build and installer selection are configured"
+fi
+
+if ! grep -q 'Continuing with the default desktop effects' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"; then
+    echo "[FAIL] Offline desktop effect fallback is missing"
+    fail=1
+else
+    echo "[OK] Offline desktop effect fallback exists"
+fi
+
+if [[ "$fail" -ne 0 ]]; then
+    echo "Static checks failed."
+    exit 1
+fi
+
+echo "All static checks passed."
+ "$PROFILE/packages.x86_64"; then
     echo "[FAIL] nodejs is missing from the live package set"
     fail=1
 else
     echo "[OK] nodejs is included"
+fi
+
+if ! grep -q '"express"' "$PROFILE/airootfs/opt/taskmanager/package.json" ||
+   ! grep -q '"systeminformation"' "$PROFILE/airootfs/opt/taskmanager/package.json"; then
+    echo "[FAIL] Task Manager runtime dependencies are missing from package.json"
+    fail=1
+else
+    echo "[OK] Task Manager runtime dependencies are declared"
+fi
+
+if ! grep -q 'npm install --prefix "$taskmanager_dir"' "$ROOT/scripts/build.sh"; then
+    echo "[FAIL] Task Manager npm dependencies are not bundled during ISO build"
+    fail=1
+else
+    echo "[OK] Task Manager dependencies are bundled during ISO build"
+fi
+
+if ! grep -q 'shutil.which("qdbus6") or shutil.which("qdbus")' "$PROFILE/airootfs/opt/mulios-installer/main.py"; then
+    echo "[FAIL] Desktop effect preview does not support qdbus6"
+    fail=1
+else
+    echo "[OK] Desktop effect preview supports qdbus6 and qdbus"
 fi
 
 if ! head -n 1 "$PROFILE/airootfs/opt/credits/main.py" | grep -q '^#!/usr/bin/env python3$'; then
