@@ -237,7 +237,7 @@ class MuliOSInstaller(QMainWindow):
         """Apply the selected KWin effect in the live session without installing it."""
         effect = self.desktop_page.selected_effect()
         plugin_names = {
-            "forceblur": ("forceblurEnabled", "Better Blur (Force Blur)"),
+            "betterblur_dx": ("better_blur_dxEnabled", "Better Blur DX (Force Blur)"),
             "glass": ("glassEnabled", "KWin Effects Glass"),
         }
         if effect in plugin_names:
@@ -247,7 +247,7 @@ class MuliOSInstaller(QMainWindow):
                 Path("/usr/lib/kwin/plugins"),
                 Path("/usr/lib/x86_64-linux-gnu/qt6/plugins/kwin/effects/plugins"),
             )
-            plugin_tokens = ("forceblur",) if effect == "forceblur" else ("glass",)
+            plugin_tokens = ("better_blur_dx",) if effect == "betterblur_dx" else ("glass",)
             installed = any(
                 directory.is_dir()
                 and any(
@@ -273,7 +273,7 @@ class MuliOSInstaller(QMainWindow):
                 "glass": ("glassEnabled", "true"),
             }
             for key, value in (
-                ("forceblurEnabled", "false"),
+                ("better_blur_dxEnabled", "false"),
                 ("glassEnabled", "false"),
                 ("blurEnabled", "true" if effect == "default" else "false"),
                 ("blurplusEnabled", "false"),
