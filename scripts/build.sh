@@ -29,7 +29,8 @@ install_dependencies() {
 
     if command -v pacman >/dev/null 2>&1; then
         sudo pacman -S --needed --noconfirm \
-            archiso git base-devel squashfs-tools mtools dosfstools libisoburn curl
+            archiso git base-devel squashfs-tools mtools dosfstools libisoburn curl \
+            cmake extra-cmake-modules qt6-tools kwin kwin-x11
     else
         echo "[ERROR]: not in an Arch Linux environment"
         exit 1
@@ -101,6 +102,7 @@ build() {
     fi
 
     bash "$WORK_DIR/scripts/install-rounded-theme.sh"
+    bash "$WORK_DIR/scripts/build-kwin-effects.sh"
     prepare_version_templates
 
     # Desktop launchers must be executable for Plasma to treat them as trusted
