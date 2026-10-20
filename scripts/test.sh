@@ -156,6 +156,14 @@ else
     echo "[OK] Desktop effect preview handler exists"
 fi
 
+if ! grep -q 'xarblu/kwin-effects-better-blur-dx' "$ROOT/scripts/build-kwin-effects.sh" ||
+   ! grep -q 'Better Blur DX (Force Blur)' "$PROFILE/airootfs/opt/mulios-installer/pages/desktop_page.py"; then
+    echo "[FAIL] Better Blur DX build or installer selection is missing"
+    fail=1
+else
+    echo "[OK] Better Blur DX build and installer selection are configured"
+fi
+
 if ! grep -q 'Continuing with the default desktop effects' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"; then
     echo "[FAIL] Offline desktop effect fallback is missing"
     fail=1
