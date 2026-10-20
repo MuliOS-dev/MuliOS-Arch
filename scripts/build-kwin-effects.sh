@@ -23,27 +23,44 @@ build_effect() {
     local source="$BUILD_DIR/$name"
     local build="$BUILD_DIR/$name-build"
 
-    echo "[INFO] Fetching $name"
-    git clone --depth 1 "$repo" "$source"
+    echo "[INFO] Fetching optional KWin effect: $name"
+    if ! git clone --depth 1 "$repo" "$source"; then
+        echo "[WARN] Could not fetch $name; continuing without this optional effect."
+        return 0
+    fi
 
     echo "[INFO] Configuring $name against the build host's installed KWin/Qt libraries"
     local -a cmake_options=(-DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr)
     # Arch's current KWin development setup targets Wayland. Avoid enabling
-    # the optional X11 plugin path, which requires a separate KWinX11 package.
+    # optional X11 plugin paths that require separate KWinX11 components.
     case "$name" in
         forceblur) cmake_options+=(-DBETTERBLUR_X11=OFF) ;;
         glass)     cmake_options+=(-DGLASS_X11=OFF) ;;
     esac
-    cmake -S "$source" -B "$build" "${cmake_options[@]}"
+
+    if ! cmake -S "$source" -B "$build" "${cmake_options[@]}"; then
+        echo "[WARN] $name is incompatible with the current KWin/Qt development libraries; continuing without it."
+        return 0
+    fi
 
     echo "[INFO] Compiling $name"
-    cmake --build "$build" --parallel "$(nproc)"
+    if ! cmake --build "$build" --parallel "$(nproc)"; then
+        echo "[WARN] $name failed to compile against the current KWin API; continuing without it."
+        return 0
+    fi
 
     echo "[INFO] Bundling $name into the MuliOS live filesystem"
-    DESTDIR="$ROOTFS" cmake --install "$build"
+    if ! DESTDIR="$ROOTFS" cmake --install "$build"; then
+        echo "[WARN] Could not install $name; continuing without it."
+        return 0
+    fi
+
+    echo "[INFO] Successfully bundled $name"
 }
 
+# Force Blur's upstream repository can lag behind KWin API changes. Treat both
+# effects as optional so a third-party plugin failure never blocks ISO creation.
 build_effect "https://github.com/taj-ny/kwin-effects-forceblur" "forceblur"
 build_effect "https://github.com/4v3ngR/kwin-effects-glass" "glass"
 
-echo "[INFO] Both optional KWin effects are bundled in the live filesystem."
+echo "[INFO] Finished optional KWin effect builds. Check warnings above for effects that were skipped."
