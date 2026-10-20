@@ -150,6 +150,15 @@ else
     echo "[OK] Desktop effect preview handler exists"
 fi
 
+KERNEL_WORKER="$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"
+if ! grep -q 'Path("/usr/lib/modules") / running_release / "vmlinuz"' "$KERNEL_WORKER" ||
+   ! grep -q 'Kernel search paths checked:' "$KERNEL_WORKER"; then
+    echo "[FAIL] Installer kernel discovery fallback or diagnostics are missing"
+    fail=1
+else
+    echo "[OK] Installer checks the bundled kernel package image and logs search paths"
+fi
+
 for template in \
     "$PROFILE/grub/grub.cfg" \
     "$PROFILE/efiboot/loader/entries/01-archiso-linux.conf" \
