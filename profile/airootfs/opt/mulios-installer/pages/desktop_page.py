@@ -14,9 +14,9 @@ class DesktopPage(QWidget):
             "Do not install an additional KWin effect. Keep the default MuliOS desktop.",
         ),
         (
-            "forceblur",
-            "Better Blur (Force Blur)",
-            "Adds configurable blur effects to supported KDE Plasma windows.",
+            "betterblur_dx",
+            "Better Blur DX (Force Blur)",
+            "Adds force blur, adjustable blur appearance, rounded corners and refraction. Built for the KWin version in this ISO.",
         ),
         (
             "glass",
