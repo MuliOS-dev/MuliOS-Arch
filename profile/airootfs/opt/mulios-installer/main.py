@@ -8,6 +8,7 @@ import os
 import sys
 import traceback
 import subprocess
+import shutil
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -290,8 +291,14 @@ class MuliOSInstaller(QMainWindow):
                      "--key", key, value],
                     check=True, capture_output=True, text=True,
                 )
+            qdbus = shutil.which("qdbus6") or shutil.which("qdbus")
+            if not qdbus:
+                raise FileNotFoundError(
+                    "Neither qdbus6 nor qdbus is available. "
+                    "Install the KDE D-Bus command-line tools to preview effects."
+                )
             subprocess.run(
-                ["qdbus", "org.kde.KWin", "/KWin", "reconfigure"],
+                [qdbus, "org.kde.KWin", "/KWin", "reconfigure"],
                 check=True, capture_output=True, text=True,
             )
         except (OSError, subprocess.CalledProcessError) as exc:
