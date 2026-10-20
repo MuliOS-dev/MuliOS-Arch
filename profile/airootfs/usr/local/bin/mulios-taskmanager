@@ -19,4 +19,5 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 cd "$APP_DIR" || exit 1
+export PYTHONUNBUFFERED=1
 exec /usr/bin/python3 "$LAUNCHER" >>"$LOG_FILE" 2>&1
