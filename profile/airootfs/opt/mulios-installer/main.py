@@ -269,7 +269,7 @@ class MuliOSInstaller(QMainWindow):
 
         try:
             config = {
-                "forceblur": ("forceblurEnabled", "true"),
+                "betterblur_dx": ("better_blur_dxEnabled", "true"),
                 "glass": ("glassEnabled", "true"),
             }
             for key, value in (
