@@ -1,4 +1,3 @@
-from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QGridLayout, QButtonGroup
 
 from widgets.select_card import SelectCard
@@ -7,7 +6,6 @@ from widgets.select_card import SelectCard
 class DesktopPage(QWidget):
     """Keep the fixed KDE desktop choice and optionally select one KWin effect."""
 
-    preview_requested = Signal()
 
     EFFECTS = (
         (
