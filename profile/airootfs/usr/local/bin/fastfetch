@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -e
+
+# MuliOS owns the default Fastfetch configuration.
+# Use it unless the caller explicitly selected another config.
+for arg in "$@"; do
+    case "$arg" in
+        -c|--config|--config=*)
+            exec /usr/bin/fastfetch "$@"
+            ;;
+    esac
+done
+
+exec /usr/bin/fastfetch --config /etc/fastfetch/config.jsonc "$@"

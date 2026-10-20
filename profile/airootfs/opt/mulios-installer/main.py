@@ -7,6 +7,8 @@ attempting installation or root escalation.
 import os
 import sys
 import traceback
+import subprocess
+import shutil
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -194,10 +196,22 @@ class MuliOSInstaller(QMainWindow):
         nav_layout.addWidget(self.back_button)
         nav_layout.addStretch()
 
+        action_layout = QVBoxLayout()
+        action_layout.setContentsMargins(0, 0, 0, 0)
+        action_layout.setSpacing(6)
+
+        self.preview_button = QPushButton("Preview")
+        self.preview_button.setObjectName("SecondaryButton")
+        self.preview_button.clicked.connect(self.preview_desktop_effect)
+        self.preview_button.setVisible(False)
+        action_layout.addWidget(self.preview_button)
+
         self.next_button = QPushButton("Next")
         self.next_button.setObjectName("PrimaryButton")
         self.next_button.clicked.connect(self.go_next)
-        nav_layout.addWidget(self.next_button)
+        action_layout.addWidget(self.next_button)
+
+        nav_layout.addLayout(action_layout)
 
         content_layout.addWidget(nav_bar)
 
@@ -209,6 +223,7 @@ class MuliOSInstaller(QMainWindow):
         self.sidebar.set_active_step(index)
         self.back_button.setEnabled(0 < index < IDX_INSTALL)
         self.next_button.setVisible(index < IDX_INSTALL)
+        self.preview_button.setVisible(index == IDX_DESKTOP)
 
         if index == IDX_SUMMARY:
             self.next_button.setText("Install")
@@ -218,6 +233,89 @@ class MuliOSInstaller(QMainWindow):
             )
         else:
             self.next_button.setText("Next")
+
+    def preview_desktop_effect(self):
+        """Apply the selected KWin effect in the live session without installing it."""
+        effect = self.desktop_page.selected_effect()
+        plugin_names = {
+            "betterblur_dx": ("better_blur_dxEnabled", "Better Blur DX (Force Blur)"),
+            "glass": ("glassEnabled", "KWin Effects Glass"),
+        }
+        if effect in plugin_names:
+            key, display_name = plugin_names[effect]
+            plugin_dirs = (
+                Path("/usr/lib/qt6/plugins/kwin/effects/plugins"),
+                Path("/usr/lib/kwin/plugins"),
+                Path("/usr/lib/x86_64-linux-gnu/qt6/plugins/kwin/effects/plugins"),
+            )
+            plugin_tokens = ("better_blur_dx",) if effect == "betterblur_dx" else ("glass",)
+            installed = any(
+                directory.is_dir()
+                and any(
+                    token in path.name.lower()
+                    for path in directory.glob("*.so")
+                    for token in plugin_tokens
+                )
+                for directory in plugin_dirs
+            )
+            if not installed:
+                QMessageBox.information(
+                    self,
+                    "Preview unavailable",
+                    f"{display_name} is not installed in this live session. "
+                    "The preview cannot be applied until the effect plugin is bundled "
+                    "with the live image.",
+                )
+                return
+
+        try:
+            config = {
+                "betterblur_dx": ("better_blur_dxEnabled", "true"),
+                "glass": ("glassEnabled", "true"),
+            }
+            for key, value in (
+                ("better_blur_dxEnabled", "false"),
+                ("glassEnabled", "false"),
+                ("blurEnabled", "true" if effect == "default" else "false"),
+                ("blurplusEnabled", "false"),
+            ):
+                subprocess.run(
+                    ["kwriteconfig6", "--file", "kwinrc", "--group", "Plugins",
+                     "--key", key, value],
+                    check=True, capture_output=True, text=True,
+                )
+            if effect in config:
+                key, value = config[effect]
+                subprocess.run(
+                    ["kwriteconfig6", "--file", "kwinrc", "--group", "Plugins",
+                     "--key", key, value],
+                    check=True, capture_output=True, text=True,
+                )
+            qdbus = shutil.which("qdbus6") or shutil.which("qdbus")
+            if not qdbus:
+                raise FileNotFoundError(
+                    "Neither qdbus6 nor qdbus is available. "
+                    "Install the KDE D-Bus command-line tools to preview effects."
+                )
+            subprocess.run(
+                [qdbus, "org.kde.KWin", "/KWin", "reconfigure"],
+                check=True, capture_output=True, text=True,
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            detail = getattr(exc, "stderr", "") or str(exc)
+            QMessageBox.warning(
+                self,
+                "Preview failed",
+                "KWin could not apply the selected desktop effect.\n\n" + detail,
+            )
+            return
+
+        QMessageBox.information(
+            self,
+            "Preview applied",
+            "The selected desktop effect has been applied to the live session. "
+            "This preview does not change the installation selection.",
+        )
 
     def go_back(self):
         idx = self.stack.currentIndex()
@@ -275,6 +373,7 @@ class MuliOSInstaller(QMainWindow):
             "bootloader": self.bootloader_page.selected_bootloader(),
             **self.account_page.data(),
             "desktop_environment": self.desktop_page.selected_desktop(),
+            "desktop_effect": self.desktop_page.selected_effect(),
             "extra_packages": self.packages_page.selected_packages(),
             "profile": self.profile_page.selected_profile(),
             "profile_name": self.profile_page.selected_profile_name(),

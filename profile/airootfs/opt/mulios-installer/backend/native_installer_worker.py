@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
 import shutil
 import subprocess
 import traceback
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -1698,6 +1700,12 @@ class InstallWorker(QThread):
                 "Removed build-only [mulios] repository."
             )
 
+        # Always leave a usable Arch mirrorlist behind, even when the
+        # installation was performed while the live session was offline.
+        # Otherwise the installed system can boot successfully but pacman
+        # has no configured servers.
+        self.configure_mirrors()
+
         resolv = self.target / "etc/resolv.conf"
 
         if resolv.exists() or resolv.is_symlink():
@@ -2117,8 +2125,33 @@ class InstallWorker(QThread):
             mode=0o440,
         )
 
+        self.configure_installed_fastfetch(username)
         self.configure_installed_plasma(username)
         self.progress.emit(60)
+
+    def configure_installed_fastfetch(self, username):
+        """Install the canonical MuliOS Fastfetch configuration for the new user."""
+        home = self.target / "home" / username
+        fastfetch_dir = home / ".config" / "fastfetch"
+        fastfetch_dir.mkdir(parents=True, exist_ok=True)
+
+        source = self.target / "etc/skel/.config/fastfetch/config.jsonc"
+        destination = fastfetch_dir / "config.jsonc"
+        if source.is_file():
+            shutil.copy2(source, destination)
+
+        # Remove legacy per-user configs so they cannot override MuliOS JSONC.
+        for legacy in (fastfetch_dir / "config.conf", fastfetch_dir / "config.json"):
+            if legacy.exists() or legacy.is_symlink():
+                legacy.unlink()
+
+        self.chroot([
+            "chown", "-R", f"{username}:{username}",
+            f"/home/{username}/.config/fastfetch",
+        ])
+
+        self.log("Installed canonical MuliOS Fastfetch configuration." if source.is_file()
+                 else "MuliOS Fastfetch configuration was unavailable in /etc/skel.")
 
     def configure_installed_plasma(self, username):
         """Seed the installed user's Plasma session from the live MuliOS session."""
@@ -2320,11 +2353,18 @@ class InstallWorker(QThread):
         kernel_name = "vmlinuz-linux-mulios-generic"
         kernel_destination = self.target / "boot" / kernel_name
 
+        # Depending on how the ISO was booted, the media mount can be
+        # exposed below bootmnt (sometimes through a symlink) or the kernel
+        # package image may be available directly in the live root filesystem.
+        # Check the known media paths first, then the package-owned kernel image.
         candidates = [
             Path("/run/archiso/boot/x86_64") / kernel_name,
             Path("/run/archiso/boot/amd64") / kernel_name,
+            Path("/run/archiso/bootmnt/arch/boot/x86_64") / kernel_name,
+            Path("/run/archiso/bootmnt/arch/boot/amd64") / kernel_name,
             Path("/run/live/boot/x86_64") / kernel_name,
             Path("/run/live/boot/amd64") / kernel_name,
+            Path("/boot") / kernel_name,
         ]
 
         source = next(
@@ -2333,25 +2373,76 @@ class InstallWorker(QThread):
         )
 
         if source is None:
-            # Some archiso layouts expose the boot tree through a mounted
-            # ISO path. Search only the known live-media roots.
+            # The MuliOS PKGBUILD installs the bootable image as
+            # /usr/lib/modules/<kernel-release>/vmlinuz in the live rootfs.
+            # Prefer the directory matching the running live kernel.
+            running_release = ""
+            try:
+                running_release = subprocess.run(
+                    ["uname", "-r"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+            except (OSError, subprocess.CalledProcessError):
+                pass
+
+            module_roots = [Path("/usr/lib/modules") / running_release / "vmlinuz"]
+            modules_dir = Path("/usr/lib/modules")
+            if modules_dir.is_dir():
+                module_roots.extend(
+                    directory / "vmlinuz"
+                    for directory in sorted(modules_dir.iterdir())
+                    if directory.is_dir()
+                    and "mulios-generic" in directory.name
+                    and directory.name != running_release
+                )
+
+            source = next(
+                (path for path in module_roots if path.is_file()),
+                None,
+            )
+
+        if source is None:
+            # Some live-media layouts expose the ISO tree through a mount
+            # that pathlib's recursive glob may not follow. Try explicit
+            # mount roots, then search the live-media trees for the exact name.
             for root in (
+                Path("/run/archiso/bootmnt"),
                 Path("/run/archiso"),
                 Path("/run/live"),
             ):
                 if not root.is_dir():
                     continue
-                matches = list(root.glob(
-                    "**/vmlinuz-linux-mulios-generic"
-                ))
+                try:
+                    matches = list(root.glob("**/" + kernel_name))
+                except OSError:
+                    matches = []
                 if matches:
                     source = matches[0]
                     break
 
         if source is None:
+            searched = [
+                str(path) for path in candidates
+            ] + [
+                "/usr/lib/modules/<release>/vmlinuz",
+                "/run/archiso/bootmnt/**/" + kernel_name,
+                "/run/archiso/**/" + kernel_name,
+                "/run/live/**/" + kernel_name,
+            ]
+            self.log("Kernel search paths checked: " + "; ".join(searched))
+            module_dirs = (
+                sorted(path.name for path in Path("/usr/lib/modules").iterdir() if path.is_dir())
+                if Path("/usr/lib/modules").is_dir()
+                else []
+            )
+            self.log("Available module directories: " + (", ".join(module_dirs) or "(none)"))
             raise InstallError(
                 "Could not locate the bundled MuliOS kernel "
-                "vmlinuz-linux-mulios-generic on the live media."
+                "vmlinuz-linux-mulios-generic. Checked the ISO boot paths "
+                "and /usr/lib/modules/*/vmlinuz; see the install log for "
+                "the exact search paths and available module directories."
             )
 
         self.log(
@@ -2488,6 +2579,168 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         self.chroot(["systemctl", "enable", "sddm"])
         self.progress.emit(70)
 
+    def install_desktop_effect(self):
+        effect = str(self.state.get("desktop_effect", "default")).strip().lower()
+        sources = {
+            "betterblur_dx": (
+                "https://github.com/xarblu/kwin-effects-better-blur-dx",
+                "Better Blur DX (Force Blur)",
+            ),
+            "glass": (
+                "https://github.com/4v3ngR/kwin-effects-glass",
+                "KWin Effects Glass",
+            ),
+        }
+        if effect == "default" or not effect:
+            self.log("Keeping the default KWin effects.")
+            return
+        if effect not in sources:
+            raise InstallError(f"Unknown desktop effect selection: {effect}")
+        # The live ISO bundles these effects. Reuse the plugin already copied
+        # to the target on both online and offline installs; only build from
+        # source when this image does not contain a compatible plugin.
+        plugin_tokens = {
+            "betterblur_dx": ("better_blur_dx",),
+            "glass": ("glass",),
+        }[effect]
+        plugin_dirs = (
+            self.target / "usr/lib/qt6/plugins/kwin/effects/plugins",
+            self.target / "usr/lib/kwin/plugins",
+        )
+        bundled_plugin = any(
+            directory.is_dir()
+            and any(
+                token in plugin.name.lower()
+                for plugin in directory.glob("*.so")
+                for token in plugin_tokens
+            )
+            for directory in plugin_dirs
+        )
+        if bundled_plugin:
+            self.configure_desktop_effect(effect)
+            self.log(
+                f"{sources[effect][1]} is bundled in the live image and was "
+                "enabled without rebuilding it."
+            )
+            return
+
+        if not self.network_available:
+            # Desktop effects are optional. An offline installation must still
+            # succeed if a compatible plugin was not bundled into the image.
+            self.state["desktop_effect"] = "default"
+            self.log(
+                f"WARNING: {sources[effect][1]} was selected, but the plugin is not "
+                "available locally and internet access is unavailable. "
+                "Continuing with the default desktop effects."
+            )
+            return
+
+        repository, display_name = sources[effect]
+        self.log(f"Building {display_name} for the installed KDE/ KWin version...")
+        # Build against the exact KWin/Qt libraries installed on the target.
+        # CMake performs the upstream compatibility checks and fails clearly
+        # if the chosen effect does not support this Plasma/KWin version.
+        build_script = (
+            "set -euo pipefail; "
+            "pacman -S --needed --noconfirm base-devel git cmake "
+            "extra-cmake-modules qt6-tools kwin; "
+            "rm -rf /tmp/mulios-kwin-effect; "
+            f"git clone --depth 1 {shlex.quote(repository)} /tmp/mulios-kwin-effect; "
+            "cmake -S /tmp/mulios-kwin-effect -B /tmp/mulios-kwin-effect/build "
+            "-DCMAKE_INSTALL_PREFIX=/usr; "
+            "cmake --build /tmp/mulios-kwin-effect/build --parallel; "
+            "cmake --install /tmp/mulios-kwin-effect/build; "
+            "rm -rf /tmp/mulios-kwin-effect"
+        )
+        try:
+            self.chroot(["bash", "-lc", build_script])
+        except Exception as exc:
+            # This is an optional desktop customization. A compatibility or
+            # build failure must not turn an otherwise successful OS install
+            # into a failed install; make the fallback explicit in the log.
+            self.state["desktop_effect"] = "default"
+            self.log(
+                f"WARNING: Could not install {display_name}: "
+                f"{type(exc).__name__}: {exc}. Continuing with default KWin effects."
+            )
+            return
+        if effect in {"glass", "betterblur_dx"}:
+            self.configure_desktop_effect(effect)
+            self.log(
+                f"{display_name} installed and enabled for the installed user. "
+                "Disabled conflicting blur effects."
+            )
+        else:
+            self.log(
+                f"{display_name} installed. Enable it from System Settings > Desktop Effects "
+                "after the first login; do not enable it alongside another blur fork."
+            )
+
+    def configure_desktop_effect(self, effect):
+        """Persist the selected KWin blur fork and disable incompatible alternatives."""
+        username = str(self.state.get("username", "")).strip()
+        if not username:
+            self.log(
+                f"WARNING: No installed username; {effect} was installed but "
+                "could not be enabled automatically."
+            )
+            return
+
+        config_path = self.target / "home" / username / ".config" / "kwinrc"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        text = config_path.read_text(encoding="utf-8") if config_path.is_file() else ""
+        lines = text.splitlines()
+
+        section_start = next(
+            (i for i, line in enumerate(lines) if line.strip() == "[Plugins]"),
+            None,
+        )
+        if section_start is None:
+            if lines and lines[-1].strip():
+                lines.append("")
+            lines.append("[Plugins]")
+            section_start = len(lines) - 1
+
+        section_end = next(
+            (
+                i for i in range(section_start + 1, len(lines))
+                if lines[i].strip().startswith("[") and lines[i].strip().endswith("]")
+            ),
+            len(lines),
+        )
+
+        # Better Blur DX installs the KWin plugin as "better_blur_dx". Blur forks
+        # cannot be enabled together; Glass also conflicts with translucency.
+        settings = {
+            "glassEnabled": "true" if effect == "glass" else "false",
+            "better_blur_dxEnabled": "true" if effect == "betterblur_dx" else "false",
+            "blurEnabled": "false",
+            "blurplusEnabled": "false",
+        }
+        if effect == "glass":
+            settings["translucencyEnabled"] = "false"
+
+        for key, value in settings.items():
+            pattern = re.compile(rf"^\s*{re.escape(key)}\s*=.*$", re.IGNORECASE)
+            matches = [
+                i for i in range(section_start + 1, section_end)
+                if pattern.match(lines[i])
+            ]
+            if matches:
+                lines[matches[0]] = f"{key}={value}"
+                for duplicate in reversed(matches[1:]):
+                    del lines[duplicate]
+                    section_end -= 1
+            else:
+                lines.insert(section_end, f"{key}={value}")
+                section_end += 1
+
+        config_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+        self.chroot([
+            "chown", f"{username}:{username}",
+            f"/home/{username}/.config/kwinrc",
+        ])
+
     # ------------------------------------------------------------------
     # Extra packages
     # ------------------------------------------------------------------
@@ -2513,77 +2766,26 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
     # ------------------------------------------------------------------
 
     def profile_packages(self):
-        profile = str(
-            self.state.get(
-                "profile",
-                "generic",
-            )
-        ).strip().lower()
-
-        profiles = {
-            "gaming": [
-                "steam",
-                "gamemode",
-                "gamescope",
-            ],
-            "code": [
-                "git",
-                "base-devel",
-                "python",
-                "gcc",
-                "clang",
-            ],
-            "ai": [
-                "git",
-                "python",
-                "python-pip",
-            ],
-            "school": [
-                "libreoffice-fresh",
-                "evince",
-            ],
-            "privacy": [
-                "firejail",
-                "tor",
-            ],
-            "generic": [],
-        }
-
-        return profile, profiles.get(
-            profile
-        )
+        profile = str(self.state.get("profile", "generic")).strip().lower()
+        allowed = {"ai", "code", "gaming", "generic", "privacy", "server", "study"}
+        if profile not in allowed:
+            self.log(f"Unknown profile '{profile}'; falling back to Generic.")
+            profile = "generic"
+        return profile, []
 
     def configure_profile(self):
-        profile, packages = (
-            self.profile_packages()
-        )
+        profile, _ = self.profile_packages()
+        self.log(f"Selected MuliOS profile: {profile}")
 
-        self.log(
-            f"Configuring MuliOS profile: "
-            f"{profile}"
-        )
-
+        # Specialized profile package installation is handled by MUpdate from
+        # MuliOS-dev/update. Do not install a second, stale set of local packages.
         if profile == "gaming":
-            self.log(
-                "Gaming profile requires multilib."
-            )
-
-            self.state[
-                "enable_multilib"
-            ] = True
-
+            self.state["enable_multilib"] = True
             self.configure_multilib()
 
-        if packages:
-            self.pacman_install(
-                packages
-            )
-
         self.write_file(
-            self.target /
-            "var/lib/mupdate/"
-            "initial-profile",
-            profile + "\n",
+            self.target / "var/lib/mupdate/initial-profile",
+            profile + "\\n",
         )
 
     # ------------------------------------------------------------------
@@ -2603,14 +2805,15 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             return
 
         candidates = [
+            # Prefer the current profile-aware MUpdate installed in the live ISO.
             Path(
-                "/opt/mulios-installer/mupdate"
+                "/usr/local/bin/mupdate"
             ),
             Path(
                 "/opt/mupdate"
             ),
             Path(
-                "/usr/local/bin/mupdate"
+                "/opt/mulios-installer/mupdate"
             ),
             Path(__file__).resolve().parent.parent /
             "mupdate",
@@ -2652,6 +2855,62 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         self.log(
             f"Installed MUpdate from {source}"
         )
+
+        self.install_selected_profile()
+
+    def install_selected_profile(self):
+        profile = str(self.state.get("profile", "generic")).strip().lower()
+        if profile == "generic":
+            self.log("Generic profile selected; keeping the default system configuration.")
+            return
+
+        # Do not infer connectivity from the Network page, Wi-Fi state, or
+        # an earlier DNS preflight. The live MuliOS session's direct request to
+        # the official profile API below is the source of truth. This also
+        # supports Ethernet and other working network connections.
+        try:
+            request = urllib.request.Request(
+                "https://api.github.com/repos/MuliOS-dev/update/git/trees/main?recursive=1",
+                headers={"Accept": "application/vnd.github+json",
+                         "User-Agent": "MuliOS-Installer"},
+            )
+            with urllib.request.urlopen(request, timeout=8) as response:
+                tree = json.loads(response.read().decode("utf-8"))
+            if tree.get("truncated") or not isinstance(tree.get("tree"), list):
+                raise InstallError("The MuliOS profile repository tree is incomplete.")
+
+            available = set()
+            for item in tree["tree"]:
+                path = item.get("path", "")
+                if item.get("type") != "blob" or not path.startswith("profiles/"):
+                    continue
+                parts = path.split("/")
+                if len(parts) == 3 and parts[2].endswith(".zip"):
+                    available.add(parts[1])
+
+            ordered = sorted(available)
+            if profile not in ordered:
+                raise InstallError(
+                    f"The selected profile '{profile}' is not currently available "
+                    "in the MuliOS profile repository."
+                )
+
+            choice = ordered.index(profile) + 1
+            self.log(
+                f"Installing the {profile} profile through MUpdate "
+                f"(discovered menu entry {choice})."
+            )
+            self.chroot(
+                ["/usr/local/bin/mupdate", "profile"],
+                input_text=f"{choice}\\ny\\n",
+            )
+            self.log(f"MUpdate installed the {profile} profile.")
+        except Exception as exc:
+            self.log(f"Profile installation failed: {type(exc).__name__}: {exc}")
+            raise InstallError(
+                f"Could not install the selected MuliOS profile '{profile}'. "
+                "Check the installer log and internet connection."
+            ) from exc
 
     # ------------------------------------------------------------------
     # Swap
@@ -3552,6 +3811,7 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             self.progress.emit(73)
 
             self.install_extra_packages()
+            self.install_desktop_effect()
             self.progress.emit(77)
 
             self.configure_profile()

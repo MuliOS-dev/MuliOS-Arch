@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=MuliOS Welcome
+Comment=Discover what's new in MuliOS
+Exec=python3 /opt/mulios-changelog/main.py
+OnlyShowIn=KDE;
+X-GNOME-Autostart-enabled=true

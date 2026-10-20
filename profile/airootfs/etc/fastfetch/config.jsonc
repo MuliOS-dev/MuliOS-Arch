@@ -1,0 +1,25 @@
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/master/doc/json_schema.json",
+  "logo": {
+    "type": "file",
+    "source": "/usr/share/mulios/fastfetch/logo.txt",
+    "padding": { "right": 3 },
+    "color": { "1": "white", "2": "green" }
+  },
+  "display": {
+    "separator": ": ",
+    "color": { "keys": "green" }
+  },
+  "modules": [
+    "title",
+    { "type": "os", "key": "OS", "format": "{pretty-name}" },
+    { "type": "kernel", "key": "Kernel", "format": "{release}" },
+    { "type": "uptime", "key": "Uptime" },
+    { "type": "packages", "key": "Packages", "format": "{all}" },
+    { "type": "shell", "key": "Shell" },
+    { "type": "cpu", "key": "CPU", "format": "{name}" },
+    { "type": "gpu", "key": "GPU", "format": "{name}" },
+    { "type": "memory", "key": "Memory" },
+    { "type": "disk", "key": "Disk", "folders": ["/"] }
+  ]
+}

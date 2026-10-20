@@ -39,6 +39,13 @@ fi
 
 chown -R liveuser:liveuser /home/liveuser/.config /home/liveuser/Desktop 2>/dev/null || true
 
+# Force the canonical MuliOS Fastfetch configuration for the live user.
+# Remove every legacy per-user Fastfetch format before the ISO is finalized.
+install -d -m 0755 /home/liveuser/.config/fastfetch
+install -m 0644 /etc/fastfetch/config.jsonc /home/liveuser/.config/fastfetch/config.jsonc
+rm -f /home/liveuser/.config/fastfetch/config.conf /home/liveuser/.config/fastfetch/config.json
+chown -R liveuser:liveuser /home/liveuser/.config/fastfetch
+
 # Build the live user's KService database after /etc/skel and the live
 # account exist. Plasma 6 expects the plasma- menu prefix.
 if id liveuser >/dev/null 2>&1 && command -v kbuildsycoca6 >/dev/null 2>&1; then

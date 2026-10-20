@@ -1,0 +1,7 @@
+# MuliOS runtime Arch Linux mirrorlist
+# Multiple HTTPS mirrors are kept for reliability.
+
+Server = https://fastly.mirror.pkgbuild.com/$repo/os/$arch
+Server = https://mirror.cyberbits.eu/archlinux/$repo/os/$arch
+Server = https://mirror.thekinrar.fr/archlinux/$repo/os/$arch
+Server = https://berlin.mirror.pkgbuild.com/$repo/os/$arch
