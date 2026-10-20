@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "\${BASH_SOURCE[0]}")/.." && pwd)"
 PROFILE="$ROOT/profile"
 
 usage() {
@@ -15,13 +15,13 @@ Runs static MuliOS profile checks without building the ISO.
 EOF
 }
 
-if [[ "${1:-}" == "--clean" ]]; then
+if [[ "\${1:-}" == "--clean" ]]; then
     rm -rf "$ROOT/output" "$ROOT/temp" "$ROOT/work" "$ROOT/out"
     echo "[OK] Build artifacts removed."
     exit 0
 fi
 
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+if [[ "\${1:-}" == "-h" || "\${1:-}" == "--help" ]]; then
     usage
     exit 0
 fi
@@ -131,28 +131,14 @@ else
     echo "[OK] application desktop entries use MuliOS launch wrappers"
 fi
 
-if ! grep -q '^nodejs
-if [[ "$fail" -ne 0 ]]; then
-    echo "Static checks failed."
-    exit 1
-fi
-
-echo "All static checks passed."
- "$PROFILE/packages.x86_64"; then
+if ! grep -q '^nodejs$' "$PROFILE/packages.x86_64"; then
     echo "[FAIL] nodejs is missing from the live package set"
     fail=1
 else
     echo "[OK] nodejs is included"
 fi
 
-if ! head -n 1 "$PROFILE/airootfs/opt/credits/main.py" | grep -q '^#!/usr/bin/env python3
-if [[ "$fail" -ne 0 ]]; then
-    echo "Static checks failed."
-    exit 1
-fi
-
-echo "All static checks passed."
-; then
+if ! head -n 1 "$PROFILE/airootfs/opt/credits/main.py" | grep -q '^#!/usr/bin/env python3$'; then
     echo "[FAIL] Credits must declare its Python interpreter"
     fail=1
 else
