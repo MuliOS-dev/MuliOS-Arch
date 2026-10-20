@@ -164,6 +164,24 @@ else
     echo "[OK] Desktop effect preview supports qdbus6 and qdbus"
 fi
 
+PROFILE_PAGE="$PROFILE/airootfs/opt/mulios-installer/pages/profile_page.py"
+if ! grep -q 'def refresh_profiles' "$PROFILE_PAGE" ||
+   ! grep -q 'Refresh profiles' "$PROFILE_PAGE" ||
+   ! grep -q 'MuliOS-dev/mupdate' "$PROFILE_PAGE"; then
+    echo "[FAIL] Profile page refresh control or canonical MUpdate endpoint is missing"
+    fail=1
+else
+    echo "[OK] Profile page has refresh control and uses the MUpdate repository"
+fi
+
+if ! grep -q 'DBUS_SESSION_BUS_ADDRESS=unix:path=' "$PROFILE/airootfs/opt/mulios-installer/main.py" ||
+   ! grep -q 'runuser, "-u", desktop_user.pw_name' "$PROFILE/airootfs/opt/mulios-installer/main.py"; then
+    echo "[FAIL] KWin preview does not target the active desktop user's D-Bus session"
+    fail=1
+else
+    echo "[OK] KWin preview targets the active desktop user's D-Bus session"
+fi
+
 if ! head -n 1 "$PROFILE/airootfs/opt/credits/main.py" | grep -q '^#!/usr/bin/env python3$'; then
     echo "[FAIL] Credits must declare its Python interpreter"
     fail=1
