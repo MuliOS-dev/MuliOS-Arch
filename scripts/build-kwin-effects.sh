@@ -34,7 +34,7 @@ build_effect() {
     # Arch's current KWin development setup targets Wayland. Avoid enabling
     # optional X11 plugin paths that require separate KWinX11 components.
     case "$name" in
-        forceblur) cmake_options+=(-DBETTERBLUR_X11=OFF) ;;
+        betterblur_dx) cmake_options+=(-DBBDX_X11=OFF) ;;
         glass)     cmake_options+=(-DGLASS_X11=OFF) ;;
     esac
 
@@ -58,9 +58,9 @@ build_effect() {
     echo "[INFO] Successfully bundled $name"
 }
 
-# Force Blur's upstream repository can lag behind KWin API changes. Treat both
+# Better Blur DX tracks newer KWin APIs; build it from its active upstream repository. Treat both
 # effects as optional so a third-party plugin failure never blocks ISO creation.
-build_effect "https://github.com/taj-ny/kwin-effects-forceblur" "forceblur"
+build_effect "https://github.com/xarblu/kwin-effects-better-blur-dx" "betterblur_dx"
 build_effect "https://github.com/4v3ngR/kwin-effects-glass" "glass"
 
 echo "[INFO] Finished optional KWin effect builds. Check warnings above for effects that were skipped."
