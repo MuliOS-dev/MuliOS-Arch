@@ -5,6 +5,7 @@ attempting installation or root escalation.
 """
 
 import os
+import pwd
 import sys
 import traceback
 import subprocess
@@ -235,14 +236,14 @@ class MuliOSInstaller(QMainWindow):
             self.next_button.setText("Next")
 
     def preview_desktop_effect(self):
-        """Apply the selected KWin effect in the live session without installing it."""
+        """Apply the selected KWin effect through the active Plasma user's session bus."""
         effect = self.desktop_page.selected_effect()
         plugin_names = {
             "betterblur_dx": ("better_blur_dxEnabled", "Better Blur DX (Force Blur)"),
             "glass": ("glassEnabled", "KWin Effects Glass"),
         }
         if effect in plugin_names:
-            key, display_name = plugin_names[effect]
+            _, display_name = plugin_names[effect]
             plugin_dirs = (
                 Path("/usr/lib/qt6/plugins/kwin/effects/plugins"),
                 Path("/usr/lib/kwin/plugins"),
@@ -269,40 +270,97 @@ class MuliOSInstaller(QMainWindow):
                 return
 
         try:
+            # ensure_root() elevates the installer. Never use the root user's
+            # D-Bus session or kwinrc: resolve the graphical session that launched it.
+            uid_value = (
+                os.environ.get("SUDO_UID")
+                or os.environ.get("PKEXEC_UID")
+                or os.environ.get("MULIOS_DESKTOP_UID")
+            )
+            if uid_value is not None:
+                desktop_uid = int(uid_value)
+            elif os.getuid() != 0:
+                desktop_uid = os.getuid()
+            else:
+                raise RuntimeError(
+                    "The installer is running as root, but the desktop user's ID "
+                    "could not be determined. Launch the installer from the live KDE session."
+                )
+
+            if desktop_uid == 0:
+                raise RuntimeError(
+                    "Could not identify a non-root KDE session user. "
+                    "KWin preview requires the live desktop user's D-Bus session."
+                )
+
+            desktop_user = pwd.getpwuid(desktop_uid)
+            runtime_dir = Path("/run/user") / str(desktop_uid)
+            bus_socket = runtime_dir / "bus"
+            if not bus_socket.exists():
+                raise RuntimeError(
+                    f"No D-Bus session bus was found at {bus_socket}. "
+                    "Make sure the live KDE desktop session is running."
+                )
+
+            runuser = shutil.which("runuser")
+            kwriteconfig = shutil.which("kwriteconfig6")
+            qdbus = shutil.which("qdbus6") or shutil.which("qdbus")
+            if not runuser:
+                raise FileNotFoundError("The runuser command is not available.")
+            if not kwriteconfig:
+                raise FileNotFoundError("kwriteconfig6 is not available.")
+            if not qdbus:
+                raise FileNotFoundError("Neither qdbus6 nor qdbus is available.")
+
+            session_env = [
+                "env",
+                f"HOME={desktop_user.pw_dir}",
+                f"XDG_CONFIG_HOME={desktop_user.pw_dir}/.config",
+                f"XDG_RUNTIME_DIR={runtime_dir}",
+                f"DBUS_SESSION_BUS_ADDRESS=unix:path={bus_socket}",
+            ]
+
+            def run_in_desktop_session(command):
+                subprocess.run(
+                    [runuser, "-u", desktop_user.pw_name, "--", *session_env, *command],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+
             config = {
                 "betterblur_dx": ("better_blur_dxEnabled", "true"),
                 "glass": ("glassEnabled", "true"),
             }
-            for key, value in (
+            settings = (
                 ("better_blur_dxEnabled", "false"),
                 ("glassEnabled", "false"),
                 ("blurEnabled", "true" if effect == "default" else "false"),
                 ("blurplusEnabled", "false"),
-            ):
-                subprocess.run(
-                    ["kwriteconfig6", "--file", "kwinrc", "--group", "Plugins",
-                     "--key", key, value],
-                    check=True, capture_output=True, text=True,
-                )
+            )
+            for key, value in settings:
+                run_in_desktop_session([
+                    kwriteconfig, "--file", "kwinrc", "--group", "Plugins",
+                    "--key", key, value,
+                ])
+
             if effect in config:
                 key, value = config[effect]
-                subprocess.run(
-                    ["kwriteconfig6", "--file", "kwinrc", "--group", "Plugins",
-                     "--key", key, value],
-                    check=True, capture_output=True, text=True,
-                )
-            qdbus = shutil.which("qdbus6") or shutil.which("qdbus")
-            if not qdbus:
-                raise FileNotFoundError(
-                    "Neither qdbus6 nor qdbus is available. "
-                    "Install the KDE D-Bus command-line tools to preview effects."
-                )
-            subprocess.run(
-                [qdbus, "org.kde.KWin", "/KWin", "reconfigure"],
-                check=True, capture_output=True, text=True,
-            )
-        except (OSError, subprocess.CalledProcessError) as exc:
+                run_in_desktop_session([
+                    kwriteconfig, "--file", "kwinrc", "--group", "Plugins",
+                    "--key", key, value,
+                ])
+
+            run_in_desktop_session([
+                qdbus, "org.kde.KWin", "/KWin", "reconfigure",
+            ])
+        except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as exc:
             detail = getattr(exc, "stderr", "") or str(exc)
+            if "DBUS_SESSION_BUS_ADDRESS" in detail or "autolaunch" in detail:
+                detail += (
+                    "\n\nThe preview must run inside the active KDE user's D-Bus session. "
+                    "The installer now checks that session explicitly."
+                )
             QMessageBox.warning(
                 self,
                 "Preview failed",
