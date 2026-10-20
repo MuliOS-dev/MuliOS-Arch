@@ -20,4 +20,13 @@ fi
 
 cd "$APP_DIR" || exit 1
 export PYTHONUNBUFFERED=1
-exec /usr/bin/python3 "$LAUNCHER" >>"$LOG_FILE" 2>&1
+if /usr/bin/python3 "$LAUNCHER" >>"$LOG_FILE" 2>&1; then
+    exit 0
+else
+    status=$?
+    if command -v kdialog >/dev/null 2>&1; then
+        details="$(tail -n 18 "$LOG_FILE" 2>/dev/null || true)"
+        kdialog --title "MuliOS Task Manager" --error "MuliOS Task Manager could not start (exit code $status).\n\nLog: $LOG_FILE\n\n$details" || true
+    fi
+    exit "$status"
+fi
