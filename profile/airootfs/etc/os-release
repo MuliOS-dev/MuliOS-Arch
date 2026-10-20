@@ -1,11 +1,11 @@
 NAME="MuliOS"
-PRETTY_NAME="MuliOS Arch 26.10.17-stable"
+PRETTY_NAME="MuliOS Arch 26.10.20-indev.11"
 ID=mulios
 ID_LIKE=arch
-VERSION="26.10.17-stable"
-VERSION_ID="26.10.17-stable"
-BUILD_ID="26.10.17-stable"
+VERSION="26.10.20-indev.11"
+VERSION_ID="26.10.20-indev.11"
+BUILD_ID="26.10.20-indev.11"
 ANSI_COLOR="38;2;0;103;56"
 HOME_URL="https://github.com/MuliOS-dev"
 IMAGE_ID=MuliOS
-IMAGE_VERSION="26.10.17-stable"
+IMAGE_VERSION="26.10.20-indev.11"
