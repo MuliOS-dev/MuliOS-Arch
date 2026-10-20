@@ -7,6 +7,7 @@ attempting installation or root escalation.
 import os
 import sys
 import traceback
+import subprocess
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -194,6 +195,12 @@ class MuliOSInstaller(QMainWindow):
         nav_layout.addWidget(self.back_button)
         nav_layout.addStretch()
 
+        self.preview_button = QPushButton("Preview")
+        self.preview_button.setObjectName("SecondaryButton")
+        self.preview_button.clicked.connect(self.preview_desktop_effect)
+        self.preview_button.setVisible(False)
+        nav_layout.addWidget(self.preview_button)
+
         self.next_button = QPushButton("Next")
         self.next_button.setObjectName("PrimaryButton")
         self.next_button.clicked.connect(self.go_next)
@@ -209,6 +216,7 @@ class MuliOSInstaller(QMainWindow):
         self.sidebar.set_active_step(index)
         self.back_button.setEnabled(0 < index < IDX_INSTALL)
         self.next_button.setVisible(index < IDX_INSTALL)
+        self.preview_button.setVisible(index == IDX_DESKTOP)
 
         if index == IDX_SUMMARY:
             self.next_button.setText("Install")
@@ -218,6 +226,83 @@ class MuliOSInstaller(QMainWindow):
             )
         else:
             self.next_button.setText("Next")
+
+    def preview_desktop_effect(self):
+        """Apply the selected KWin effect in the live session without installing it."""
+        effect = self.desktop_page.selected_effect()
+        plugin_names = {
+            "forceblur": ("forceblurEnabled", "Better Blur (Force Blur)"),
+            "glass": ("glassEnabled", "KWin Effects Glass"),
+        }
+        if effect in plugin_names:
+            key, display_name = plugin_names[effect]
+            plugin_dirs = (
+                Path("/usr/lib/qt6/plugins/kwin/effects/plugins"),
+                Path("/usr/lib/kwin/plugins"),
+                Path("/usr/lib/x86_64-linux-gnu/qt6/plugins/kwin/effects/plugins"),
+            )
+            plugin_tokens = ("forceblur",) if effect == "forceblur" else ("glass",)
+            installed = any(
+                directory.is_dir()
+                and any(
+                    token in path.name.lower()
+                    for path in directory.glob("*.so")
+                    for token in plugin_tokens
+                )
+                for directory in plugin_dirs
+            )
+            if not installed:
+                QMessageBox.information(
+                    self,
+                    "Preview unavailable",
+                    f"{display_name} is not installed in this live session. "
+                    "The preview cannot be applied until the effect plugin is bundled "
+                    "with the live image.",
+                )
+                return
+
+        try:
+            config = {
+                "forceblur": ("forceblurEnabled", "true"),
+                "glass": ("glassEnabled", "true"),
+            }
+            for key, value in (
+                ("forceblurEnabled", "false"),
+                ("glassEnabled", "false"),
+                ("blurEnabled", "true" if effect == "default" else "false"),
+                ("blurplusEnabled", "false"),
+            ):
+                subprocess.run(
+                    ["kwriteconfig6", "--file", "kwinrc", "--group", "Plugins",
+                     "--key", key, value],
+                    check=True, capture_output=True, text=True,
+                )
+            if effect in config:
+                key, value = config[effect]
+                subprocess.run(
+                    ["kwriteconfig6", "--file", "kwinrc", "--group", "Plugins",
+                     "--key", key, value],
+                    check=True, capture_output=True, text=True,
+                )
+            subprocess.run(
+                ["qdbus", "org.kde.KWin", "/KWin", "org.kde.KWin.reconfigure"],
+                check=True, capture_output=True, text=True,
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            detail = getattr(exc, "stderr", "") or str(exc)
+            QMessageBox.warning(
+                self,
+                "Preview failed",
+                "KWin could not apply the selected desktop effect.\n\n" + detail,
+            )
+            return
+
+        QMessageBox.information(
+            self,
+            "Preview applied",
+            "The selected desktop effect has been applied to the live session. "
+            "This preview does not change the installation selection.",
+        )
 
     def go_back(self):
         idx = self.stack.currentIndex()
