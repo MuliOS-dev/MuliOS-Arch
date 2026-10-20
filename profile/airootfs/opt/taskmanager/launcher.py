@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import signal
 import subprocess
 import sys
@@ -21,24 +22,38 @@ class TaskManager(QMainWindow):
         self.setWindowTitle("Task Manager")
         self.resize(1200, 800)
 
+        log_dir = Path.home() / ".local" / "state" / "mulios"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        self._backend_log = (log_dir / "taskmanager-backend.log").open(
+            "a", encoding="utf-8"
+        )
+        self._backend_log.write("\n--- Task Manager backend starting ---\n")
+        self._backend_log.flush()
+
         self.backend = subprocess.Popen(
             ["node", str(BACKEND)],
             cwd=str(BASE_DIR),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=self._backend_log,
+            stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
             start_new_session=True,
         )
 
-        time.sleep(1)
+        # Node can take longer to initialize on slower live USBs or VMs.
+        deadline = time.monotonic() + 5
+        while self.backend.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.1)
 
         if self.backend.poll() is not None:
+            self._backend_log.flush()
             QMessageBox.critical(
                 self,
                 "Task Manager",
-                "The Task Manager backend failed to start.",
+                "The Task Manager backend failed to start. "
+                "See ~/.local/state/mulios/taskmanager-backend.log.",
             )
-            raise RuntimeError("Node.js backend exited")
+            self._backend_log.close()
+            raise RuntimeError("Node.js backend exited; see taskmanager-backend.log")
 
         self.browser = QWebEngineView()
         self.browser.setUrl(QUrl(URL))
@@ -51,6 +66,8 @@ class TaskManager(QMainWindow):
                 self.backend.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 self.backend.kill()
+        self._backend_log.flush()
+        self._backend_log.close()
         event.accept()
 
 
