@@ -11,13 +11,13 @@ if [[ ! -f "$PROFILE_VERSION_FILE" ]]; then
 fi
 
 while true; do
-    read -r -p "Enter release channel/suffix (e.g. stable, beta, indev, indev.11): " release_channel
+    read -r -p "Enter release channel/suffix (e.g. stable, beta, indev, indev.xxx): " release_channel
 
-    if [[ "$release_channel" =~ ^[a-z][a-z0-9-]*$ || "$release_channel" =~ ^[a-z][a-z0-9-]*\.[0-9]+$ ]]; then
+    if [[ "$release_channel" =~ ^[a-z][a-z0-9-]*$ || "$release_channel" =~ ^[a-z][a-z0-9-]*\.[a-z0-9-]+$ ]]; then
         break
     fi
 
-    echo "[ERROR]: invalid channel. Use lowercase letters/numbers/hyphens, optionally followed by .N (e.g. indev.11)." >&2
+    echo "[ERROR]: invalid channel. Use lowercase letters/numbers/hyphens, optionally followed by .N (e.g. indev.xxx)." >&2
 done
 
 mulios_version="${BUILD_DATE}-${release_channel}"
