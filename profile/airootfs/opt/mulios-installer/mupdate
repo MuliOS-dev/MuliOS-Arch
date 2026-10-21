@@ -517,7 +517,7 @@ prepare_profile_kernel_conflicts() {
     # build tree behind. Quarantine only the known paths, and only after
     # verifying that no installed package owns files within those paths.
     local ownership_list="$WORKDIR/installed-package-paths"
-    pacman -Qlq > "$ownership_list" ||
+    pacman -Qq | xargs -r pacman -Qlq > "$ownership_list" ||
         die "Unable to inspect installed package ownership; refusing kernel-header cleanup."
 
     local owned_path
