@@ -234,12 +234,7 @@ else
     echo "[OK] Installer and MUpdate configure official Arch mirrors with fallbacks"
 fi
 
-if ! grep -q '^ParallelDownloads = 3 then
-    echo "[FAIL] Pacman parallel downloads are not limited to a conservative value"
-    fail=1
-else
-    echo "[OK] Pacman uses conservative parallel downloads"
-fi
+# Pacman parallel-download setting is checked in the consolidated checks below.
 
 if ! grep -q 'prepare_profile_kernel_conflicts' "$PROFILE/airootfs/usr/local/bin/mupdate" ||
    ! grep -q 'Refusing to move game-kernel header files' "$PROFILE/airootfs/usr/local/bin/mupdate" ||
