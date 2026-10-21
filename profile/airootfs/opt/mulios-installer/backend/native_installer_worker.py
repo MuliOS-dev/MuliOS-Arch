@@ -2976,8 +2976,9 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         except Exception as exc:
             self.log(f"Profile installation failed: {type(exc).__name__}: {exc}")
             raise InstallError(
-                f"Could not install the selected MuliOS profile '{profile}'. "
-                "Check the installer log and internet connection."
+                f"Could not install the selected MuliOS profile '{profile}': "
+                f"{type(exc).__name__}: {exc}. See /var/log/mulios/install.log "
+                "for the complete command output."
             ) from exc
 
     # ------------------------------------------------------------------
