@@ -555,11 +555,11 @@ else
     echo "[OK] KDE splash animation defaults to None"
 fi
 
-if grep -Fq '\\n' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"; then
-    echo "[FAIL] Installer worker contains literal escaped newlines in generated configuration"
+if ! grep -Fq '"\n".join(lines) + "\n"' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"; then
+    echo "[FAIL] Installer worker does not join generated configuration lines with newline escapes"
     fail=1
 else
-    echo "[OK] Installer worker uses real newline escapes for generated configuration"
+    echo "[OK] Installer worker joins generated configuration lines with newline escapes"
 fi
 
 if ! grep -q 'DBUS_SESSION_BUS_ADDRESS=unix:path=' "$PROFILE/airootfs/opt/mulios-installer/main.py" ||
