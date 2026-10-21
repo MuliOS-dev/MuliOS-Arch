@@ -678,7 +678,13 @@ for node in ast.walk(install):
 positions = {name: next((line for call, line in calls if call == name), None) for name in ("install_kernel_image", "copy_system", "configure_kernel")}
 if any(value is None for value in positions.values()) or not (positions["install_kernel_image"] < positions["copy_system"] < positions["configure_kernel"]):
     raise SystemExit(f"Incorrect install order: {positions}")
-print("Kernel image installation precedes airootfs copy.")
+kernel_method = next((n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "install_kernel_image"), None)
+if kernel_method is None:
+    raise SystemExit("install_kernel_image() method not found")
+method_source = ast.get_source_segment(path.read_text(encoding="utf-8"), kernel_method) or ""
+if "kernel_destination.is_file()" not in method_source or "refusing to copy the live airootfs" not in method_source:
+    raise SystemExit("Kernel image must be verified before the airootfs copy can proceed")
+print("Kernel image installation is ordered first and verified before airootfs copy.")
 PY
 then
     echo "[FAIL] Installer must install the kernel image before copying the live airootfs"
