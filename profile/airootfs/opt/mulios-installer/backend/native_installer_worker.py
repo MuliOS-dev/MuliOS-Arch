@@ -2882,11 +2882,15 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             available = set()
             for item in tree["tree"]:
                 path = item.get("path", "")
-                if item.get("type") != "blob" or not path.startswith("profiles/"):
+                if item.get("type") != "blob" or not path.startswith("profiles/") or not path.endswith(".zip"):
                     continue
                 parts = path.split("/")
-                if len(parts) == 3 and parts[2].endswith(".zip"):
-                    available.add(parts[1])
+                if len(parts) >= 3:
+                    slug = parts[1]
+                    available.add("gaming" if slug == "game" else slug)
+                elif len(parts) == 2 and parts[1].startswith("latest-"):
+                    slug = parts[1][len("latest-"):-len(".zip")]
+                    available.add("gaming" if slug == "game" else slug)
 
             ordered = sorted(available)
             if profile not in ordered:
