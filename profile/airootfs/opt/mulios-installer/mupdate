@@ -11,7 +11,7 @@ set -Eeuo pipefail
 # Files are never deleted as of now.
 # Machine-specific state is protected.
 
-VERSION="a1.0.7"
+VERSION="a1.0.8"
 GITHUB_OWNER="MuliOS-dev"
 GITHUB_REPO="MuliOS-Arch"
 GITHUB_BRANCH="main"
@@ -503,6 +503,72 @@ download_verified_profile_zip() {
     ok "Verified profile package: $(basename "$path")"
 }
 
+prepare_profile_kernel_conflicts() {
+    local profile="$1"
+    [[ "$profile" == "gaming" ]] || return 0
+
+    local headers_package="linux-mulios-game-headers"
+    if pacman -Q "$headers_package" >/dev/null 2>&1; then
+        info "Game-kernel headers are already registered with pacman; no conflict cleanup needed."
+        return 0
+    fi
+
+    # A failed/partial profile installation can leave an unregistered kernel
+    # build tree behind. Quarantine only the known paths, and only after
+    # verifying that no installed package owns files within those paths.
+    local ownership_list="$WORKDIR/installed-package-paths"
+    pacman -Qlq > "$ownership_list" ||
+        die "Unable to inspect installed package ownership; refusing kernel-header cleanup."
+
+    local owned_path
+    while IFS= read -r owned_path; do
+        case "$owned_path" in
+            /usr/lib/modules/*-mulios-game/build|\
+            /usr/lib/modules/*-mulios-game/build/*|\
+            /usr/lib/modules/*-mulios-game/vdso|\
+            /usr/lib/modules/*-mulios-game/vdso/*|\
+            /usr/src/linux-mulios-game)
+                die "Refusing to move game-kernel header files because an installed package owns: $owned_path"
+                ;;
+        esac
+    done < "$ownership_list"
+
+    local stamp backup_root version_dir version candidate destination moved=0
+    stamp="$(date -u '+%Y%m%dT%H%M%SZ')-$"
+    backup_root="/var/lib/mupdate/profile-conflicts/$stamp"
+
+    shopt -s nullglob
+    for version_dir in /usr/lib/modules/*-mulios-game; do
+        [[ -d "$version_dir" ]] || continue
+        version="${version_dir##*/}"
+
+        for candidate in "$version_dir/build" "$version_dir/vdso"; do
+            [[ -e "$candidate" || -L "$candidate" ]] || continue
+            destination="$backup_root/$version/${candidate##*/}"
+            mkdir -p "$(dirname "$destination")"
+            mv -- "$candidate" "$destination" ||
+                die "Could not safely quarantine stale header path: $candidate"
+            info "Quarantined unowned stale kernel-header path: $candidate"
+            moved=1
+        done
+    done
+    shopt -u nullglob
+
+    candidate="/usr/src/linux-mulios-game"
+    if [[ -e "$candidate" || -L "$candidate" ]]; then
+        destination="$backup_root/linux-mulios-game"
+        mkdir -p "$backup_root"
+        mv -- "$candidate" "$destination" ||
+            die "Could not safely quarantine stale source path: $candidate"
+        info "Quarantined unowned stale kernel-header path: $candidate"
+        moved=1
+    fi
+
+    if [[ "$moved" == "1" ]]; then
+        ok "Stale game-kernel header files were preserved at $backup_root"
+    fi
+}
+
 validate_profile_archive() {
     local archive="$1"
     local extract_dir="$2"
@@ -623,6 +689,8 @@ cmd_profile() {
         warn "Profile installation cancelled."
         return 0
     fi
+
+    prepare_profile_kernel_conflicts "$profile"
 
     info "Running sh/install.sh first..."
     ( cd "$extract_dir" && ./sh/install.sh ) || die "Profile kernel/image installation failed."
