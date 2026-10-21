@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# MUpdate — MuliOS repository merger
-# Version: a1.0.6
+# MUpdate
+# Version: a1.0.7
 #
 # Source: https://github.com/MuliOS-dev/MuliOS-Arch
 # Source tree: profile/airootfs
 #
 # Only new/changed MuliOS-owned files are downloaded.
-# Files are never deleted.
+# Files are never deleted as of now.
 # Machine-specific state is protected.
 
-VERSION="a1.0.6"
+VERSION="a1.0.7"
 GITHUB_OWNER="MuliOS-dev"
 GITHUB_REPO="MuliOS-Arch"
 GITHUB_BRANCH="main"
+UPDATE_OWNER="MuliOS-dev"
+UPDATE_REPO="update"
+UPDATE_BRANCH="main"
+PROFILE_ROOT="profiles"
+BETA_MODE=0
 
 STATE_DIR="/var/lib/mupdate"
 LOG_FILE="/var/log/mupdate.log"
@@ -24,6 +29,7 @@ WORKDIR="$(mktemp -d /tmp/mupdate.XXXXXX)"
 ASSUME_YES=1
 SAFE_MODE=0
 DRY_RUN=0
+FORCE_MODE=0
 
 CHANGED_COUNT=0
 ADDED_COUNT=0
@@ -79,7 +85,39 @@ require_cmd() {
 }
 
 check_dependencies() {
-    require_cmd curl jq git sha1sum sha256sum install mkdir rm mktemp stat chmod readlink flock tar cp sed tr date head cat
+    require_cmd curl jq git sha1sum sha256sum install mkdir rm mktemp stat chmod readlink flock tar cp sed tr date head cat zip
+}
+
+create_backup() {
+    local local_path="$1"
+    local backup_root="$STATE_DIR/backups"
+    local backup_stage="$WORKDIR/backup"
+    local timestamp
+    local archive
+
+    [[ "$DRY_RUN" == "1" ]] && return 0
+    [[ -e "$local_path" || -L "$local_path" ]] || return 0
+
+    timestamp="$(date -u '+%Y%m%dT%H%M%S%NZ')"
+    path_id="$(printf '%s' "$local_path" | sha256sum | sed 's/ .*//' | sed 's/^\(.\{12\}\).*$/\1/')"
+    archive="$backup_root/mupdate-$timestamp-$path_id.zip"
+
+    mkdir -p "$backup_root"
+    rm -rf "$backup_stage"
+    mkdir -p "$backup_stage$(dirname "$local_path")"
+
+    cp -a "$local_path" "$backup_stage$local_path"
+
+    (
+        cd "$backup_stage"
+        zip -q -r "$archive" .
+    ) || {
+        rm -f "$archive"
+        warn "Unable to create backup archive for $local_path; refusing to overwrite it."
+        return 1
+    }
+
+    ok "Backed up $local_path to $archive"
 }
 
 acquire_lock() {
@@ -177,6 +215,11 @@ merge_file() {
             return
         fi
 
+        if ! create_backup "$local_path"; then
+            ((SKIPPED_COUNT+=1))
+            return 0
+        fi
+
         rm -f "$local_path"
         mkdir -p "$(dirname "$local_path")"
         ln -s "$link_target" "$local_path"
@@ -189,12 +232,45 @@ merge_file() {
 
     local downloaded_sha
     downloaded_sha="$(git hash-object "$temp_file")"
-    [[ "$downloaded_sha" == "$remote_sha" ]] ||
-        die "Repository changed or download was corrupted: $repo_path"
+
+    if [[ "$downloaded_sha" != "$remote_sha" ]]; then
+        warn "Raw download hash mismatch for $repo_path; retrying from GitHub blob API..."
+
+        local blob_json blob_encoding blob_content
+        blob_json="$WORKDIR/blob.json"
+        curl -fsSL --retry 3 --retry-all-errors             -H "Accept: application/vnd.github+json"             -H "X-GitHub-Api-Version: 2022-11-28"             "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/git/blobs/$remote_sha"             > "$blob_json" ||
+            die "Failed retrieving GitHub blob: $repo_path"
+
+        blob_encoding="$(jq -r '.encoding // empty' "$blob_json")"
+        blob_content="$(jq -r '.content // empty' "$blob_json")"
+
+        [[ "$blob_encoding" == "base64" && -n "$blob_content" ]] ||
+            die "GitHub returned an invalid blob for: $repo_path"
+
+        printf '%s' "$blob_content" | tr -d '\n' | base64 -d > "$temp_file" ||
+            die "Failed decoding GitHub blob: $repo_path"
+
+        downloaded_sha="$(git hash-object "$temp_file")"
+    fi
+
+    if [[ "$downloaded_sha" != "$remote_sha" ]]; then
+        if [[ "$FORCE_MODE" == "1" ]]; then
+            warn "Blob verification failed for $repo_path; --force will install the downloaded repository file anyway."
+        else
+            warn "Unable to verify $repo_path; skipping file and continuing."
+            ((SKIPPED_COUNT+=1))
+            return 0
+        fi
+    fi
 
     if [[ "$DRY_RUN" == "1" ]]; then
         printf 'UPDATE %s\n' "$local_path"
         return
+    fi
+
+    if ! create_backup "$local_path"; then
+        ((SKIPPED_COUNT+=1))
+        return 0
     fi
 
     local install_mode=0644
@@ -217,6 +293,7 @@ sync_repository() {
     local deferred_mupdate_path=""
     local deferred_mupdate_mode=""
     local deferred_mupdate_sha=""
+    local self_updated=0
 
     info "Checking MuliOS-Arch..."
     get_tree > "$tree_file" ||
@@ -278,14 +355,32 @@ sync_repository() {
             continue
         fi
 
-        merge_file "$path" "$mode" "$remote_sha"
+        if ! merge_file "$path" "$mode" "$remote_sha"; then
+            warn "Skipping /$(printf '%s' "$path" | sed 's#^profile/airootfs/##') and continuing."
+            ((SKIPPED_COUNT+=1))
+        fi
     done < "$manifest"
 
     if [[ -n "$deferred_mupdate_path" ]]; then
         if [[ "$SAFE_MODE" == "0" ]]; then
-            merge_file "$deferred_mupdate_path" "$deferred_mupdate_mode" "$deferred_mupdate_sha"
+            local current_mupdate_sha=""
+            current_mupdate_sha="$(local_blob_sha "$deferred_mupdate_path" "$deferred_mupdate_mode" 2>/dev/null || true)"
+
+            if [[ "$current_mupdate_sha" != "$deferred_mupdate_sha" ]]; then
+                merge_file "$deferred_mupdate_path" "$deferred_mupdate_mode" "$deferred_mupdate_sha"
+                self_updated=1
+            fi
         else
             echo "UPDATE /usr/local/bin/mupdate (deferred until other files are checked)"
+        fi
+    fi
+
+    if [[ "$self_updated" == "1" && "$SAFE_MODE" == "0" && "$DRY_RUN" == "0" ]]; then
+        info "MUpdate itself was updated; restarting with the new version..."
+        if [[ "$BETA_MODE" == "1" ]]; then
+            exec /usr/local/bin/mupdate update beta
+        else
+            exec /usr/local/bin/mupdate update
         fi
     fi
 
@@ -304,14 +399,260 @@ sync_repository() {
     echo "Skipped : $SKIPPED_COUNT"
 }
 
+
+
+
+profile_name_from_path() {
+    local path="$1"
+    printf '%s' "$path" | cut -d/ -f2
+}
+
+profile_zip_is_direct_child() {
+    local path="$1"
+    local profile="$2"
+    local candidate_profile="$(printf '%s' "$path" | cut -d/ -f2)"
+    local remainder="$(printf '%s' "$path" | cut -d/ -f3-)"
+
+    [[ "$candidate_profile" == "$profile" ]] || return 1
+    [[ "$path" == "$PROFILE_ROOT/"* ]] || return 1
+    [[ "$remainder" == *.zip ]] || return 1
+    [[ "$remainder" != */* ]] || return 1
+}
+
+download_verified_profile_zip() {
+    local path="$1"
+    local expected_sha="$2"
+    local destination="$3"
+    local raw="$WORKDIR/profile.raw"
+    local payload="$WORKDIR/profile.payload"
+    local blob_json="$WORKDIR/profile-blob.json"
+    local pointer="$WORKDIR/profile-pointer"
+
+    info "Downloading profile package: $(basename "$path")"
+    curl -fsSL --retry 3 --retry-all-errors -o "$raw" \
+        "https://raw.githubusercontent.com/$UPDATE_OWNER/$UPDATE_REPO/$UPDATE_BRANCH/$path" ||
+        die "Failed to download profile package: $path"
+
+    local actual_sha
+    actual_sha="$(git hash-object "$raw")"
+
+    # Profile ZIPs are stored with Git LFS. A raw URL may return either the
+    # 134-byte pointer or the actual ZIP, so never accept a matching Git blob
+    # hash until the pointer has been inspected.
+    if [[ "$actual_sha" != "$expected_sha" ]] || grep -q '^version https://git-lfs.github.com/spec/v1$' "$raw"; then
+        curl -fsSL --retry 3 --retry-all-errors \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$UPDATE_OWNER/$UPDATE_REPO/git/blobs/$expected_sha" \
+            > "$blob_json" || die "Failed retrieving profile Git blob: $path"
+
+        [[ "$(jq -r '.encoding // empty' "$blob_json")" == "base64" ]] ||
+            die "GitHub returned an unsupported blob encoding for $path"
+
+        jq -r '.content // empty' "$blob_json" | tr -d '\n' | base64 -d > "$pointer" ||
+            die "Failed decoding profile Git blob: $path"
+
+        local pointer_sha
+        pointer_sha="$(git hash-object "$pointer")"
+        [[ "$pointer_sha" == "$expected_sha" ]] ||
+            die "Profile pointer verification failed: $path"
+
+        if grep -q '^version https://git-lfs.github.com/spec/v1$' "$pointer"; then
+            local expected_lfs_sha expected_size actual_lfs_sha actual_size
+            expected_lfs_sha="$(sed -n 's/^oid sha256://p' "$pointer")"
+            expected_size="$(sed -n 's/^size //p' "$pointer")"
+
+            # Prefer the already-downloaded payload if raw.githubusercontent.com
+            # returned the real object; otherwise request the LFS media endpoint.
+            actual_lfs_sha="$(sha256sum "$raw" | cut -d ' ' -f 1)"
+            actual_size="$(stat -c '%s' "$raw")"
+            if [[ "$actual_lfs_sha" == "$expected_lfs_sha" && "$actual_size" == "$expected_size" ]]; then
+                mv "$raw" "$destination"
+                ok "Verified Git LFS profile package: $(basename "$path")"
+                return 0
+            fi
+
+            curl -fsSL --retry 3 --retry-all-errors -o "$payload" \
+                "https://media.githubusercontent.com/media/$UPDATE_OWNER/$UPDATE_REPO/$UPDATE_BRANCH/$path" ||
+                die "Could not retrieve the Git LFS payload for $path"
+
+            actual_lfs_sha="$(sha256sum "$payload" | cut -d ' ' -f 1)"
+            actual_size="$(stat -c '%s' "$payload")"
+            [[ "$expected_lfs_sha" =~ ^[0-9a-f]{64}$ ]] ||
+                die "Invalid Git LFS SHA-256 pointer for $path"
+            [[ "$expected_size" =~ ^[0-9]+$ ]] ||
+                die "Invalid Git LFS size pointer for $path"
+            [[ "$actual_lfs_sha" == "$expected_lfs_sha" && "$actual_size" == "$expected_size" ]] ||
+                die "Git LFS profile package integrity check failed: $path"
+
+            mv "$payload" "$destination"
+            ok "Verified Git LFS profile package: $(basename "$path")"
+            return 0
+        fi
+
+        # Non-LFS files must match the Git blob exactly.
+        cp "$pointer" "$raw"
+        actual_sha="$(git hash-object "$raw")"
+    fi
+
+    if [[ "$actual_sha" != "$expected_sha" ]]; then
+        die "Profile package integrity check failed: $path"
+    fi
+
+    mv "$raw" "$destination"
+    ok "Verified profile package: $(basename "$path")"
+}
+
+validate_profile_archive() {
+    local archive="$1"
+    local extract_dir="$2"
+
+    info "Validating profile archive..."
+
+    unzip -tq "$archive" ||
+        die "Profile archive is corrupt: $(basename "$archive")"
+
+    rm -rf "$extract_dir"
+    mkdir -p "$extract_dir"
+    unzip -q "$archive" -d "$extract_dir" ||
+        die "Failed to extract profile archive."
+
+    [[ -f "$extract_dir/sh/install.sh" ]] ||
+        die "Profile archive is missing sh/install.sh"
+
+    [[ -f "$extract_dir/sh/packages.sh" ]] ||
+        die "Profile archive is missing sh/packages.sh"
+
+    chmod +x "$extract_dir/sh/install.sh" "$extract_dir/sh/packages.sh"
+
+    bash -n "$extract_dir/sh/install.sh" ||
+        die "Profile sh/install.sh failed shell syntax validation."
+
+    bash -n "$extract_dir/sh/packages.sh" ||
+        die "Profile sh/packages.sh failed shell syntax validation."
+
+    local package_count
+    package_count="$(find "$extract_dir" -maxdepth 1 -type f \
+        \( -name '*.pkg.tar.zst' -o -name '*.pkg.tar.xz' -o -name '*.pkg.tar.gz' \) |
+        wc -l)"
+
+    [[ "$package_count" -gt 0 ]] ||
+        die "Profile archive contains no Arch package files."
+
+    info "Profile archive is valid."
+    echo "    install script : sh/install.sh"
+    echo "    package script : sh/packages.sh"
+    echo "    package files  : $package_count"
+}
+
+cmd_profile() {
+    local requested_profile="${1:-}"
+    require_root
+    require_cmd curl jq git sha1sum sha256sum unzip mktemp mkdir rm mv cp chmod find sort wc stat cut grep base64 sed tr
+    verify_os
+    acquire_lock
+
+    local tree_file="$WORKDIR/update-tree.json"
+    local manifest="$WORKDIR/profiles.tsv"
+    info "Checking MuliOS profile repository..."
+    curl -fsSL --retry 3 --retry-all-errors \
+        -H "Accept: application/vnd.github+json" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
+        "https://api.github.com/repos/$UPDATE_OWNER/$UPDATE_REPO/git/trees/$UPDATE_BRANCH?recursive=1" \
+        > "$tree_file" || die "Unable to read the MuliOS update repository."
+
+    jq -e '.tree | type == "array"' "$tree_file" >/dev/null ||
+        die "GitHub returned an invalid profile repository tree."
+    [[ "$(jq -r '.truncated // false' "$tree_file")" == "false" ]] ||
+        die "GitHub returned a truncated profile tree; refusing an incomplete profile list."
+
+    info "Profile tree verified: $(jq -r '.sha' "$tree_file")"
+    : > "$manifest"
+
+    # Only a ZIP directly inside profiles/<name>/ qualifies. Empty folders
+    # and nested historical files are deliberately not listed.
+    while IFS="$(printf '\t')" read -r path mode type sha; do
+        [[ "$type" == "blob" && "$path" == profiles/* ]] || continue
+        profile="$(printf '%s\n' "$path" | cut -d/ -f2)"
+        inside="$(printf '%s\n' "$path" | cut -d/ -f3-)"
+        [[ -n "$profile" && "$inside" == *.zip && "$inside" != */* ]] || continue
+        printf '%s\t%s\t%s\n' "$profile" "$path" "$sha" >> "$manifest"
+    done < <(jq -r '.tree[] | [.path,.mode,.type,.sha] | @tsv' "$tree_file")
+
+    [[ -s "$manifest" ]] || die "No installable MuliOS profiles were found."
+    sort -t "$(printf '\t')" -k1,1 "$manifest" -o "$manifest"
+    local count
+    count="$(wc -l < "$manifest" | tr -d ' ')"
+    local choice row profile path sha
+    if [[ -n "$requested_profile" ]]; then
+        [[ "$requested_profile" =~ ^[a-zA-Z0-9._-]+$ ]] ||
+            die "Invalid profile name: $requested_profile"
+        row="$(awk -F '\t' -v wanted="$requested_profile" '$1 == wanted { print; found=1; exit } END { if (!found) exit 1 }' "$manifest")" ||
+            die "Unknown profile '$requested_profile'. Run 'sudo mupdate profile' to list available profiles."
+        info "Installing requested profile: $requested_profile"
+    else
+        echo
+        info "Available MuliOS profiles:"
+        cut -f1 "$manifest" | awk '{ print "  " NR ": " $0 }'
+        echo
+
+        while true; do
+            if [[ ! -t 0 ]]; then
+                die "No profile specified and no interactive terminal is available. Use: sudo mupdate profile <profile>"
+            fi
+            read -r -p "Select a profile [1-$count]: " choice
+            [[ "$choice" =~ ^[0-9]+$ ]] || { warn "Enter a number."; continue; }
+            (( choice >= 1 && choice <= count )) || { warn "Invalid profile selection."; continue; }
+            break
+        done
+
+        row="$(sed -n "$choice"'p' "$manifest")"
+    fi
+    IFS="$(printf '\t')" read -r profile path sha <<< "$row"
+    info "Selected profile: $profile"
+    info "Package: $(basename "$path")"
+
+    local archive="$WORKDIR/$profile.zip"
+    local extract_dir="$WORKDIR/$profile"
+    download_verified_profile_zip "$path" "$sha" "$archive"
+    validate_profile_archive "$archive" "$extract_dir"
+
+    echo
+    warn "sh/install.sh runs before sh/packages.sh."
+    if ! confirm "Install the $profile profile?"; then
+        warn "Profile installation cancelled."
+        return 0
+    fi
+
+    info "Running sh/install.sh first..."
+    ( cd "$extract_dir" && ./sh/install.sh ) || die "Profile kernel/image installation failed."
+    ok "sh/install.sh completed."
+    info "Running sh/packages.sh second..."
+    ( cd "$extract_dir" && ./sh/packages.sh ) || die "Profile package installation failed."
+    ok "sh/packages.sh completed."
+
+    mkdir -p "$STATE_DIR/profiles"
+    printf '%s\n' "$profile" > "$STATE_DIR/profiles/active"
+    printf '%s\n' "$sha" > "$STATE_DIR/profiles/$profile.sha"
+    printf '%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$STATE_DIR/profiles/last-install"
+    echo
+    ok "MuliOS $profile profile installation complete."
+    warn "Reboot if the profile installed a new kernel."
+}
+
 sync_rounded_theme() {
     local installer_script="$WORKDIR/install-rounded-theme.sh"
     local commit
-    curl -fsSL --retry 3 --retry-all-errors -o "$installer_script" "$(raw_url scripts/install-rounded-theme.sh)" ||
-        die "Unable to read the pinned ROUNDED theme version from the repository."
+    if ! curl -fsSL --retry 3 --retry-all-errors -o "$installer_script" "$(raw_url scripts/install-rounded-theme.sh)"; then
+        warn "Unable to read the pinned ROUNDED theme version; skipping ROUNDED theme update."
+        return 0
+    fi
 
     commit="$(sed -n 's/^THEME_COMMIT="\([^"]*\)"/\1/p' "$installer_script" | head -n 1)"
-    [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "Invalid ROUNDED theme commit in scripts/install-rounded-theme.sh."
+    if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
+        warn "Invalid ROUNDED theme commit; skipping ROUNDED theme update."
+        return 0
+    fi
 
     local state_file="$STATE_DIR/rounded-theme-commit"
     if [[ -f "$state_file" && "$(cat "$state_file")" == "$commit" &&
@@ -330,15 +671,32 @@ sync_rounded_theme() {
 
     info "Downloading pinned ROUNDED KDE theme $commit..."
     local archive="$WORKDIR/rounded.tar.gz"
-    curl -fsSL --retry 3 --retry-all-errors -o "$archive" "https://github.com/varlesh/rounded/archive/$commit.tar.gz" ||
-        die "Unable to download the ROUNDED theme archive."
-    tar -xzf "$archive" -C "$WORKDIR" || die "Unable to extract the ROUNDED theme archive."
+    if ! curl -fsSL --retry 3 --retry-all-errors -o "$archive" "https://github.com/varlesh/rounded/archive/$commit.tar.gz"; then
+        warn "Unable to download the ROUNDED theme archive; skipping."
+        return 0
+    fi
+    if ! tar -xzf "$archive" -C "$WORKDIR"; then
+        warn "Unable to extract the ROUNDED theme archive; skipping."
+        return 0
+    fi
 
     local root="$WORKDIR/rounded-$commit"
-    [[ -d "$root/plasma/desktoptheme/ROUNDED-DARK" ]] || die "ROUNDED desktop theme is missing from archive."
-    [[ -d "$root/plasma/look-and-feel/com.github.varlesh.rounded-dark" ]] || die "ROUNDED Look-and-Feel package is missing from archive."
-    [[ -d "$root/aurorae/themes/ROUNDED-DARK" ]] || die "ROUNDED Aurorae decoration is missing from archive."
-    [[ -f "$root/plasma/desktoptheme/ROUNDED-DARK/colors" ]] || die "ROUNDED color scheme is missing from archive."
+    if [[ ! -d "$root/plasma/desktoptheme/ROUNDED-DARK" ]]; then
+        warn "ROUNDED desktop theme is missing from archive; skipping."
+        return 0
+    fi
+    if [[ ! -d "$root/plasma/look-and-feel/com.github.varlesh.rounded-dark" ]]; then
+        warn "ROUNDED Look-and-Feel package is missing from archive; skipping."
+        return 0
+    fi
+    if [[ ! -d "$root/aurorae/themes/ROUNDED-DARK" ]]; then
+        warn "ROUNDED Aurorae decoration is missing from archive; skipping."
+        return 0
+    fi
+    if [[ ! -f "$root/plasma/desktoptheme/ROUNDED-DARK/colors" ]]; then
+        warn "ROUNDED color scheme is missing from archive; skipping."
+        return 0
+    fi
 
     install -d /usr/share/plasma/desktoptheme /usr/share/plasma/look-and-feel /usr/share/aurorae/themes /usr/share/color-schemes
     cp -a "$root/plasma/desktoptheme/ROUNDED-DARK" /usr/share/plasma/desktoptheme/
@@ -353,9 +711,22 @@ cmd_update() {
     require_root
     check_dependencies
     verify_os
-    acquire_lock
 
-    info "MUpdate $VERSION — direct repository merge"
+    if [[ "$BETA_MODE" == "1" ]]; then
+        local os_version=""
+        os_version="$(sed -n 's/^VERSION_ID=//p' /etc/os-release | tr -d '"')"
+        [[ "$os_version" =~ ^[0-9]{2}\.[0-9]{2}\.[0-9]{2}-beta(\.[0-9]+)?$ ]] || {
+            err "unable to fetch from beta: your version is not a beta build (expected YYYY.MM.DD-beta or YYYY.MM.DD-beta.N)."
+            exit 1
+        }
+        GITHUB_BRANCH="beta"
+        info "MUpdate $VERSION — direct repository merge (beta)"
+    else
+        GITHUB_BRANCH="main"
+        info "MUpdate $VERSION — direct repository merge"
+    fi
+
+    acquire_lock
 
     if [[ "$DRY_RUN" == "1" ]]; then
         warn "Dry-run: no files will be changed."
@@ -395,9 +766,45 @@ UPDATE
   sudo mupdate sync
   sudo mupdate update -y
 
+BETA CHANNEL
+  sudo mupdate update beta
+
+  Beta updates target only:
+    https://github.com/MuliOS-dev/MuliOS-Arch/tree/beta
+
+  Beta updates are available only on versions ending in -beta, optionally
+  followed by a numeric sequence (for example, 26.10.17-beta.22).
+  Stable and dev versions cannot use the beta channel.
+  Otherwise MUpdate aborts with:
+    unable to fetch from beta: your version is not a beta build.
+
+PROFILE
+  sudo mupdate profile
+  sudo mupdate profile gaming
+
+  Without a profile name, an interactive numbered menu is shown. Supplying a
+  profile name installs that profile directly.
+
+  Profiles are discovered from the complete recursive Git tree of:
+    https://github.com/MuliOS-dev/update/tree/main/profiles
+
+  Only a ZIP directly inside profiles/<name>/ is listed.
+  Nested files such as profiles/gaming/old/... are ignored.
+
+  The selected ZIP is verified against its Git blob SHA and tested before
+  installation.
+
+  Installation order:
+    1. sh/install.sh
+    2. sh/packages.sh
+
+  sh/install.sh is responsible for installing kernel packages and must install
+  kernel headers before kernel/image packages.
+
 CHECK
   sudo mupdate update --dry-run
   sudo mupdate update --safe
+  sudo mupdate update --force
   mupdate status
 
 SOURCE
@@ -416,7 +823,14 @@ BEHAVIOR
 
   New or changed files are downloaded and merged.
 
+  Before an existing system file is overwritten, MUpdate creates a ZIP backup
+  under /var/lib/mupdate/backups/. Backups contain the original filesystem
+  path and are timestamped per overwritten file.
+
   Files are never deleted.
+
+  Normal updates skip files that cannot be verified or merged and continue.
+  Use --force to overwrite a file when repository blob verification fails.
   New files default to non-executable permissions unless installed under a
   known executable directory. Existing file permissions are preserved.
 
@@ -446,11 +860,23 @@ EOF
 
 main() {
     local command="update"
+    local PROFILE_ARG=""
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
             update|sync)
                 command="update"
+                if [[ "${2:-}" == "beta" ]]; then
+                    BETA_MODE=1
+                    shift
+                fi
+                ;;
+            profile)
+                command="profile"
+                if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+                    PROFILE_ARG="$2"
+                    shift
+                fi
                 ;;
             status)
                 command="status"
@@ -463,6 +889,9 @@ main() {
                 ;;
             --dry-run)
                 DRY_RUN=1
+                ;;
+            --force|-f)
+                FORCE_MODE=1
                 ;;
             --version|-v)
                 echo "mupdate version $VERSION"
@@ -481,6 +910,7 @@ main() {
 
     case "$command" in
         update) cmd_update ;;
+        profile) cmd_profile "$PROFILE_ARG" ;;
         status) cmd_status ;;
     esac
 }
