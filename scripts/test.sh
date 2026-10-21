@@ -201,6 +201,36 @@ else
     echo "[OK] Task Manager backend defines its listening host and port"
 fi
 
+for mupdate in \
+    "$PROFILE/airootfs/usr/local/bin/mupdate" \
+    "$PROFILE/airootfs/opt/mulios-installer/mupdate"
+do
+    if ! grep -q 'check_writable_capacity' "$mupdate" ||
+       ! grep -q 'Failure writing output to destination' "$mupdate"; then
+        echo "[FAIL] MUpdate does not diagnose local storage write failures"
+        fail=1
+        break
+    fi
+done
+if [[ "$fail" -eq 0 ]]; then
+    echo "[OK] MUpdate checks storage capacity before profile installation"
+fi
+
+if ! grep -q 'local_storage_failure' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py" ||
+   ! grep -q 'INSUFFICIENT SPACE' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"; then
+    echo "[FAIL] Installer does not distinguish local storage failures from mirror outages"
+    fail=1
+else
+    echo "[OK] Installer diagnoses local storage failures before pacman refresh"
+fi
+
+if ! grep -q '^ParallelDownloads = 3$' "$PROFILE/airootfs/etc/pacman.conf"; then
+    echo "[FAIL] Pacman parallel downloads are not limited to a conservative value"
+    fail=1
+else
+    echo "[OK] Pacman uses conservative parallel downloads"
+fi
+
 if ! grep -q 'prepare_profile_kernel_conflicts' "$PROFILE/airootfs/usr/local/bin/mupdate" ||
    ! grep -q 'Refusing to move game-kernel header files' "$PROFILE/airootfs/usr/local/bin/mupdate" ||
    ! grep -q 'prepare_profile_kernel_conflicts' "$PROFILE/airootfs/opt/mulios-installer/mupdate"; then
