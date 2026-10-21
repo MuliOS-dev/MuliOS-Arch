@@ -2183,17 +2183,39 @@ class InstallWorker(QThread):
         # keeping the MuliOS ROUNDED-DARK color scheme.
         kdeglobals = config / "kdeglobals"
         kde_text = kdeglobals.read_text(encoding="utf-8", errors="replace") if kdeglobals.exists() else ""
-        if "[KDE]" not in kde_text:
-            kde_text += "\n[KDE]\n"
-        if re.search(r"(?m)^LookAndFeelPackage=", kde_text):
-            kde_text = re.sub(
-                r"(?m)^LookAndFeelPackage=.*$",
-                "LookAndFeelPackage=org.kde.breeze.desktop",
-                kde_text,
-            )
+        kde_lines = kde_text.splitlines()
+        kde_start = next(
+            (i for i, line in enumerate(kde_lines) if line.strip() == "[KDE]"),
+            None,
+        )
+        if kde_start is None:
+            if kde_lines and kde_lines[-1].strip():
+                kde_lines.append("")
+            kde_lines.append("[KDE]")
+            kde_start = len(kde_lines) - 1
+
+        kde_end = next(
+            (
+                i for i in range(kde_start + 1, len(kde_lines))
+                if kde_lines[i].strip().startswith("[")
+                and kde_lines[i].strip().endswith("]")
+            ),
+            len(kde_lines),
+        )
+        look_and_feel = "LookAndFeelPackage=org.kde.breeze.desktop"
+        existing_keys = [
+            i for i in range(kde_start + 1, kde_end)
+            if kde_lines[i].strip().startswith("LookAndFeelPackage=")
+        ]
+        if existing_keys:
+            kde_lines[existing_keys[0]] = look_and_feel
+            for duplicate in reversed(existing_keys[1:]):
+                del kde_lines[duplicate]
+                kde_end -= 1
         else:
-            kde_text += "LookAndFeelPackage=org.kde.breeze.desktop\n"
-        kdeglobals.write_text(kde_text.rstrip() + "\n", encoding="utf-8")
+            kde_lines.insert(kde_end, look_and_feel)
+
+        kdeglobals.write_text("\n".join(kde_lines).rstrip() + "\n", encoding="utf-8")
 
         # The live ISO does not need the installed-session splash. Disable
         # the KDE splash explicitly for the installed user.
