@@ -330,6 +330,30 @@ class MuliOSInstaller(QMainWindow):
                 )
 
             selected_plugin = plugin_names[effect]
+
+            # Switch the surrounding Plasma/window appearance as well as the
+            # compositor effect. A KWin blur plugin alone is not a complete theme.
+            custom_effect = effect in {"betterblur_dx", "glass"}
+            appearance_values = {
+                "kdeglobals": (
+                    ("General", "ColorScheme", "BreezeDark" if custom_effect else "ROUNDEDDARK"),
+                    ("KDE", "widgetStyle", "Breeze"),
+                ),
+                "plasmarc": (
+                    ("Theme", "name", "default" if custom_effect else "ROUNDED-DARK"),
+                ),
+                "kwinrc": (
+                    ("org.kde.kdecoration2", "library", "org.kde.breeze" if custom_effect else "org.kde.kwin.aurorae"),
+                    ("org.kde.kdecoration2", "theme", "" if custom_effect else "__aurorae__svg__ROUNDED-DARK"),
+                ),
+            }
+            for filename, values in appearance_values.items():
+                for group, key, value in values:
+                    run_in_desktop_session([
+                        kwriteconfig, "--file", filename, "--group", group,
+                        "--key", key, value,
+                    ])
+
             settings = {
                 "better_blur_dxEnabled": "true" if effect == "betterblur_dx" else "false",
                 "glassEnabled": "true" if effect == "glass" else "false",
@@ -388,9 +412,10 @@ class MuliOSInstaller(QMainWindow):
         QMessageBox.information(
             self,
             "Preview applied",
-            f"{display_name} is loaded in the live KDE session. Blur is visible only "
-            "behind translucent windows and surfaces; the ROUNDED-DARK window theme "
-            "is separate and will not change when switching blur effects.",
+            f"{display_name} is loaded in the live KDE session and the "
+            f"{'Breeze Dark' if effect != 'default' else 'ROUNDED-DARK'} appearance preset was selected. "
+            "The effect changes compositor blur; it cannot make every application's "
+            "opaque UI liquid glass unless that application/theme supports transparency.",
         )
 
     def go_back(self):
