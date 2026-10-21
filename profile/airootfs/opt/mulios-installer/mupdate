@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 # MUpdate
-# Version: a1.0.7
+# Version: a1.0.9
 #
 # Source: https://github.com/MuliOS-dev/MuliOS-Arch
 # Source tree: profile/airootfs
@@ -11,7 +11,7 @@ set -Eeuo pipefail
 # Files are never deleted as of now.
 # Machine-specific state is protected.
 
-VERSION="a1.0.8"
+VERSION="a1.0.9"
 GITHUB_OWNER="MuliOS-dev"
 GITHUB_REPO="MuliOS-Arch"
 GITHUB_BRANCH="main"
@@ -82,6 +82,52 @@ require_cmd() {
     for cmd in "$@"; do
         command -v "$cmd" >/dev/null 2>&1 || die "Missing required command: $cmd"
     done
+}
+
+check_writable_capacity() {
+    local path="$1"
+    local minimum_mib="$2"
+    local label="$3"
+    local available_kib available_inodes probe
+
+    [[ -d "$path" ]] || mkdir -p "$path" ||
+        die "Cannot access $label at $path; check the filesystem and mount status."
+
+    available_kib="$(df -Pk "$path" | awk 'END {print $4}')"
+    available_inodes="$(df -Pi "$path" | awk 'END {print $4}')"
+
+    [[ "$available_kib" =~ ^[0-9]+$ ]] ||
+        die "Could not determine free space for $label ($path). Run: df -h '$path'"
+    [[ "$available_inodes" =~ ^[0-9]+$ ]] ||
+        die "Could not determine free inodes for $label ($path). Run: df -i '$path'"
+
+    if (( available_kib < minimum_mib * 1024 )); then
+        err "Insufficient free space for $label at $path: $((available_kib / 1024)) MiB available; at least ${minimum_mib} MiB required."
+        df -h "$path" >&2 || true
+        die "Free disk space before retrying. Pacman 'Failure writing output to destination' is a local storage-write failure, not necessarily a mirror problem."
+    fi
+
+    if (( available_inodes < 256 )); then
+        err "Insufficient free inodes for $label at $path: $available_inodes available."
+        df -i "$path" >&2 || true
+        die "Free inodes before retrying package operations."
+    fi
+
+    probe="$path/.mupdate-write-test-${BASHPID}"
+    if ! (umask 077; : > "$probe") 2>/dev/null; then
+        err "Filesystem for $label at $path is not writable."
+        df -h "$path" >&2 || true
+        die "Check whether the filesystem is full, read-only, or reporting I/O errors."
+    fi
+    rm -f -- "$probe"
+}
+
+check_profile_storage() {
+    local minimum_mib="${1:-1024}"
+    check_writable_capacity "/" "$minimum_mib" "root filesystem"
+    check_writable_capacity "/tmp" "$minimum_mib" "temporary filesystem"
+    check_writable_capacity "/var/cache/pacman/pkg" 512 "Pacman package cache"
+    check_writable_capacity "/var/lib/pacman/sync" 128 "Pacman database directory"
 }
 
 check_dependencies() {
@@ -678,6 +724,8 @@ cmd_profile() {
     info "Selected profile: $profile"
     info "Package: $(basename "$path")"
 
+    check_profile_storage 1024
+
     local archive="$WORKDIR/$profile.zip"
     local extract_dir="$WORKDIR/$profile"
     download_verified_profile_zip "$path" "$sha" "$archive"
@@ -690,6 +738,7 @@ cmd_profile() {
         return 0
     fi
 
+    check_profile_storage 2048
     prepare_profile_kernel_conflicts "$profile"
 
     info "Running sh/install.sh first..."
