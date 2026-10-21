@@ -2966,14 +2966,11 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
                     "in the MuliOS profile repository."
                 )
 
-            choice = ordered.index(profile) + 1
             self.log(
-                f"Installing the {profile} profile through MUpdate "
-                f"(discovered menu entry {choice})."
+                f"Installing the {profile} profile directly through MUpdate."
             )
             self.chroot(
-                ["/usr/local/bin/mupdate", "profile"],
-                input_text=f"{choice}\ny\n",
+                ["/usr/local/bin/mupdate", "profile", profile],
             )
             self.log(f"MUpdate installed the {profile} profile.")
         except Exception as exc:
