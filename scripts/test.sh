@@ -231,7 +231,7 @@ else
 fi
 
 KSPLASH="$PROFILE/airootfs/etc/skel/.config/ksplashrc"
-if ! grep -Fxq 'Engine=none' "$KSPLASH" || ! grep -Fxq 'Theme=none' "$KSPLASH"; then
+if ! grep -Fxq 'Engine=none' "$KSPLASH" || ! grep -Fxq 'Theme=None' "$KSPLASH"; then
     echo "[FAIL] KDE splash animation is not disabled in the default user configuration"
     fail=1
 else
