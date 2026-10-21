@@ -2217,6 +2217,51 @@ class InstallWorker(QThread):
 
         kdeglobals.write_text("\n".join(kde_lines).rstrip() + "\n", encoding="utf-8")
 
+        # A custom blur/glass effect is paired with Breeze rather than leaving
+        # the ROUNDED-DARK window decoration in place. KWin effects are not
+        # full themes by themselves, so the appearance preset is changed too.
+        effect = str(self.state.get("desktop_effect", "default")).strip().lower()
+        custom_effect = effect in {"betterblur_dx", "glass"}
+
+        def set_ini_values(path, values):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            current = path.read_text(encoding="utf-8", errors="replace") if path.is_file() else ""
+            lines = current.splitlines()
+            for section, key, value in values:
+                start = next((i for i, line in enumerate(lines) if line.strip() == f"[{section}]"), None)
+                if start is None:
+                    if lines and lines[-1].strip():
+                        lines.append("")
+                    lines.append(f"[{section}]")
+                    start = len(lines) - 1
+                end = next((i for i in range(start + 1, len(lines)) if lines[i].strip().startswith("[") and lines[i].strip().endswith("]")), len(lines))
+                keys = [i for i in range(start + 1, end) if lines[i].strip().startswith(f"{key}=")]
+                if keys:
+                    lines[keys[0]] = f"{key}={value}"
+                    for duplicate in reversed(keys[1:]):
+                        del lines[duplicate]
+                else:
+                    lines.insert(end, f"{key}={value}")
+            path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+        if custom_effect:
+            set_ini_values(kdeglobals, [
+                ("General", "ColorScheme", "BreezeDark"),
+                ("KDE", "widgetStyle", "Breeze"),
+            ])
+            set_ini_values(config / "plasmarc", [("Theme", "name", "default")])
+            set_ini_values(config / "kwinrc", [
+                ("org.kde.kdecoration2", "library", "org.kde.breeze"),
+                ("org.kde.kdecoration2", "theme", ""),
+            ])
+        else:
+            set_ini_values(kdeglobals, [("General", "ColorScheme", "ROUNDEDDARK")])
+            set_ini_values(config / "plasmarc", [("Theme", "name", "ROUNDED-DARK")])
+            set_ini_values(config / "kwinrc", [
+                ("org.kde.kdecoration2", "library", "org.kde.kwin.aurorae"),
+                ("org.kde.kdecoration2", "theme", "__aurorae__svg__ROUNDED-DARK"),
+            ])
+
         # The live ISO does not need the installed-session splash. Disable
         # the KDE splash explicitly for the installed user.
         ksplashrc = config / "ksplashrc"
