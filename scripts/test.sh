@@ -238,7 +238,7 @@ else
     echo "[OK] KDE splash animation defaults to None"
 fi
 
-if grep -Fq '\\n' "$KERNEL_WORKER"; then
+if grep -Fq '\\n' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"; then
     echo "[FAIL] Installer worker contains literal escaped newlines in generated configuration"
     fail=1
 else
