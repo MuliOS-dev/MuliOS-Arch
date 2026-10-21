@@ -197,9 +197,19 @@ class MuliOSInstaller(QMainWindow):
         nav_layout.addWidget(self.back_button)
         nav_layout.addStretch()
 
-        action_layout = QVBoxLayout()
+        action_layout = QHBoxLayout()
         action_layout.setContentsMargins(0, 0, 0, 0)
-        action_layout.setSpacing(6)
+        action_layout.setSpacing(8)
+
+        self.profile_refresh_button = self.profile_page.refresh_button
+        self.profile_refresh_button.setVisible(False)
+        action_layout.addWidget(self.profile_refresh_button)
+
+        self.refresh_effects_button = QPushButton("Refresh effects")
+        self.refresh_effects_button.setObjectName("SecondaryButton")
+        self.refresh_effects_button.clicked.connect(self.desktop_page.refresh_effects)
+        self.refresh_effects_button.setVisible(False)
+        action_layout.addWidget(self.refresh_effects_button)
 
         self.preview_button = QPushButton("Preview")
         self.preview_button.setObjectName("SecondaryButton")
@@ -224,7 +234,11 @@ class MuliOSInstaller(QMainWindow):
         self.sidebar.set_active_step(index)
         self.back_button.setEnabled(0 < index < IDX_INSTALL)
         self.next_button.setVisible(index < IDX_INSTALL)
+        self.profile_refresh_button.setVisible(index == IDX_PROFILE)
+        self.refresh_effects_button.setVisible(index == IDX_DESKTOP)
         self.preview_button.setVisible(index == IDX_DESKTOP)
+        if index == IDX_DESKTOP:
+            self.desktop_page.refresh_effects()
 
         if index == IDX_SUMMARY:
             self.next_button.setText("Install")
@@ -236,42 +250,33 @@ class MuliOSInstaller(QMainWindow):
             self.next_button.setText("Next")
 
     def preview_desktop_effect(self):
-        """Apply the selected KWin effect through the active Plasma user's session bus."""
+        """Load the selected KWin effect in the active Plasma session."""
         effect = self.desktop_page.selected_effect()
-        plugin_names = {
-            "betterblur_dx": ("better_blur_dxEnabled", "Better Blur DX (Force Blur)"),
-            "glass": ("glassEnabled", "KWin Effects Glass"),
+        display_names = {
+            "default": "KWin default blur",
+            "betterblur_dx": "Better Blur DX",
+            "glass": "KWin Effects Glass",
         }
-        if effect in plugin_names:
-            _, display_name = plugin_names[effect]
-            plugin_dirs = (
-                Path("/usr/lib/qt6/plugins/kwin/effects/plugins"),
-                Path("/usr/lib/kwin/plugins"),
-                Path("/usr/lib/x86_64-linux-gnu/qt6/plugins/kwin/effects/plugins"),
-            )
-            plugin_tokens = ("better_blur_dx",) if effect == "betterblur_dx" else ("glass",)
-            installed = any(
-                directory.is_dir()
-                and any(
-                    token in path.name.lower()
-                    for path in directory.glob("*.so")
-                    for token in plugin_tokens
-                )
-                for directory in plugin_dirs
-            )
-            if not installed:
+        plugin_names = {
+            "betterblur_dx": "better_blur_dx",
+            "glass": "glass",
+            "default": "blur",
+        }
+        display_name = display_names.get(effect, effect)
+
+        if effect in {"betterblur_dx", "glass"}:
+            installed = self.desktop_page.installed_effects()
+            if effect not in installed:
                 QMessageBox.information(
                     self,
                     "Preview unavailable",
                     f"{display_name} is not installed in this live session. "
-                    "The preview cannot be applied until the effect plugin is bundled "
-                    "with the live image.",
+                    "Use Refresh effects to check the bundled plugins. The selected "
+                    "effect can still be built for the installed system during installation.",
                 )
                 return
 
         try:
-            # ensure_root() elevates the installer. Never use the root user's
-            # D-Bus session or kwinrc: resolve the graphical session that launched it.
             uid_value = (
                 os.environ.get("SUDO_UID")
                 or os.environ.get("PKEXEC_UID")
@@ -283,32 +288,28 @@ class MuliOSInstaller(QMainWindow):
                 desktop_uid = os.getuid()
             else:
                 raise RuntimeError(
-                    "The installer is running as root, but the desktop user's ID "
-                    "could not be determined. Launch the installer from the live KDE session."
+                    "The installer is running as root, but the graphical desktop user "
+                    "could not be identified."
                 )
 
             if desktop_uid == 0:
-                raise RuntimeError(
-                    "Could not identify a non-root KDE session user. "
-                    "KWin preview requires the live desktop user's D-Bus session."
-                )
+                raise RuntimeError("KWin preview requires a non-root desktop session.")
 
             desktop_user = pwd.getpwuid(desktop_uid)
             runtime_dir = Path("/run/user") / str(desktop_uid)
             bus_socket = runtime_dir / "bus"
             if not bus_socket.exists():
                 raise RuntimeError(
-                    f"No D-Bus session bus was found at {bus_socket}. "
-                    "Make sure the live KDE desktop session is running."
+                    f"No session bus was found at {bus_socket}. Ensure KDE Plasma is running."
                 )
 
             runuser = shutil.which("runuser")
             kwriteconfig = shutil.which("kwriteconfig6")
             qdbus = shutil.which("qdbus6") or shutil.which("qdbus")
             if not runuser:
-                raise FileNotFoundError("The runuser command is not available.")
+                raise FileNotFoundError("runuser is unavailable.")
             if not kwriteconfig:
-                raise FileNotFoundError("kwriteconfig6 is not available.")
+                raise FileNotFoundError("kwriteconfig6 is unavailable.")
             if not qdbus:
                 raise FileNotFoundError("Neither qdbus6 nor qdbus is available.")
 
@@ -321,31 +322,22 @@ class MuliOSInstaller(QMainWindow):
             ]
 
             def run_in_desktop_session(command):
-                subprocess.run(
+                return subprocess.run(
                     [runuser, "-u", desktop_user.pw_name, "--", *session_env, *command],
                     check=True,
                     capture_output=True,
                     text=True,
                 )
 
-            config = {
-                "betterblur_dx": ("better_blur_dxEnabled", "true"),
-                "glass": ("glassEnabled", "true"),
+            selected_plugin = plugin_names[effect]
+            settings = {
+                "better_blur_dxEnabled": "true" if effect == "betterblur_dx" else "false",
+                "glassEnabled": "true" if effect == "glass" else "false",
+                "blurEnabled": "true" if effect == "default" else "false",
+                "blurplusEnabled": "false",
+                "translucencyEnabled": "true" if effect == "default" else "false",
             }
-            settings = (
-                ("better_blur_dxEnabled", "false"),
-                ("glassEnabled", "false"),
-                ("blurEnabled", "true" if effect == "default" else "false"),
-                ("blurplusEnabled", "false"),
-            )
-            for key, value in settings:
-                run_in_desktop_session([
-                    kwriteconfig, "--file", "kwinrc", "--group", "Plugins",
-                    "--key", key, value,
-                ])
-
-            if effect in config:
-                key, value = config[effect]
+            for key, value in settings.items():
                 run_in_desktop_session([
                     kwriteconfig, "--file", "kwinrc", "--group", "Plugins",
                     "--key", key, value,
@@ -354,25 +346,51 @@ class MuliOSInstaller(QMainWindow):
             run_in_desktop_session([
                 qdbus, "org.kde.KWin", "/KWin", "reconfigure",
             ])
+
+            # KWin's reconfigure call alone does not reliably load/unload effects
+            # in an already-running session. Use the documented Effects D-Bus API.
+            effect_names = ("better_blur_dx", "glass", "blur", "blurplus", "translucency")
+            for name in effect_names:
+                if name != selected_plugin:
+                    run_in_desktop_session([
+                        qdbus, "org.kde.KWin", "/Effects",
+                        "org.kde.kwin.Effects.unloadEffect", name,
+                    ])
+
+            result = run_in_desktop_session([
+                qdbus, "org.kde.KWin", "/Effects",
+                "org.kde.kwin.Effects.loadEffect", selected_plugin,
+            ])
+            if result.stdout.strip().lower() == "false":
+                raise RuntimeError(
+                    f"KWin refused to load the selected effect '{selected_plugin}'. "
+                    "It may be unsupported by this compositor."
+                )
+
+            loaded = run_in_desktop_session([
+                qdbus, "org.kde.KWin", "/Effects",
+                "org.kde.kwin.Effects.isEffectLoaded", selected_plugin,
+            ])
+            if loaded.stdout.strip().lower() != "true":
+                raise RuntimeError(
+                    f"KWin did not report '{selected_plugin}' as loaded. "
+                    "Check the KWin journal for plugin compatibility errors."
+                )
         except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as exc:
             detail = getattr(exc, "stderr", "") or str(exc)
-            if "DBUS_SESSION_BUS_ADDRESS" in detail or "autolaunch" in detail:
-                detail += (
-                    "\n\nThe preview must run inside the active KDE user's D-Bus session. "
-                    "The installer now checks that session explicitly."
-                )
             QMessageBox.warning(
                 self,
                 "Preview failed",
-                "KWin could not apply the selected desktop effect.\n\n" + detail,
+                f"KWin could not activate {display_name}.\n\n{detail}",
             )
             return
 
         QMessageBox.information(
             self,
             "Preview applied",
-            "The selected desktop effect has been applied to the live session. "
-            "This preview does not change the installation selection.",
+            f"{display_name} is loaded in the live KDE session. Blur is visible only "
+            "behind translucent windows and surfaces; the ROUNDED-DARK window theme "
+            "is separate and will not change when switching blur effects.",
         )
 
     def go_back(self):
