@@ -204,13 +204,45 @@ else
 fi
 
 PROFILE_PAGE="$PROFILE/airootfs/opt/mulios-installer/pages/profile_page.py"
-if ! grep -q 'def refresh_profiles' "$PROFILE_PAGE" ||
-   ! grep -q 'Refresh profiles' "$PROFILE_PAGE" ||
-   ! grep -q 'MuliOS-dev/mupdate' "$PROFILE_PAGE"; then
-    echo "[FAIL] Profile page refresh control or canonical MUpdate endpoint is missing"
+if ! grep -q 'https://api.github.com/repos/MuliOS-dev/update/git/trees/main?recursive=1' "$PROFILE_PAGE" ||
+   ! grep -q 'class _ProfileFetchWorker' "$PROFILE_PAGE" ||
+   ! grep -q 'thread.started.connect(worker.run)' "$PROFILE_PAGE"; then
+    echo "[FAIL] Profile refresh must use MuliOS-dev/update asynchronously"
     fail=1
 else
-    echo "[OK] Profile page has refresh control and uses the MUpdate repository"
+    echo "[OK] Profile refresh uses the requested repository and runs asynchronously"
+fi
+
+INSTALLER_MAIN="$PROFILE/airootfs/opt/mulios-installer/main.py"
+if ! grep -q 'org.kde.kwin.Effects.loadEffect' "$INSTALLER_MAIN" ||
+   ! grep -q 'org.kde.kwin.Effects.isEffectLoaded' "$INSTALLER_MAIN"; then
+    echo "[FAIL] Desktop effect preview does not load and verify the effect through KWin D-Bus"
+    fail=1
+else
+    echo "[OK] Desktop effect preview loads and verifies KWin effects through D-Bus"
+fi
+
+if ! grep -q 'self.profile_refresh_button.setVisible(index == IDX_PROFILE)' "$INSTALLER_MAIN" ||
+   ! grep -q 'self.refresh_effects_button.setVisible(index == IDX_DESKTOP)' "$INSTALLER_MAIN"; then
+    echo "[FAIL] Profile and desktop refresh buttons are not placed in the navigation footer"
+    fail=1
+else
+    echo "[OK] Profile and desktop refresh buttons are shown in the navigation footer"
+fi
+
+KSPLASH="$PROFILE/airootfs/etc/skel/.config/ksplashrc"
+if ! grep -Fxq 'Engine=none' "$KSPLASH" || ! grep -Fxq 'Theme=none' "$KSPLASH"; then
+    echo "[FAIL] KDE splash animation is not disabled in the default user configuration"
+    fail=1
+else
+    echo "[OK] KDE splash animation defaults to None"
+fi
+
+if grep -Fq '\\n' "$KERNEL_WORKER"; then
+    echo "[FAIL] Installer worker contains literal escaped newlines in generated configuration"
+    fail=1
+else
+    echo "[OK] Installer worker uses real newline escapes for generated configuration"
 fi
 
 if ! grep -q 'DBUS_SESSION_BUS_ADDRESS=unix:path=' "$PROFILE/airootfs/opt/mulios-installer/main.py" ||
