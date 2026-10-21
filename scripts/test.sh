@@ -166,6 +166,38 @@ check_desktop_launcher() {
 check_desktop_launcher "$PROFILE/airootfs/usr/share/applications/taskmanager.desktop" "/usr/local/bin/mulios-taskmanager"
 check_desktop_launcher "$PROFILE/airootfs/usr/share/applications/mulios-credits.desktop" "/usr/local/bin/mulios-credits"
 
+if ! grep -q 'mulios-state-' "$PROFILE/airootfs/usr/local/bin/mulios-taskmanager" ||
+   ! grep -q 'gettempdir' "$PROFILE/airootfs/opt/taskmanager/launcher.py"; then
+    echo "[FAIL] Task Manager has no writable fallback for state/log directory"
+    fail=1
+else
+    echo "[OK] Task Manager falls back when the user's state directory is not writable"
+fi
+
+if ! grep -q 'const PORT' "$PROFILE/airootfs/opt/taskmanager/main.js" ||
+   ! grep -q 'const URL' "$PROFILE/airootfs/opt/taskmanager/main.js"; then
+    echo "[FAIL] Task Manager backend is missing its host/port configuration"
+    fail=1
+else
+    echo "[OK] Task Manager backend defines its listening host and port"
+fi
+
+if ! grep -q 'media.githubusercontent.com/media' "$PROFILE/airootfs/usr/local/bin/mupdate" ||
+   ! grep -q 'Git LFS profile package integrity check failed' "$PROFILE/airootfs/usr/local/bin/mupdate"; then
+    echo "[FAIL] MUpdate does not verify and retrieve Git LFS profile archives"
+    fail=1
+else
+    echo "[OK] MUpdate verifies Git LFS profile archive payloads"
+fi
+
+if ! grep -q 'BreezeDark' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py" ||
+   ! grep -q 'org.kde.breeze' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"; then
+    echo "[FAIL] Custom blur effects do not replace ROUNDED-DARK with the Breeze appearance preset"
+    fail=1
+else
+    echo "[OK] Custom blur effects select a Breeze appearance preset"
+fi
+
 if ! grep -q 'backend_is_ready' "$PROFILE/airootfs/opt/taskmanager/launcher.py" ||
    ! grep -q 'BACKEND_START_TIMEOUT' "$PROFILE/airootfs/opt/taskmanager/launcher.py"; then
     echo "[FAIL] Task Manager does not wait for HTTP backend readiness"
