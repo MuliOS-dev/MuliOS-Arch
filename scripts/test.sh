@@ -182,6 +182,22 @@ else
     echo "[OK] Task Manager backend defines its listening host and port"
 fi
 
+if ! grep -q 'prepare_profile_kernel_conflicts' "$PROFILE/airootfs/usr/local/bin/mupdate" ||
+   ! grep -q 'Refusing to move game-kernel header files' "$PROFILE/airootfs/usr/local/bin/mupdate" ||
+   ! grep -q 'prepare_profile_kernel_conflicts' "$PROFILE/airootfs/opt/mulios-installer/mupdate"; then
+    echo "[FAIL] MUpdate does not safely quarantine unowned game-kernel header conflicts"
+    fail=1
+else
+    echo "[OK] MUpdate guards and quarantines stale unowned game-kernel header conflicts"
+fi
+
+if ! grep -q 'See /var/log/mulios/install.log' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"; then
+    echo "[FAIL] Installer does not expose the underlying profile failure details"
+    fail=1
+else
+    echo "[OK] Installer profile errors include the underlying failure details"
+fi
+
 if ! grep -q 'media.githubusercontent.com/media' "$PROFILE/airootfs/usr/local/bin/mupdate" ||
    ! grep -q 'Git LFS profile package integrity check failed' "$PROFILE/airootfs/usr/local/bin/mupdate"; then
     echo "[FAIL] MUpdate does not verify and retrieve Git LFS profile archives"
