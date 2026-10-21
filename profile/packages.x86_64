@@ -60,6 +60,7 @@ sddm-kcm
 
 # KDE apps
 dolphin
+kdialog
 desktop-file-utils
 kservice
 kde-cli-tools
