@@ -198,6 +198,13 @@ else
     echo "[OK] Custom blur effects select a Breeze appearance preset"
 fi
 
+if ! grep -q 'mulios-state-' "$PROFILE/airootfs/usr/local/bin/mulios-credits"; then
+    echo "[FAIL] Credits launcher has no writable fallback for its log directory"
+    fail=1
+else
+    echo "[OK] Credits launcher falls back when the user's state directory is not writable"
+fi
+
 if ! grep -q 'backend_is_ready' "$PROFILE/airootfs/opt/taskmanager/launcher.py" ||
    ! grep -q 'BACKEND_START_TIMEOUT' "$PROFILE/airootfs/opt/taskmanager/launcher.py"; then
     echo "[FAIL] Task Manager does not wait for HTTP backend readiness"
