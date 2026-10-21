@@ -534,7 +534,7 @@ prepare_profile_kernel_conflicts() {
     done < "$ownership_list"
 
     local stamp backup_root version_dir version candidate destination moved=0
-    stamp="$(date -u '+%Y%m%dT%H%M%SZ')-$"
+    stamp="$(date -u '+%Y%m%dT%H%M%SZ')-${BASHPID}"
     backup_root="/var/lib/mupdate/profile-conflicts/$stamp"
 
     shopt -s nullglob
