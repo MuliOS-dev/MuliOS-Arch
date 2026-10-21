@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import signal
 import subprocess
 import sys
@@ -7,6 +8,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from tempfile import gettempdir
 
 from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import QApplication, QMainWindow
@@ -33,17 +35,36 @@ class TaskManager(QMainWindow):
         self.resize(1200, 800)
         self.backend = None
 
-        log_dir = Path.home() / ".local" / "state" / "mulios"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        self._backend_log = (log_dir / "taskmanager-backend.log").open(
-            "a", encoding="utf-8"
-        )
+        log_candidates = []
+        xdg_state_home = os.environ.get("XDG_STATE_HOME")
+        if xdg_state_home:
+            log_candidates.append(Path(xdg_state_home) / "mulios")
+        log_candidates.append(Path.home() / ".local" / "state" / "mulios")
+        log_candidates.append(Path(gettempdir()) / f"mulios-state-{os.getuid()}")
+
+        self._backend_log = None
+        log_errors = []
+        for log_dir in log_candidates:
+            try:
+                log_dir.mkdir(parents=True, exist_ok=True)
+                self._backend_log = (log_dir / "taskmanager-backend.log").open(
+                    "a", encoding="utf-8"
+                )
+                break
+            except OSError as exc:
+                log_errors.append(f"{log_dir}: {exc}")
+
+        if self._backend_log is None:
+            raise RuntimeError(
+                "Could not create a writable Task Manager log file. "
+                + "; ".join(log_errors)
+            )
         self._backend_log.write("\n--- Task Manager backend starting ---\n")
         self._backend_log.flush()
 
         try:
             self.backend = subprocess.Popen(
-                ["node", str(BACKEND)],
+                ["/usr/bin/node", str(BACKEND)],
                 cwd=str(BASE_DIR),
                 stdout=self._backend_log,
                 stderr=subprocess.STDOUT,
@@ -56,7 +77,7 @@ class TaskManager(QMainWindow):
             self._backend_log.close()
             raise RuntimeError(
                 "Could not start the Task Manager Node.js backend. "
-                "Check ~/.local/state/mulios/taskmanager-backend.log."
+                "Check the Task Manager backend log in ~/.local/state/mulios or /tmp."
             ) from exc
 
         deadline = time.monotonic() + BACKEND_START_TIMEOUT
