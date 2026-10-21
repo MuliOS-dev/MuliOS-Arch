@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 # MUpdate
-# Version: a1.0.6
+# Version: a1.0.7
 #
 # Source: https://github.com/MuliOS-dev/MuliOS-Arch
 # Source tree: profile/airootfs
@@ -11,7 +11,7 @@ set -Eeuo pipefail
 # Files are never deleted as of now.
 # Machine-specific state is protected.
 
-VERSION="a1.0.6"
+VERSION="a1.0.7"
 GITHUB_OWNER="MuliOS-dev"
 GITHUB_REPO="MuliOS-Arch"
 GITHUB_BRANCH="main"
@@ -546,6 +546,7 @@ validate_profile_archive() {
 }
 
 cmd_profile() {
+    local requested_profile="${1:-}"
     require_root
     require_cmd curl jq git sha1sum sha256sum unzip mktemp mkdir rm mv cp chmod find sort wc stat cut grep base64 sed tr
     verify_os
@@ -582,20 +583,31 @@ cmd_profile() {
     sort -t "$(printf '\t')" -k1,1 "$manifest" -o "$manifest"
     local count
     count="$(wc -l < "$manifest" | tr -d ' ')"
-    echo
-    info "Available MuliOS profiles:"
-    cut -f1 "$manifest" | awk '{ print "  " NR ": " $0 }'
-    echo
-
     local choice row profile path sha
-    while true; do
-        read -r -p "Select a profile [1-$count]: " choice
-        [[ "$choice" =~ ^[0-9]+$ ]] || { warn "Enter a number."; continue; }
-        (( choice >= 1 && choice <= count )) || { warn "Invalid profile selection."; continue; }
-        break
-    done
+    if [[ -n "$requested_profile" ]]; then
+        [[ "$requested_profile" =~ ^[a-zA-Z0-9._-]+$ ]] ||
+            die "Invalid profile name: $requested_profile"
+        row="$(awk -F '\t' -v wanted="$requested_profile" '$1 == wanted { print; found=1; exit } END { if (!found) exit 1 }' "$manifest")" ||
+            die "Unknown profile '$requested_profile'. Run 'sudo mupdate profile' to list available profiles."
+        info "Installing requested profile: $requested_profile"
+    else
+        echo
+        info "Available MuliOS profiles:"
+        cut -f1 "$manifest" | awk '{ print "  " NR ": " $0 }'
+        echo
 
-    row="$(sed -n "$choice"'p' "$manifest")"
+        while true; do
+            if [[ ! -t 0 ]]; then
+                die "No profile specified and no interactive terminal is available. Use: sudo mupdate profile <profile>"
+            fi
+            read -r -p "Select a profile [1-$count]: " choice
+            [[ "$choice" =~ ^[0-9]+$ ]] || { warn "Enter a number."; continue; }
+            (( choice >= 1 && choice <= count )) || { warn "Invalid profile selection."; continue; }
+            break
+        done
+
+        row="$(sed -n "$choice"'p' "$manifest")"
+    fi
     IFS="$(printf '\t')" read -r profile path sha <<< "$row"
     info "Selected profile: $profile"
     info "Package: $(basename "$path")"
@@ -768,6 +780,10 @@ BETA CHANNEL
 
 PROFILE
   sudo mupdate profile
+  sudo mupdate profile gaming
+
+  Without a profile name, an interactive numbered menu is shown. Supplying a
+  profile name installs that profile directly.
 
   Profiles are discovered from the complete recursive Git tree of:
     https://github.com/MuliOS-dev/update/tree/main/profiles
@@ -844,6 +860,7 @@ EOF
 
 main() {
     local command="update"
+    local PROFILE_ARG=""
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -856,6 +873,10 @@ main() {
                 ;;
             profile)
                 command="profile"
+                if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+                    PROFILE_ARG="$2"
+                    shift
+                fi
                 ;;
             status)
                 command="status"
@@ -889,7 +910,7 @@ main() {
 
     case "$command" in
         update) cmd_update ;;
-        profile) cmd_profile ;;
+        profile) cmd_profile "$PROFILE_ARG" ;;
         status) cmd_status ;;
     esac
 }
