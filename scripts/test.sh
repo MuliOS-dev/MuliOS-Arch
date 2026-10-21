@@ -442,7 +442,7 @@ else
     echo "[OK] Offline desktop effect fallback exists"
 fi
 
-if ! grep -q '^ParallelDownloads = 3
+if ! grep -q '^ParallelDownloads = 3$' "$PROFILE/airootfs/etc/pacman.conf"; then
     echo "[FAIL] Pacman parallel downloads are not limited to a conservative value"
     fail=1
 else
