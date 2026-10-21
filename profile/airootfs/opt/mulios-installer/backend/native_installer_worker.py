@@ -1862,6 +1862,35 @@ class InstallWorker(QThread):
                 check=False,
             )
 
+            # Diagnose local storage before network/database operations. A curl
+            # "Failure writing output to destination" means data could not be
+            # written locally; trying more mirrors cannot fix a full/read-only FS.
+            storage_check = self.chroot(
+                [
+                    "bash",
+                    "-c",
+                    "set -eu; "
+                    "for path in / /var/lib/pacman/sync /var/cache/pacman/pkg; do "
+                    "  test -d \"$path\" || mkdir -p \"$path\"; "
+                    "  probe=\"$path/.mulios-installer-write-test-$$\"; "
+                    "  (umask 077; : > \"$probe\") || { echo \"NOT WRITABLE: $path\"; exit 23; }; "
+                    "  rm -f \"$probe\"; "
+                    "  df -Pk \"$path\"; df -Pi \"$path\"; "
+                    "done; "
+                    "test \"$(df -Pk / | awk 'END {print $4}')\" -ge 1048576 || "
+                    "{ echo \"INSUFFICIENT SPACE: root filesystem has less than 1 GiB free\"; exit 24; }; "
+                    "test \"$(df -Pi / | awk 'END {print $4}')\" -ge 256 || "
+                    "{ echo \"INSUFFICIENT INODES: root filesystem has fewer than 256 free\"; exit 25; }",
+                ],
+                check=False,
+            )
+            if "INSUFFICIENT SPACE" in storage_check or "INSUFFICIENT INODES" in storage_check or "NOT WRITABLE" in storage_check:
+                raise InstallError(
+                    "Pacman cannot safely refresh package databases because the "
+                    "installed target filesystem has insufficient free space/inodes "
+                    "or is not writable. See /var/log/mulios/install.log for df output."
+                )
+
             self.log("Refreshing Arch Linux package databases...")
 
             refresh = self.chroot(
@@ -1876,6 +1905,28 @@ class InstallWorker(QThread):
                 or "could not resolve" in refresh.lower()
                 or "failed retrieving" in refresh.lower()
             )
+
+            local_storage_failure = any(
+                marker in refresh.lower()
+                for marker in (
+                    "failure writing output to destination",
+                    "write failed",
+                    "no space left on device",
+                    "read-only file system",
+                    "input/output error",
+                )
+            )
+            if local_storage_failure:
+                storage_report = self.chroot(
+                    ["bash", "-c", "df -h /; df -i /; df -h /var/lib/pacman/sync; df -i /var/lib/pacman/sync"],
+                    check=False,
+                )
+                self.log("Pacman reported a local filesystem write failure; storage report follows:\n" + storage_report)
+                raise InstallError(
+                    "Pacman could not write package database data. This is a local "
+                    "storage/filesystem problem, not a mirror outage. Check free space, "
+                    "free inodes and filesystem errors. See /var/log/mulios/install.log."
+                )
 
             if refresh_failed:
                 self.log(
