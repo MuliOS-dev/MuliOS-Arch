@@ -54,6 +54,25 @@ check_executable() {
 
 echo "== MuliOS static profile checks =="
 
+for mupdate in \
+    "$PROFILE/airootfs/usr/local/bin/mupdate" \
+    "$PROFILE/airootfs/opt/mulios-installer/mupdate"
+do
+    if bash -n "$mupdate"; then
+        echo "[OK] shell syntax: $mupdate"
+    else
+        echo "[FAIL] shell syntax: $mupdate"
+        fail=1
+    fi
+done
+
+if cmp -s "$PROFILE/airootfs/usr/local/bin/mupdate" "$PROFILE/airootfs/opt/mulios-installer/mupdate"; then
+    echo "[OK] bundled and installed MUpdate copies are identical"
+else
+    echo "[FAIL] bundled and installed MUpdate copies differ"
+    fail=1
+fi
+
 for path in \
     "$PROFILE/profiledef.sh" \
     "$PROFILE/packages.x86_64" \
