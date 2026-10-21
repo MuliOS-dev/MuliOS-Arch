@@ -1891,6 +1891,36 @@ class InstallWorker(QThread):
                     "or is not writable. See /var/log/mulios/install.log for df output."
                 )
 
+            # The ISO may ship a stale or unavailable mirror list. Use official
+            # Arch DevOps mirrors before refreshing the target database.
+            self.log("Configuring official Arch Linux mirrors...")
+            mirrorlist_text = (
+                "# MuliOS Arch Linux mirrorlist\\n"
+                "# Official Arch DevOps mirrors with regional fallbacks.\\n"
+                "Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch\\n"
+                "Server = https://london.mirror.pkgbuild.com/$repo/os/$arch\\n"
+                "Server = https://frankfurt.mirror.pkgbuild.com/$repo/os/$arch\\n"
+                "Server = https://berlin.mirror.pkgbuild.com/$repo/os/$arch\\n"
+            )
+            mirror_setup = self.chroot(
+                [
+                    "bash",
+                    "-c",
+                    "mkdir -p /etc/pacman.d && "
+                    "cat > /etc/pacman.d/mirrorlist <<'MULIOS_MIRRORS'\\n"
+                    + mirrorlist_text
+                    + "MULIOS_MIRRORS\\n",
+                ],
+                check=False,
+            )
+            if not mirror_setup.strip() and not self.chroot(
+                ["test", "-s", "/etc/pacman.d/mirrorlist"], check=False
+            ):
+                raise InstallError(
+                    "Could not configure the target Arch Linux mirror list. "
+                    "See /var/log/mulios/install.log."
+                )
+
             self.log("Refreshing Arch Linux package databases...")
 
             refresh = self.chroot(
