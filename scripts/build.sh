@@ -76,7 +76,20 @@ restore_version_templates() {
 
 trap restore_version_templates EXIT
 
+normalize_version_templates() {
+    # A previous interrupted/older build may have left a literal release version
+    # in the source templates. Canonicalize those lines back to the placeholder
+    # before backing them up, so the EXIT trap always restores reusable templates.
+    local file
+    for file in "${VERSION_TEMPLATE_FILES[@]}"; do
+        sed -E -i \
+            -e 's/(MuliOS )[0-9]{2}\.[0-9]{2}\.[0-9]{2}-[a-z][a-z0-9-]*(\.[0-9]+)?/\1@MULIOS_VERSION@/g' \
+            "$file"
+    done
+}
+
 prepare_version_templates() {
+    normalize_version_templates
     VERSION_TEMPLATE_BACKUP_DIR="$(mktemp -d "$WORK_DIR/.version-templates.XXXXXX")"
 
     local index=0
