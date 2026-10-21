@@ -1,7 +1,6 @@
 const path = require('path');
-const fs = require('fs');
 const express = require('express');
-const { execFile, execFileSync, spawn } = require('child_process');
+const { execFile } = require('child_process');
 const si = require('systeminformation');
 
 let cachedStaticInfo = null;
@@ -173,71 +172,6 @@ api.post('/api/kill', (req, res) => {
   });
 });
 
-// Locate an installed Chromium-based browser (Chrome/Edge/Brave/Chromium)
-function findBrowserPath() {
-  const platform = process.platform;
-
-  if (platform === 'darwin') {
-    const candidates = [
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-      '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
-      '/Applications/Chromium.app/Contents/MacOS/Chromium'
-    ];
-    return candidates.find(p => fs.existsSync(p)) || null;
-  }
-
-  if (platform === 'win32') {
-    const pf = process.env['ProgramFiles'] || 'C:\\Program Files';
-    const pf86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
-    const candidates = [
-      `${pf}\\Google\\Chrome\\Application\\chrome.exe`,
-      `${pf86}\\Google\\Chrome\\Application\\chrome.exe`,
-      `${pf}\\Microsoft\\Edge\\Application\\msedge.exe`,
-      `${pf86}\\Microsoft\\Edge\\Application\\msedge.exe`,
-      `${pf}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe`,
-      `${pf86}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe`
-    ];
-    return candidates.find(p => fs.existsSync(p)) || null;
-  }
-
-  // Linux and other POSIX platforms: search PATH
-  const names = ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'microsoft-edge', 'microsoft-edge-stable', 'brave-browser'];
-  for (const name of names) {
-    try {
-      const found = execFileSync('which', [name], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
-      if (found) return found;
-    } catch (_) { /* not on PATH, try next */ }
-  }
-  return null;
-}
-
-// Open the app as a standalone, chromeless window (no tabs/address bar) using
-// the browser's "app mode", instead of a normal browser tab.
-function openStandaloneWindow(url) {
-  const browserPath = findBrowserPath();
-
-  if (browserPath) {
-    const child = spawn(browserPath, [`--app=${url}`, '--new-window'], {
-      detached: true,
-      stdio: 'ignore'
-    });
-    child.unref();
-    return;
-  }
-
-  console.warn('No Chrome/Edge/Brave/Chromium found for app-mode window; opening a normal browser tab instead.');
-  const platform = process.platform;
-  const cmd = platform === 'darwin' ? 'open' : platform === 'win32' ? 'cmd' : 'xdg-open';
-  const args = platform === 'win32' ? ['/c', 'start', '""', url] : [url];
-  execFile(cmd, args, (err) => {
-    if (err) console.warn('Could not auto-open browser, open manually:', url);
-  });
-}
-
-const PORT = 4700;
-const URL = `http://127.0.0.1:${PORT}`;
 api.listen(PORT, '127.0.0.1', () => {
   console.log(`Task Manager running at ${URL}`);
-  openStandaloneWindow(URL);
 });
