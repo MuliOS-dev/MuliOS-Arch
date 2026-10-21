@@ -2466,7 +2466,7 @@ class InstallWorker(QThread):
     # Kernel
     # ------------------------------------------------------------------
 
-    def configure_kernel(self):
+    def install_kernel_image(self):
         # MuliOS ships its own kernel in the ISO. The live kernel is outside
         # the airootfs, so rsync cannot copy it into the installed /boot.
         # The previous installer selected the generic Arch "linux" package;
@@ -2598,8 +2598,10 @@ class InstallWorker(QThread):
         shutil.copy2(source, kernel_destination)
         os.chmod(kernel_destination, 0o644)
 
-        # The live ISO carries ArchISO-specific mkinitcpio configuration.
-        # It must never be used by the installed system.
+    def configure_kernel(self):
+        # Run after copy_system(): the target now contains the full package
+        # database and configuration, so these changes cannot be overwritten
+        # by the live-root rsync step.
         self.configure_installed_mkinitcpio()
 
         # Keep firmware and encryption support from the live environment;
@@ -3925,7 +3927,12 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
                 mapped_root,
             )
 
+            # Install the kernel image before copying the live airootfs.
+            # The kernel lives outside /run/archiso/airootfs, so rsync cannot
+            # provide it as part of the copied root filesystem.
+            self.install_kernel_image()
             self.copy_system()
+            self.configure_kernel()
 
             self.configure_fstab(
                 boot,
@@ -3943,7 +3950,6 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             self.prepare_network()
             self.progress.emit(56)
 
-            self.configure_kernel()
             self.progress.emit(61)
 
             self.create_user()
