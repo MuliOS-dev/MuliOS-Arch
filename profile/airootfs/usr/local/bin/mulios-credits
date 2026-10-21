@@ -1,31 +1,45 @@
 #!/usr/bin/env bash
-set -u
+set -Eeuo pipefail
 
 APP_DIR="/opt/credits"
 LAUNCHER="$APP_DIR/main.py"
-LOG_DIR="$HOME/.local/state/mulios"
+LOG_DIR="${HOME:-/tmp}/.local/state/mulios"
 LOG_FILE="$LOG_DIR/credits.log"
 
 mkdir -p "$LOG_DIR"
 
-if [ ! -f "$LAUNCHER" ]; then
-    printf '%s\n' "MuliOS Credits is not installed." | tee -a "$LOG_FILE" >&2
+show_startup_error() {
+    local status="$1"
+    local details message
+    details="$(tail -n 20 "$LOG_FILE" 2>/dev/null || true)"
+    message="$(printf '%s could not start (exit code %s).\n\nLog: %s\n\nLast output:\n%s' "MuliOS Credits" "$status" "$LOG_FILE" "${details:-No application output was recorded.}")"
+
+    if command -v kdialog >/dev/null 2>&1 && [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
+        kdialog --title "MuliOS Credits" --error "$message" || true
+    else
+        printf '%s\n' "$message" >&2
+    fi
+}
+
+if [[ ! -f "$LAUNCHER" ]]; then
+    printf '%s\n' "MuliOS Credits is not installed: $LAUNCHER" | tee -a "$LOG_FILE" >&2
+    show_startup_error 1
     exit 1
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-    printf '%s\n' "Python 3 is required by MuliOS Credits." | tee -a "$LOG_FILE" >&2
+if [[ ! -x /usr/bin/python3 ]]; then
+    printf '%s\n' "Python 3 is unavailable at /usr/bin/python3." | tee -a "$LOG_FILE" >&2
+    show_startup_error 1
     exit 1
 fi
 
-cd "$APP_DIR" || exit 1
+cd "$APP_DIR"
+export PYTHONUNBUFFERED=1
+
 if /usr/bin/python3 "$LAUNCHER" >>"$LOG_FILE" 2>&1; then
     exit 0
 else
     status=$?
-    if command -v kdialog >/dev/null 2>&1; then
-        details="$(tail -n 18 "$LOG_FILE" 2>/dev/null || true)"
-        kdialog --title "MuliOS Credits" --error "MuliOS Credits could not start (exit code $status).\n\nLog: $LOG_FILE\n\n$details" || true
-    fi
+    show_startup_error "$status"
     exit "$status"
 fi
