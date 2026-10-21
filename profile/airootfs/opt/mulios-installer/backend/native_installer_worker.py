@@ -2597,6 +2597,15 @@ class InstallWorker(QThread):
         )
         shutil.copy2(source, kernel_destination)
         os.chmod(kernel_destination, 0o644)
+        if not kernel_destination.is_file() or kernel_destination.stat().st_size == 0:
+            raise InstallError(
+                "The bundled MuliOS kernel was not installed correctly at "
+                f"{kernel_destination}; refusing to copy the live airootfs."
+            )
+        self.log(
+            f"Kernel image verified at {kernel_destination} "
+            f"({kernel_destination.stat().st_size} bytes)."
+        )
 
     def configure_kernel(self):
         # Run after copy_system(): the target now contains the full package
