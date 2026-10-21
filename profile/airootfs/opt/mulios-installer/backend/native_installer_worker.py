@@ -2201,7 +2201,7 @@ class InstallWorker(QThread):
         ksplashrc.write_text(
             "[KSplash]\n"
             "Engine=none\n"
-            "Theme=none\n",
+            "Theme=None\n",
             encoding="utf-8",
         )
 
