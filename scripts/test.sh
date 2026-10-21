@@ -135,11 +135,278 @@ else
     echo "[OK] application desktop entries use MuliOS launch wrappers"
 fi
 
-if ! grep -q '^nodejs$' "$PROFILE/packages.x86_64"; then
+if ! grep -q '^nodejs
+if ! grep -q '"express"' "$PROFILE/airootfs/opt/taskmanager/package.json" ||
+   ! grep -q '"systeminformation"' "$PROFILE/airootfs/opt/taskmanager/package.json"; then
+    echo "[FAIL] Task Manager runtime dependencies are missing from package.json"
+    fail=1
+else
+    echo "[OK] Task Manager runtime dependencies are declared"
+fi
+
+if ! grep -q 'npm install --prefix "$taskmanager_dir"' "$ROOT/scripts/build.sh"; then
+    echo "[FAIL] Task Manager npm dependencies are not bundled during ISO build"
+    fail=1
+else
+    echo "[OK] Task Manager dependencies are bundled during ISO build"
+fi
+
+if ! grep -q 'shutil.which("qdbus6") or shutil.which("qdbus")' "$PROFILE/airootfs/opt/mulios-installer/main.py"; then
+    echo "[FAIL] Desktop effect preview does not support qdbus6"
+    fail=1
+else
+    echo "[OK] Desktop effect preview supports qdbus6 and qdbus"
+fi
+
+PROFILE_PAGE="$PROFILE/airootfs/opt/mulios-installer/pages/profile_page.py"
+if ! grep -q 'def refresh_profiles' "$PROFILE_PAGE" ||
+   ! grep -q 'Refresh profiles' "$PROFILE_PAGE" ||
+   ! grep -q 'MuliOS-dev/mupdate' "$PROFILE_PAGE"; then
+    echo "[FAIL] Profile page refresh control or canonical MUpdate endpoint is missing"
+    fail=1
+else
+    echo "[OK] Profile page has refresh control and uses the MUpdate repository"
+fi
+
+if ! grep -q 'DBUS_SESSION_BUS_ADDRESS=unix:path=' "$PROFILE/airootfs/opt/mulios-installer/main.py" ||
+   ! grep -q 'runuser, "-u", desktop_user.pw_name' "$PROFILE/airootfs/opt/mulios-installer/main.py"; then
+    echo "[FAIL] KWin preview does not target the active desktop user's D-Bus session"
+    fail=1
+else
+    echo "[OK] KWin preview targets the active desktop user's D-Bus session"
+fi
+
+if ! head -n 1 "$PROFILE/airootfs/opt/credits/main.py" | grep -q '^#!/usr/bin/env python3$'; then
+    echo "[FAIL] Credits must declare its Python interpreter"
+    fail=1
+else
+    echo "[OK] Credits declares its Python interpreter"
+fi
+
+if ! grep -q 'def preview_desktop_effect' "$PROFILE/airootfs/opt/mulios-installer/main.py"; then
+    echo "[FAIL] Desktop effect preview handler is missing"
+    fail=1
+else
+    echo "[OK] Desktop effect preview handler exists"
+fi
+
+KERNEL_WORKER="$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"
+if ! grep -q 'Path("/usr/lib/modules") / running_release / "vmlinuz"' "$KERNEL_WORKER" ||
+   ! grep -q 'Kernel search paths checked:' "$KERNEL_WORKER"; then
+    echo "[FAIL] Installer kernel discovery fallback or diagnostics are missing"
+    fail=1
+else
+    echo "[OK] Installer checks the bundled kernel package image and logs search paths"
+fi
+
+expected_version="$(cat "$ROOT/profile/version" 2>/dev/null || true)"
+for template in \
+    "$PROFILE/grub/grub.cfg" \
+    "$PROFILE/efiboot/loader/entries/01-archiso-linux.conf" \
+    "$PROFILE/efiboot/loader/entries/02-archiso-speech-linux.conf" \
+    "$PROFILE/syslinux/archiso_sys-linux.cfg"
+do
+    if grep -q '@MULIOS_VERSION@' "$template"; then
+        echo "[OK] dynamic version placeholder: $template"
+    elif [[ -n "$expected_version" ]] && grep -Fq "$expected_version" "$template"; then
+        # During a build, build.sh temporarily substitutes the version before
+        # running these checks, then restores the original source templates.
+        echo "[OK] substituted build version: $template"
+    else
+        echo "[FAIL] Boot menu template has neither the version placeholder nor the current build version: $template"
+        fail=1
+    fi
+done
+
+if grep -RIn '26\.10\.20-indev\.11' \
+    "$PROFILE/grub/grub.cfg" \
+    "$PROFILE/efiboot/loader/entries" \
+    "$PROFILE/syslinux/archiso_sys-linux.cfg" >/dev/null 2>&1; then
+    echo "[FAIL] hardcoded stale version found in a boot menu template"
+    fail=1
+else
+    echo "[OK] no hardcoded stale version in boot menu templates"
+fi
+
+if ! grep -q 'xarblu/kwin-effects-better-blur-dx' "$ROOT/scripts/build-kwin-effects.sh" ||
+   ! grep -q 'Better Blur DX (Force Blur)' "$PROFILE/airootfs/opt/mulios-installer/pages/desktop_page.py"; then
+    echo "[FAIL] Better Blur DX build or installer selection is missing"
+    fail=1
+else
+    echo "[OK] Better Blur DX build and installer selection are configured"
+fi
+
+if ! grep -q 'Continuing with the default desktop effects' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"; then
+    echo "[FAIL] Offline desktop effect fallback is missing"
+    fail=1
+else
+    echo "[OK] Offline desktop effect fallback exists"
+fi
+
+if [[ "$fail" -ne 0 ]]; then
+    echo "Static checks failed."
+    exit 1
+fi
+
+echo "All static checks passed."
+ "$PROFILE/packages.x86_64"; then
     echo "[FAIL] nodejs is missing from the live package set"
     fail=1
 else
     echo "[OK] nodejs is included"
+fi
+
+if ! grep -q '^kdialog
+if ! grep -q '"express"' "$PROFILE/airootfs/opt/taskmanager/package.json" ||
+   ! grep -q '"systeminformation"' "$PROFILE/airootfs/opt/taskmanager/package.json"; then
+    echo "[FAIL] Task Manager runtime dependencies are missing from package.json"
+    fail=1
+else
+    echo "[OK] Task Manager runtime dependencies are declared"
+fi
+
+if ! grep -q 'npm install --prefix "$taskmanager_dir"' "$ROOT/scripts/build.sh"; then
+    echo "[FAIL] Task Manager npm dependencies are not bundled during ISO build"
+    fail=1
+else
+    echo "[OK] Task Manager dependencies are bundled during ISO build"
+fi
+
+if ! grep -q 'shutil.which("qdbus6") or shutil.which("qdbus")' "$PROFILE/airootfs/opt/mulios-installer/main.py"; then
+    echo "[FAIL] Desktop effect preview does not support qdbus6"
+    fail=1
+else
+    echo "[OK] Desktop effect preview supports qdbus6 and qdbus"
+fi
+
+PROFILE_PAGE="$PROFILE/airootfs/opt/mulios-installer/pages/profile_page.py"
+if ! grep -q 'def refresh_profiles' "$PROFILE_PAGE" ||
+   ! grep -q 'Refresh profiles' "$PROFILE_PAGE" ||
+   ! grep -q 'MuliOS-dev/mupdate' "$PROFILE_PAGE"; then
+    echo "[FAIL] Profile page refresh control or canonical MUpdate endpoint is missing"
+    fail=1
+else
+    echo "[OK] Profile page has refresh control and uses the MUpdate repository"
+fi
+
+if ! grep -q 'DBUS_SESSION_BUS_ADDRESS=unix:path=' "$PROFILE/airootfs/opt/mulios-installer/main.py" ||
+   ! grep -q 'runuser, "-u", desktop_user.pw_name' "$PROFILE/airootfs/opt/mulios-installer/main.py"; then
+    echo "[FAIL] KWin preview does not target the active desktop user's D-Bus session"
+    fail=1
+else
+    echo "[OK] KWin preview targets the active desktop user's D-Bus session"
+fi
+
+if ! head -n 1 "$PROFILE/airootfs/opt/credits/main.py" | grep -q '^#!/usr/bin/env python3$'; then
+    echo "[FAIL] Credits must declare its Python interpreter"
+    fail=1
+else
+    echo "[OK] Credits declares its Python interpreter"
+fi
+
+if ! grep -q 'def preview_desktop_effect' "$PROFILE/airootfs/opt/mulios-installer/main.py"; then
+    echo "[FAIL] Desktop effect preview handler is missing"
+    fail=1
+else
+    echo "[OK] Desktop effect preview handler exists"
+fi
+
+KERNEL_WORKER="$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"
+if ! grep -q 'Path("/usr/lib/modules") / running_release / "vmlinuz"' "$KERNEL_WORKER" ||
+   ! grep -q 'Kernel search paths checked:' "$KERNEL_WORKER"; then
+    echo "[FAIL] Installer kernel discovery fallback or diagnostics are missing"
+    fail=1
+else
+    echo "[OK] Installer checks the bundled kernel package image and logs search paths"
+fi
+
+expected_version="$(cat "$ROOT/profile/version" 2>/dev/null || true)"
+for template in \
+    "$PROFILE/grub/grub.cfg" \
+    "$PROFILE/efiboot/loader/entries/01-archiso-linux.conf" \
+    "$PROFILE/efiboot/loader/entries/02-archiso-speech-linux.conf" \
+    "$PROFILE/syslinux/archiso_sys-linux.cfg"
+do
+    if grep -q '@MULIOS_VERSION@' "$template"; then
+        echo "[OK] dynamic version placeholder: $template"
+    elif [[ -n "$expected_version" ]] && grep -Fq "$expected_version" "$template"; then
+        # During a build, build.sh temporarily substitutes the version before
+        # running these checks, then restores the original source templates.
+        echo "[OK] substituted build version: $template"
+    else
+        echo "[FAIL] Boot menu template has neither the version placeholder nor the current build version: $template"
+        fail=1
+    fi
+done
+
+if grep -RIn '26\.10\.20-indev\.11' \
+    "$PROFILE/grub/grub.cfg" \
+    "$PROFILE/efiboot/loader/entries" \
+    "$PROFILE/syslinux/archiso_sys-linux.cfg" >/dev/null 2>&1; then
+    echo "[FAIL] hardcoded stale version found in a boot menu template"
+    fail=1
+else
+    echo "[OK] no hardcoded stale version in boot menu templates"
+fi
+
+if ! grep -q 'xarblu/kwin-effects-better-blur-dx' "$ROOT/scripts/build-kwin-effects.sh" ||
+   ! grep -q 'Better Blur DX (Force Blur)' "$PROFILE/airootfs/opt/mulios-installer/pages/desktop_page.py"; then
+    echo "[FAIL] Better Blur DX build or installer selection is missing"
+    fail=1
+else
+    echo "[OK] Better Blur DX build and installer selection are configured"
+fi
+
+if ! grep -q 'Continuing with the default desktop effects' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"; then
+    echo "[FAIL] Offline desktop effect fallback is missing"
+    fail=1
+else
+    echo "[OK] Offline desktop effect fallback exists"
+fi
+
+if [[ "$fail" -ne 0 ]]; then
+    echo "Static checks failed."
+    exit 1
+fi
+
+echo "All static checks passed."
+ "$PROFILE/packages.x86_64"; then
+    echo "[FAIL] kdialog is missing; application startup failures would be silent"
+    fail=1
+else
+    echo "[OK] kdialog is included for application startup diagnostics"
+fi
+
+check_desktop_launcher() {
+    local desktop_file="$1"
+    local expected="$2"
+    local exec_value tryexec_value
+    exec_value="$(sed -n 's/^Exec=//p' "$desktop_file" | head -n 1)"
+    tryexec_value="$(sed -n 's/^TryExec=//p' "$desktop_file" | head -n 1)"
+    if [[ "$exec_value" == "$expected" && "$tryexec_value" == "$expected" && -x "$PROFILE/airootfs$expected" ]]; then
+        echo "[OK] desktop entry launches executable wrapper: $desktop_file"
+    else
+        echo "[FAIL] desktop entry does not point to its executable wrapper: $desktop_file"
+        fail=1
+    fi
+}
+
+check_desktop_launcher "$PROFILE/airootfs/usr/share/applications/taskmanager.desktop" "/usr/local/bin/mulios-taskmanager"
+check_desktop_launcher "$PROFILE/airootfs/usr/share/applications/mulios-credits.desktop" "/usr/local/bin/mulios-credits"
+
+if ! grep -q 'backend_is_ready' "$PROFILE/airootfs/opt/taskmanager/launcher.py" ||
+   ! grep -q 'BACKEND_START_TIMEOUT' "$PROFILE/airootfs/opt/taskmanager/launcher.py"; then
+    echo "[FAIL] Task Manager does not wait for HTTP backend readiness"
+    fail=1
+else
+    echo "[OK] Task Manager waits for backend readiness before showing the window"
+fi
+
+if grep -qE 'openStandaloneWindow|execFileSync|xdg-open' "$PROFILE/airootfs/opt/taskmanager/main.js"; then
+    echo "[FAIL] Task Manager backend still tries to launch a second external browser"
+    fail=1
+else
+    echo "[OK] Task Manager backend only serves the UI embedded by its Qt launcher"
 fi
 
 if ! grep -q '"express"' "$PROFILE/airootfs/opt/taskmanager/package.json" ||
