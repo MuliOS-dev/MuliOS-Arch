@@ -3,10 +3,19 @@ set -Eeuo pipefail
 
 APP_DIR="/opt/taskmanager"
 LAUNCHER="$APP_DIR/launcher.py"
-LOG_DIR="${HOME:-/tmp}/.local/state/mulios"
+STATE_ROOT="${XDG_STATE_HOME:-${HOME:+$HOME/.local/state}}"
+if [[ -z "$STATE_ROOT" ]]; then
+    STATE_ROOT="${TMPDIR:-/tmp}/mulios-state-${UID}"
+fi
+LOG_DIR="$STATE_ROOT/mulios"
+if ! mkdir -p "$LOG_DIR" 2>/dev/null || [[ ! -w "$LOG_DIR" ]]; then
+    LOG_DIR="${TMPDIR:-/tmp}/mulios-state-${UID}"
+    mkdir -p "$LOG_DIR" || {
+        printf '%s\n' "Cannot create a writable Task Manager log directory." >&2
+        exit 1
+    }
+fi
 LOG_FILE="$LOG_DIR/taskmanager.log"
-
-mkdir -p "$LOG_DIR"
 
 show_startup_error() {
     local status="$1"
