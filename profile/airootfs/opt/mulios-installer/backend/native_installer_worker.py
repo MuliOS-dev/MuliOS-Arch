@@ -1894,28 +1894,23 @@ class InstallWorker(QThread):
             # The ISO may ship a stale or unavailable mirror list. Use official
             # Arch DevOps mirrors before refreshing the target database.
             self.log("Configuring official Arch Linux mirrors...")
-            mirrorlist_text = (
-                "# MuliOS Arch Linux mirrorlist\\n"
-                "# Official Arch DevOps mirrors with regional fallbacks.\\n"
-                "Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch\\n"
-                "Server = https://london.mirror.pkgbuild.com/$repo/os/$arch\\n"
-                "Server = https://frankfurt.mirror.pkgbuild.com/$repo/os/$arch\\n"
-                "Server = https://berlin.mirror.pkgbuild.com/$repo/os/$arch\\n"
-            )
             mirror_setup = self.chroot(
                 [
                     "bash",
                     "-c",
                     "mkdir -p /etc/pacman.d && "
-                    "cat > /etc/pacman.d/mirrorlist <<'MULIOS_MIRRORS'\\n"
-                    + mirrorlist_text
-                    + "MULIOS_MIRRORS\\n",
+                    "printf '%s\\n' "
+                    "'# MuliOS Arch Linux mirrorlist' "
+                    "'# Official Arch DevOps mirrors with regional fallbacks.' "
+                    "'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' "
+                    "'Server = https://london.mirror.pkgbuild.com/$repo/os/$arch' "
+                    "'Server = https://frankfurt.mirror.pkgbuild.com/$repo/os/$arch' "
+                    "'Server = https://berlin.mirror.pkgbuild.com/$repo/os/$arch' "
+                    "> /etc/pacman.d/mirrorlist && echo MIRRORLIST_CONFIGURED",
                 ],
                 check=False,
             )
-            if not mirror_setup.strip() and not self.chroot(
-                ["test", "-s", "/etc/pacman.d/mirrorlist"], check=False
-            ):
+            if "MIRRORLIST_CONFIGURED" not in mirror_setup:
                 raise InstallError(
                     "Could not configure the target Arch Linux mirror list. "
                     "See /var/log/mulios/install.log."
