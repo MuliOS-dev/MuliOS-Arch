@@ -667,9 +667,9 @@ from pathlib import Path
 
 path = Path(sys.argv[1])
 tree = ast.parse(path.read_text(encoding="utf-8"))
-install = next((n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "install"), None)
+install = next((n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "run"), None)
 if install is None:
-    raise SystemExit("install() method not found")
+    raise SystemExit("run() method not found")
 calls = []
 for node in ast.walk(install):
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
