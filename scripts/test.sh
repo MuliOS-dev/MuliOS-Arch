@@ -659,6 +659,34 @@ do
     fi
 done
 
+KERNEL_WORKER="$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"
+if ! python - "$KERNEL_WORKER" <<'PY'
+import ast
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+tree = ast.parse(path.read_text(encoding="utf-8"))
+install = next((n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "install"), None)
+if install is None:
+    raise SystemExit("install() method not found")
+calls = []
+for node in ast.walk(install):
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+        if isinstance(node.func.value, ast.Name) and node.func.value.id == "self":
+            calls.append((node.func.attr, node.lineno))
+positions = {name: next((line for call, line in calls if call == name), None) for name in ("install_kernel_image", "copy_system", "configure_kernel")}
+if any(value is None for value in positions.values()) or not (positions["install_kernel_image"] < positions["copy_system"] < positions["configure_kernel"]):
+    raise SystemExit(f"Incorrect install order: {positions}")
+print("Kernel image installation precedes airootfs copy.")
+PY
+then
+    echo "[FAIL] Installer must install the kernel image before copying the live airootfs"
+    fail=1
+else
+    echo "[OK] Installer installs the kernel image before copying the live airootfs"
+fi
+
 if [[ "$fail" -ne 0 ]]; then
     echo "Static checks failed."
     exit 1
