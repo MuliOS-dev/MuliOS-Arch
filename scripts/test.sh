@@ -380,6 +380,14 @@ else
     echo "[OK] Installer checks the bundled kernel package image and logs search paths"
 fi
 
+if ! grep -q 'normalize_version_templates' "$ROOT/scripts/build.sh" ||
+   ! grep -q 'trap restore_version_templates EXIT' "$ROOT/scripts/build.sh"; then
+    echo "[FAIL] Build does not normalize and restore boot-menu version templates"
+    fail=1
+else
+    echo "[OK] Build normalizes version templates and restores them on exit"
+fi
+
 expected_version="$(cat "$ROOT/profile/version" 2>/dev/null || true)"
 for template in \
     "$PROFILE/grub/grub.cfg" \
