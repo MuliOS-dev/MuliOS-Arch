@@ -3,6 +3,10 @@ const express = require('express');
 const { execFile } = require('child_process');
 const si = require('systeminformation');
 
+const PORT = Number.parseInt(process.env.MULIOS_TASKMANAGER_PORT || '4700', 10);
+const HOST = '127.0.0.1';
+const URL = `http://${HOST}:${PORT}`;
+
 let cachedStaticInfo = null;
 
 // In-memory caching to serve requests instantly without blocking the event loop
@@ -172,6 +176,6 @@ api.post('/api/kill', (req, res) => {
   });
 });
 
-api.listen(PORT, '127.0.0.1', () => {
+api.listen(PORT, HOST, () => {
   console.log(`Task Manager running at ${URL}`);
 });
