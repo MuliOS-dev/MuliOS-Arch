@@ -4,21 +4,21 @@ import time
 import urllib.error
 import urllib.request
 
+from PySide6.QtCore import QObject, QThread, Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QGridLayout, QHBoxLayout, QLabel,
-    QButtonGroup, QPushButton,
+    QWidget, QVBoxLayout, QGridLayout, QLabel, QButtonGroup, QPushButton,
 )
 
 from widgets.select_card import ProfileCard
 from config.settings import PROFILE_DESCRIPTIONS, DEFAULT_PROFILE_SLUG
 
-PROFILE_TREE_URL = "https://api.github.com/repos/MuliOS-dev/mupdate/git/trees/main?recursive=1"
-REQUEST_TIMEOUT = 5
+PROFILE_TREE_URL = "https://api.github.com/repos/MuliOS-dev/update/git/trees/main?recursive=1"
+REQUEST_TIMEOUT = 8
 REQUEST_ATTEMPTS = 3
 
 
 def _profile_slug_from_path(path: str):
-    """Resolve a supported profile ZIP path from the MUpdate repository."""
+    """Resolve profile ZIP paths from the official update repository."""
     if not path.startswith("profiles/") or not path.endswith(".zip"):
         return None
 
@@ -28,24 +28,24 @@ def _profile_slug_from_path(path: str):
         if not filename.startswith("latest-"):
             return None
         slug = filename[len("latest-"):-len(".zip")]
-        if slug == "game":
-            slug = "gaming"
-        return slug
+        return "gaming" if slug == "game" else slug
 
-    if len(parts) == 3:
-        return parts[1]
+    if len(parts) >= 3:
+        slug = parts[1]
+        return "gaming" if slug == "game" else slug
 
     return None
 
 
 def _available_profiles():
-    """Fetch profile metadata with bounded retries and actionable errors."""
+    """Fetch the current profile ZIP listing from MuliOS-dev/update."""
     request = urllib.request.Request(
         PROFILE_TREE_URL,
         headers={
             "Accept": "application/vnd.github+json",
             "User-Agent": "MuliOS-Installer",
             "X-GitHub-Api-Version": "2022-11-28",
+            "Cache-Control": "no-cache",
         },
     )
     last_error = None
@@ -63,12 +63,11 @@ def _available_profiles():
                 if item.get("type") != "blob":
                     continue
                 slug = _profile_slug_from_path(item.get("path", ""))
-                if slug in PROFILE_DESCRIPTIONS:
+                if slug and slug.replace("-", "").replace("_", "").isalnum():
                     slugs.add(slug)
 
-            if DEFAULT_PROFILE_SLUG not in slugs:
-                raise ValueError("The online profile repository does not contain Generic.")
-
+            # Generic is the installer's built-in fallback and needs no ZIP.
+            slugs.add(DEFAULT_PROFILE_SLUG)
             return sorted(slugs)
         except (urllib.error.URLError, TimeoutError, socket.timeout, OSError,
                 ValueError, json.JSONDecodeError) as exc:
@@ -78,14 +77,25 @@ def _available_profiles():
 
     reason = getattr(last_error, "reason", last_error)
     if isinstance(reason, socket.gaierror):
-        detail = "DNS lookup failed. Ethernet may be connected, but name resolution is not working."
+        detail = "DNS lookup failed. Check the connection or name resolution."
     elif isinstance(last_error, (TimeoutError, socket.timeout)):
-        detail = "The request timed out. Check the connection, DNS, or firewall."
+        detail = "The request timed out. Check the connection or firewall."
     elif isinstance(last_error, urllib.error.HTTPError):
         detail = f"GitHub returned HTTP {last_error.code}."
     else:
         detail = f"{type(last_error).__name__}: {reason}"
     raise RuntimeError(detail) from last_error
+
+
+class _ProfileFetchWorker(QObject):
+    loaded = Signal(list)
+    failed = Signal(str)
+
+    def run(self):
+        try:
+            self.loaded.emit(_available_profiles())
+        except Exception as exc:
+            self.failed.emit(str(exc))
 
 
 class ProfilePage(QWidget):
@@ -101,20 +111,16 @@ class ProfilePage(QWidget):
         layout.addWidget(title)
 
         self.subtitle = QLabel(
-            "Generic is selected by default. Specialized profiles are downloaded "
-            "and installed by MUpdate from the official profile repository."
+            "Profiles are discovered from MuliOS-dev/update. Generic is available "
+            "as a built-in fallback."
         )
         self.subtitle.setObjectName("SubtitleLabel")
         self.subtitle.setWordWrap(True)
         layout.addWidget(self.subtitle)
 
-        status_row = QHBoxLayout()
-        status_row.addStretch()
         self.refresh_button = QPushButton("Refresh profiles")
         self.refresh_button.setObjectName("SecondaryButton")
         self.refresh_button.clicked.connect(self.refresh_profiles)
-        status_row.addWidget(self.refresh_button)
-        layout.addLayout(status_row)
 
         self.grid = QGridLayout()
         self.grid.setSpacing(14)
@@ -126,6 +132,8 @@ class ProfilePage(QWidget):
         self._slug_by_button = {}
         self._name_by_slug = {}
         self._available_slugs = [DEFAULT_PROFILE_SLUG]
+        self._refresh_thread = None
+        self._refresh_worker = None
         self._render_profiles(self._available_slugs)
         self.refresh_profiles(initial=True)
 
@@ -139,12 +147,16 @@ class ProfilePage(QWidget):
 
         self._slug_by_button = {}
         self._name_by_slug = {}
-        self._available_slugs = list(slugs) or [DEFAULT_PROFILE_SLUG]
+        self._available_slugs = list(dict.fromkeys(slugs)) or [DEFAULT_PROFILE_SLUG]
         if DEFAULT_PROFILE_SLUG not in self._available_slugs:
             self._available_slugs.insert(0, DEFAULT_PROFILE_SLUG)
 
         for i, slug in enumerate(self._available_slugs):
-            name, description = PROFILE_DESCRIPTIONS[slug]
+            name, description = PROFILE_DESCRIPTIONS.get(
+                slug,
+                (slug.replace("-", " ").replace("_", " ").title(),
+                 f"Profile provided by MuliOS-dev/update ({slug})."),
+            )
             card = ProfileCard("", name, description)
             row, col = divmod(i, 3)
             self.grid.addWidget(card, row, col)
@@ -152,37 +164,58 @@ class ProfilePage(QWidget):
             self._slug_by_button[card] = slug
             self._name_by_slug[slug] = name
 
-        selected = previous if previous in self._slug_by_button else DEFAULT_PROFILE_SLUG
+        selected = previous if previous in self._available_slugs else DEFAULT_PROFILE_SLUG
         for button, slug in self._slug_by_button.items():
             button.setChecked(slug == selected)
 
     def refresh_profiles(self, initial=False):
+        if self._refresh_thread is not None:
+            return
+
         self.refresh_button.setEnabled(False)
         self.refresh_button.setText("Checking..." if initial else "Refreshing...")
         self.subtitle.setText(
-            "Checking the MUpdate profile repository…"
-            if initial else "Retrying the profile repository connection…"
+            "Fetching profiles from MuliOS-dev/update..."
+            if initial else "Refreshing profiles from MuliOS-dev/update..."
         )
 
-        try:
-            discovered = _available_profiles()
-        except Exception as exc:
-            # Keep any profiles already loaded; on first launch Generic remains
-            # selectable and users can retry without restarting the installer.
-            if initial or len(self._available_slugs) <= 1:
-                self._render_profiles([DEFAULT_PROFILE_SLUG])
-            self.subtitle.setText(
-                "Could not load online profiles. Generic remains available. "
-                f"{exc} Use Refresh profiles to try again."
-            )
-        else:
-            self._render_profiles(discovered)
-            self.subtitle.setText(
-                f"Loaded {len(discovered)} profiles from the official repository."
-            )
-        finally:
-            self.refresh_button.setEnabled(True)
-            self.refresh_button.setText("Refresh profiles")
+        thread = QThread(self)
+        worker = _ProfileFetchWorker()
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.loaded.connect(self._profiles_loaded)
+        worker.failed.connect(self._profiles_failed)
+        worker.loaded.connect(thread.quit)
+        worker.failed.connect(thread.quit)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(self._refresh_finished)
+        thread.finished.connect(thread.deleteLater)
+        self._refresh_thread = thread
+        self._refresh_worker = worker
+        thread.start()
+
+    def _profiles_loaded(self, discovered):
+        self._render_profiles(discovered)
+        self.subtitle.setText(
+            f"Loaded {len(discovered)} profiles from MuliOS-dev/update."
+        )
+        self.refresh_button.setText("Refresh profiles")
+        self.refresh_button.setEnabled(True)
+
+    def _profiles_failed(self, error):
+        # Preserve existing choices when a refresh fails.
+        if not self._available_slugs:
+            self._render_profiles([DEFAULT_PROFILE_SLUG])
+        self.subtitle.setText(
+            "Could not refresh profiles from MuliOS-dev/update. "
+            f"Generic remains available. {error}"
+        )
+        self.refresh_button.setText("Refresh profiles")
+        self.refresh_button.setEnabled(True)
+
+    def _refresh_finished(self):
+        self._refresh_thread = None
+        self._refresh_worker = None
 
     def selected_profile(self) -> str:
         checked = self.button_group.checkedButton()
