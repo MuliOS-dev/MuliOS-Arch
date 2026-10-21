@@ -645,6 +645,20 @@ else
     echo "[OK] Offline desktop effect fallback exists"
 fi
 
+for boot_config in \
+    "$PROFILE/grub/grub.cfg" \
+    "$PROFILE/efiboot/loader/entries/01-archiso-linux.conf" \
+    "$PROFILE/efiboot/loader/entries/02-archiso-speech-linux.conf" \
+    "$PROFILE/syslinux/archiso_sys-linux.cfg"
+do
+    if ! grep -q 'cow_spacesize=4G' "$boot_config"; then
+        echo "[FAIL] Live ISO writable overlay is not configured to 4 GiB: $boot_config"
+        fail=1
+    else
+        echo "[OK] Live ISO writable overlay is configured to 4 GiB: $boot_config"
+    fi
+done
+
 if [[ "$fail" -ne 0 ]]; then
     echo "Static checks failed."
     exit 1
