@@ -1,0 +1,21 @@
+[package]
+name = "mulios-taskmanager"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Native Rust system-monitor backend for MuliOS Task Manager"
+
+[[bin]]
+name = "mulios-taskmanager"
+path = "src/main.rs"
+
+[dependencies]
+axum = "0.8"
+serde_json = "1"
+sysinfo = "0.35"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
+tower-http = { version = "0.6", features = ["fs"] }
+
+[lints]
+workspace = true
