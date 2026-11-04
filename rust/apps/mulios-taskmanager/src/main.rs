@@ -264,3 +264,26 @@ fn parse_number_before(report: &str, needle: &str, suffix: &str) -> Option<f64> 
     let end = tail.find(suffix)?;
     tail[..end].split_whitespace().last()?.parse().ok()
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_gpu_percentages_without_matching_other_fields() {
+        let report = "gpu 42.5% ee 10% vgt 3.25%";
+        assert_eq!(parse_percent(report, "gpu "), Some(42.5));
+        assert_eq!(parse_percent(report, "ee "), Some(10.0));
+        assert_eq!(parse_percent(report, "vgt "), Some(3.25));
+        assert_eq!(parse_percent(report, "missing "), None);
+    }
+
+    #[test]
+    fn parses_gpu_memory_and_clock_values() {
+        let report = "vram 75% 384mb mclk 20% 1.2ghz sclk 80% 2.1ghz";
+        assert_eq!(parse_number_before(report, "vram ", "mb"), Some(384.0));
+        assert_eq!(parse_number_before(report, "mclk ", "ghz"), Some(1.2));
+        assert_eq!(parse_number_before(report, "sclk ", "ghz"), Some(2.1));
+    }
+}
