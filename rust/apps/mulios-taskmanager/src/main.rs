@@ -41,7 +41,7 @@ async fn main() -> ExitCode {
         .route("/api/gpu", get(gpu_info))
         .route("/api/kill", post(kill_process))
         .with_state(system)
-        .fallback_service(ServeDir::new(app_dir));
+        .fallback_service(ServeDir::new(app_dir).append_index_html_on_directories());
 
     let address = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = match tokio::net::TcpListener::bind(address).await {
