@@ -50,7 +50,9 @@ fn print_info() -> ExitCode {
         Ok(os) => {
             println!(
                 "Operating system: {}",
-                os.pretty_name.or(os.name).unwrap_or_else(|| "Unknown".into())
+                os.pretty_name
+                    .or(os.name)
+                    .unwrap_or_else(|| "Unknown".into())
             );
             println!(
                 "Distribution ID: {}",
