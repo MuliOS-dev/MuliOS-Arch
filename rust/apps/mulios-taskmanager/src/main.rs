@@ -70,8 +70,14 @@ async fn system_info(State(shared): State<SharedSystem>) -> Json<Value> {
     system.refresh_all();
 
     let cpus = system.cpus();
-    let cpu_brand = cpus.first().map(|cpu| cpu.brand()).unwrap_or("Unknown CPU");
-    let cpu_vendor = cpus.first().map(|cpu| cpu.vendor_id()).unwrap_or("Unknown");
+    let cpu_brand = cpus
+        .first()
+        .map(|cpu| cpu.brand())
+        .unwrap_or("Unknown CPU");
+    let cpu_vendor = cpus
+        .first()
+        .map(|cpu| cpu.vendor_id())
+        .unwrap_or("Unknown");
     let cpu_speed = cpus.first().map(|cpu| cpu.frequency()).unwrap_or(0);
     let cpu_count = cpus.len();
     let total_memory = system.total_memory();
@@ -139,23 +145,29 @@ async fn process_list(State(shared): State<SharedSystem>) -> Json<Value> {
     system.refresh_all();
 
     let total_memory = system.total_memory().max(1) as f64;
-    let mut list = system.processes().iter().map(|(pid, process)| {
-        let command = process.cmd().iter()
-            .map(|part| part.to_string_lossy().into_owned())
-            .collect::<Vec<_>>()
-            .join(" ");
-        let memory_bytes = process.memory();
-        json!({
-            "pid": pid.as_u32(),
-            "name": process.name().to_string_lossy(),
-            "cpu": process.cpu_usage(),
-            "mem": memory_bytes as f64 / total_memory * 100.0,
-            "memRss": memory_bytes / 1024,
-            "user": "unknown",
-            "state": format!("{:?}", process.status()),
-            "command": command
+    let mut list = system
+        .processes()
+        .iter()
+        .map(|(pid, process)| {
+            let command = process
+                .cmd()
+                .iter()
+                .map(|part| part.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join(" ");
+            let memory_bytes = process.memory();
+            json!({
+                "pid": pid.as_u32(),
+                "name": process.name().to_string_lossy(),
+                "cpu": process.cpu_usage(),
+                "mem": memory_bytes as f64 / total_memory * 100.0,
+                "memRss": memory_bytes / 1024,
+                "user": "unknown",
+                "state": format!("{:?}", process.status()),
+                "command": command
+            })
         })
-    }).collect::<Vec<_>>();
+        .collect::<Vec<_>>();
 
     list.sort_by(|a, b| {
         let a_cpu = a.get("cpu").and_then(Value::as_f64).unwrap_or(0.0);
@@ -206,7 +218,7 @@ async fn gpu_info() -> Json<Value> {
             ("sc", "sc "),
             ("pa", "pa "),
             ("db", "db "),
-            ("cb", "cb ")
+            ("cb", "cb "),
         ] {
             if let Some(value) = parse_percent(&report, needle) {
                 gpu[field] = json!(value);
@@ -231,24 +243,44 @@ async fn kill_process(
     Json(payload): Json<Value>,
 ) -> (StatusCode, Json<Value>) {
     let Some(pid) = payload.get("pid").and_then(Value::as_u64) else {
-        return (StatusCode::BAD_REQUEST, Json(json!({"success": false, "error": "A numeric PID is required"})));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"success": false, "error": "A numeric PID is required"})),
+        );
     };
     let Ok(pid) = u32::try_from(pid) else {
-        return (StatusCode::BAD_REQUEST, Json(json!({"success": false, "error": "PID is out of range"})));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"success": false, "error": "PID is out of range"})),
+        );
     };
 
     let mut system = match shared.lock() {
         Ok(system) => system,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "error": "system monitor lock is poisoned"}))),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"success": false, "error": "system monitor lock is poisoned"})),
+            );
+        }
     };
     system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[Pid::from_u32(pid)]), true);
     let Some(process) = system.process(Pid::from_u32(pid)) else {
-        return (StatusCode::NOT_FOUND, Json(json!({"success": false, "error": "Process not found"})));
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({"success": false, "error": "Process not found"})),
+        );
     };
 
     match process.kill() {
         true => (StatusCode::OK, Json(json!({"success": true, "error": null}))),
-        false => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "error": "The operating system refused to terminate the process"}))),
+        false => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "error": "The operating system refused to terminate the process"
+            })),
+        ),
     }
 }
 
@@ -264,7 +296,6 @@ fn parse_number_before(report: &str, needle: &str, suffix: &str) -> Option<f64> 
     let end = tail.find(suffix)?;
     tail[..end].split_whitespace().last()?.parse().ok()
 }
-
 
 #[cfg(test)]
 mod tests {
