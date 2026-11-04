@@ -1,0 +1,17 @@
+[package]
+name = "muliosctl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Initial native MuliOS system information command"
+
+[[bin]]
+name = "muliosctl"
+path = "src/main.rs"
+
+[dependencies]
+mulios-core = { path = "../../crates/mulios-core" }
+
+[lints]
+workspace = true
