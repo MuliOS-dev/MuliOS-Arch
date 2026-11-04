@@ -18,8 +18,8 @@ if [[ ! -f "$WORK_DIR/Cargo.toml" ]]; then
     exit 1
 fi
 
-echo "[INFO] Building MuliOS Rust workspace..."
-cargo build --manifest-path "$WORK_DIR/Cargo.toml" --workspace --release --target-dir "$TARGET_DIR"
+echo "[INFO] Building production MuliOS Rust utilities..."
+cargo build --manifest-path "$WORK_DIR/Cargo.toml" -p muliosctl --release --target-dir "$TARGET_DIR"
 
 if [[ ! -x "$BINARY" ]]; then
     echo "[ERROR] Expected Rust executable was not produced: $BINARY" >&2
@@ -27,7 +27,18 @@ if [[ ! -x "$BINARY" ]]; then
 fi
 
 install -D -m 0755 "$BINARY" "$PROFILE_ROOT/usr/local/bin/muliosctl"
-install -D -m 0755 "$TASKMANAGER_BINARY" "$PROFILE_ROOT/usr/local/libexec/mulios-taskmanager-native"
-echo "[OK] Staged muliosctl and the experimental native Task Manager backend."
+echo "[OK] Staged muliosctl in the Archiso live filesystem."
 "$PROFILE_ROOT/usr/local/bin/muliosctl" version
-"$PROFILE_ROOT/usr/local/libexec/mulios-taskmanager-native" --version
+
+# The new Task Manager backend is intentionally opt-in until it reaches full
+# feature parity with the current production Node.js backend.
+if [[ "${MULIOS_BUILD_EXPERIMENTAL_RUST_TASKMANAGER:-0}" == "1" ]]; then
+    echo "[INFO] Building experimental native Task Manager backend..."
+    cargo build --manifest-path "$WORK_DIR/Cargo.toml" -p mulios-taskmanager --release --target-dir "$TARGET_DIR"
+    if [[ ! -x "$TASKMANAGER_BINARY" ]]; then
+        echo "[ERROR] Expected Task Manager executable was not produced: $TASKMANAGER_BINARY" >&2
+        exit 1
+    fi
+    install -D -m 0755 "$TASKMANAGER_BINARY" "$PROFILE_ROOT/usr/local/libexec/mulios-taskmanager-native"
+    "$PROFILE_ROOT/usr/local/libexec/mulios-taskmanager-native" --version
+fi
