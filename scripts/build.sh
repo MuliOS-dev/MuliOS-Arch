@@ -30,7 +30,7 @@ install_dependencies() {
     if command -v pacman >/dev/null 2>&1; then
         sudo pacman -S --needed --noconfirm \
             archiso git base-devel squashfs-tools mtools dosfstools libisoburn curl \
-            cmake extra-cmake-modules qt6-tools vulkan-headers kwin nodejs npm
+            cmake extra-cmake-modules qt6-tools vulkan-headers kwin nodejs rust npm
     else
         echo "[ERROR]: not in an Arch Linux environment"
         exit 1
@@ -116,6 +116,9 @@ build() {
 
     bash "$WORK_DIR/scripts/install-rounded-theme.sh"
     bash "$WORK_DIR/scripts/build-kwin-effects.sh"
+
+    # Build and stage native MuliOS Rust applications into the live filesystem.
+    bash "$WORK_DIR/scripts/build-rust.sh"
 
     # Bundle Task Manager's JavaScript dependencies into the live filesystem.
     # The live image includes Node.js, but npm dependencies are not Arch packages.
