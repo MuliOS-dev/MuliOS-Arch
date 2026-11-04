@@ -31,9 +31,18 @@ fn print_help() {
 fn print_info() -> ExitCode {
     match mulios_core::os_release() {
         Ok(os) => {
-            println!("Operating system: {}", os.pretty_name.or(os.name).unwrap_or_else(|| "Unknown".into()));
-            println!("Distribution ID: {}", os.id.unwrap_or_else(|| "unknown".into()));
-            println!("Version: {}", os.version_id.unwrap_or_else(|| "unknown".into()));
+            println!(
+                "Operating system: {}",
+                os.pretty_name.or(os.name).unwrap_or_else(|| "Unknown".into())
+            );
+            println!(
+                "Distribution ID: {}",
+                os.id.unwrap_or_else(|| "unknown".into())
+            );
+            println!(
+                "Version: {}",
+                os.version_id.unwrap_or_else(|| "unknown".into())
+            );
         }
         Err(error) => {
             eprintln!("muliosctl: unable to read /etc/os-release: {error}");
@@ -73,9 +82,13 @@ fn format_duration(seconds: f64) -> String {
     let hours = (total % 86_400) / 3_600;
     let minutes = (total % 3_600) / 60;
     let secs = total % 60;
-    if days > 0 { format!("{days}d {hours}h {minutes}m") }
-    else if hours > 0 { format!("{hours}h {minutes}m {secs}s") }
-    else { format!("{minutes}m {secs}s") }
+    if days > 0 {
+        format!("{days}d {hours}h {minutes}m")
+    } else if hours > 0 {
+        format!("{hours}h {minutes}m {secs}s")
+    } else {
+        format!("{minutes}m {secs}s")
+    }
 }
 
 #[cfg(test)]
