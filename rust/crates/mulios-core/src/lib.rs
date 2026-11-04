@@ -109,7 +109,11 @@ mod tests {
     #[test]
     fn parses_quoted_os_release_values_and_ignores_comments() {
         let parsed = parse_os_release(
-            "# comment\\nNAME=Arch\\nPRETTY_NAME=\\\"MuliOS Arch 1.0\\\"\\nID='mulios'\\n",
+            r#"# comment
+NAME=Arch
+PRETTY_NAME="MuliOS Arch 1.0"
+ID='mulios'
+"#,
         );
         assert_eq!(parsed.get("NAME").map(String::as_str), Some("Arch"));
         assert_eq!(
@@ -122,8 +126,13 @@ mod tests {
 
     #[test]
     fn rejects_invalid_keys_and_lines_without_equals() {
-        let parsed =
-            parse_os_release("lower=value\\nNOT A KEY=value\\nBROKEN\\nGOOD=yes\\n");
+        let parsed = parse_os_release(
+            r#"lower=value
+NOT A KEY=value
+BROKEN
+GOOD=yes
+"#,
+        );
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed.get("GOOD").map(String::as_str), Some("yes"));
     }
