@@ -32,8 +32,8 @@ async fn main() -> ExitCode {
     };
 
     let system = Arc::new(Mutex::new(System::new_all()));
-    let app_dir = env::var("MULIOS_TASKMANAGER_DIR")
-        .unwrap_or_else(|_| "/opt/taskmanager".to_owned());
+    let app_dir =
+        env::var("MULIOS_TASKMANAGER_DIR").unwrap_or_else(|_| "/opt/taskmanager".to_owned());
 
     let app = Router::new()
         .route("/api/system", get(system_info))
@@ -41,7 +41,7 @@ async fn main() -> ExitCode {
         .route("/api/gpu", get(gpu_info))
         .route("/api/kill", post(kill_process))
         .with_state(system)
-        .fallback_service(ServeDir::new(app_dir).append_index_html_on_directories());
+        .fallback_service(ServeDir::new(app_dir).append_index_html_on_directories(true));
 
     let address = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = match tokio::net::TcpListener::bind(address).await {
@@ -70,14 +70,8 @@ async fn system_info(State(shared): State<SharedSystem>) -> Json<Value> {
     system.refresh_all();
 
     let cpus = system.cpus();
-    let cpu_brand = cpus
-        .first()
-        .map(|cpu| cpu.brand())
-        .unwrap_or("Unknown CPU");
-    let cpu_vendor = cpus
-        .first()
-        .map(|cpu| cpu.vendor_id())
-        .unwrap_or("Unknown");
+    let cpu_brand = cpus.first().map(|cpu| cpu.brand()).unwrap_or("Unknown CPU");
+    let cpu_vendor = cpus.first().map(|cpu| cpu.vendor_id()).unwrap_or("Unknown");
     let cpu_speed = cpus.first().map(|cpu| cpu.frequency()).unwrap_or(0);
     let cpu_count = cpus.len();
     let total_memory = system.total_memory();
@@ -264,7 +258,10 @@ async fn kill_process(
             );
         }
     };
-    system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[Pid::from_u32(pid)]), true);
+    system.refresh_processes(
+        sysinfo::ProcessesToUpdate::Some(&[Pid::from_u32(pid)]),
+        true,
+    );
     let Some(process) = system.process(Pid::from_u32(pid)) else {
         return (
             StatusCode::NOT_FOUND,
@@ -273,7 +270,10 @@ async fn kill_process(
     };
 
     match process.kill() {
-        true => (StatusCode::OK, Json(json!({"success": true, "error": null}))),
+        true => (
+            StatusCode::OK,
+            Json(json!({"success": true, "error": null})),
+        ),
         false => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({
