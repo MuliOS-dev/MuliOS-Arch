@@ -6,6 +6,7 @@ WORK_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 PROFILE_ROOT="$WORK_DIR/profile/airootfs"
 TARGET_DIR="$WORK_DIR/temp/rust-target"
 BINARY="$TARGET_DIR/release/muliosctl"
+TASKMANAGER_BINARY="$TARGET_DIR/release/mulios-taskmanager"
 
 if ! command -v cargo >/dev/null 2>&1; then
     echo "[ERROR] Cargo is required to build MuliOS Rust applications." >&2
@@ -26,5 +27,7 @@ if [[ ! -x "$BINARY" ]]; then
 fi
 
 install -D -m 0755 "$BINARY" "$PROFILE_ROOT/usr/local/bin/muliosctl"
-echo "[OK] Staged muliosctl in the Archiso live filesystem."
+install -D -m 0755 "$TASKMANAGER_BINARY" "$PROFILE_ROOT/usr/local/libexec/mulios-taskmanager-native"
+echo "[OK] Staged muliosctl and the experimental native Task Manager backend."
 "$PROFILE_ROOT/usr/local/bin/muliosctl" version
+"$PROFILE_ROOT/usr/local/libexec/mulios-taskmanager-native" --version
