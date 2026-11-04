@@ -56,7 +56,7 @@ pub fn parse_os_release(contents: &str) -> BTreeMap<String, String> {
             let value = if value.len() >= 2 {
                 let first = value.as_bytes()[0];
                 let last = value.as_bytes()[value.len() - 1];
-                if (first == b'"' && last == b'"') || (first == b'\\'' && last == b'\\'') {
+                if (first == b'"' && last == b'"') || (first == 39 && last == 39) {
                     &value[1..value.len() - 1]
                 } else {
                     value
