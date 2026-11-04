@@ -35,6 +35,27 @@ The first utility reads standard, read-only Linux interfaces:
 
 It does not require root and does not change system state.
 
+## Native Task Manager backend (experimental)
+
+A Rust backend now exists at `rust/apps/mulios-taskmanager`. It exposes the
+existing local API paths:
+
+- `GET /api/system`
+- `GET /api/processes`
+- `GET /api/gpu`
+- `POST /api/kill`
+
+It uses Axum and sysinfo, serves the existing Task Manager web assets, and
+binds only to loopback. The build stages it as
+`/usr/local/libexec/mulios-taskmanager-native`.
+
+This is an experimental migration target, not yet the default runtime. The
+current Python/Qt launcher and Node backend remain in place until the Rust
+backend reproduces the existing disk, network, memory-module, CPU, and GPU
+telemetry accurately and passes QEMU interaction tests. The initial backend
+currently reports empty disk/network/module collections and does not yet
+resolve GPU identity on all hardware.
+
 ## Migration order
 
 1. Establish the Rust workspace, shared interfaces, CI, and packaging conventions.
