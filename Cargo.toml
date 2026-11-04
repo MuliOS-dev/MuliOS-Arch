@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["rust/crates/mulios-core", "rust/apps/muliosctl"]
+members = ["rust/crates/mulios-core", "rust/apps/muliosctl", "rust/apps/mulios-taskmanager"]
 
 [workspace.package]
 version = "0.1.0"
