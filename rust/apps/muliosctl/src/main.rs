@@ -1,15 +1,32 @@
-use std::process::ExitCode;
+use std::env;
+use std::fs;
+use std::path::PathBuf;
+use std::process::{Command, ExitCode, Stdio};
+use std::thread;
+use std::time::Duration;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+const WALLPAPER: &str = "/usr/share/backgrounds/mulios/wallpaper.png";
 
 fn main() -> ExitCode {
-    let mut args = std::env::args().skip(1);
+    let mut args = env::args().skip(1);
     match args.next().as_deref() {
         Some("version") | Some("--version") | Some("-V") => {
             println!("muliosctl {VERSION}");
             ExitCode::SUCCESS
         }
         Some("info") => print_info(),
+        Some("wallpaper") => match args.next().as_deref() {
+            Some("apply") => apply_wallpaper(),
+            Some("autostart") => {
+                thread::sleep(Duration::from_secs(3));
+                apply_wallpaper()
+            }
+            _ => {
+                eprintln!("Usage: muliosctl wallpaper <apply|autostart>");
+                ExitCode::from(2)
+            }
+        },
         Some("help") | Some("--help") | Some("-h") | None => {
             print_help();
             ExitCode::SUCCESS
@@ -24,7 +41,7 @@ fn main() -> ExitCode {
 
 fn print_help() {
     println!(
-        "muliosctl {VERSION}\nNative MuliOS system utility\n\nUsage:\n  muliosctl <command>\n\nCommands:\n  info       Show operating system and memory information\n  version    Show application version\n  help       Show this help"
+        "muliosctl {VERSION}\nNative MuliOS system utility\n\nUsage:\n  muliosctl <command>\n\nCommands:\n  info                  Show operating system and memory information\n  wallpaper apply       Apply the MuliOS Plasma wallpaper\n  wallpaper autostart   Apply wallpaper after desktop startup\n  version               Show application version\n  help                  Show this help"
     );
 }
 
@@ -63,6 +80,86 @@ fn print_info() -> ExitCode {
         Err(error) => eprintln!("Uptime unavailable: {error}"),
     }
     ExitCode::SUCCESS
+}
+
+fn apply_wallpaper() -> ExitCode {
+    let wallpaper = PathBuf::from(WALLPAPER);
+    if !wallpaper.is_file() {
+        return ExitCode::SUCCESS;
+    }
+
+    let home = match env::var_os("HOME") {
+        Some(home) => PathBuf::from(home),
+        None => {
+            eprintln!("muliosctl: HOME is not set; cannot create wallpaper marker");
+            return ExitCode::FAILURE;
+        }
+    };
+    let marker = home.join(".config/.mulios-wallpaper-applied");
+    if let Some(parent) = marker.parent() {
+        if let Err(error) = fs::create_dir_all(parent) {
+            eprintln!("muliosctl: cannot create {}: {error}", parent.display());
+            return ExitCode::FAILURE;
+        }
+    }
+
+    if command_exists("plasma-apply-wallpaperimage") {
+        for _ in 0..20 {
+            let status = Command::new("plasma-apply-wallpaperimage")
+                .arg(&wallpaper)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+            if status.is_ok_and(|status| status.success()) {
+                return write_wallpaper_marker(&marker);
+            }
+            thread::sleep(Duration::from_secs(1));
+        }
+    }
+
+    let qdbus = ["qdbus6", "qdbus"]
+        .into_iter()
+        .find(|candidate| command_exists(candidate));
+    if let Some(qdbus) = qdbus {
+        let script = format!(
+            "var desktopsList = desktops();\nfor (var i = 0; i < desktopsList.length; ++i) {{\n    var desktop = desktopsList[i];\n    desktop.wallpaperPlugin = \"org.kde.image\";\n    desktop.currentConfigGroup = [\"Wallpaper\", \"org.kde.image\", \"General\"];\n    desktop.writeConfig(\"Image\", \"file://{}\");\n}}",
+            WALLPAPER
+        );
+        for _ in 0..10 {
+            let status = Command::new(qdbus)
+                .args([
+                    "org.kde.plasmashell",
+                    "/PlasmaShell",
+                    "org.kde.PlasmaShell.evaluateScript",
+                    &script,
+                ])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+            if status.is_ok_and(|status| status.success()) {
+                return write_wallpaper_marker(&marker);
+            }
+            thread::sleep(Duration::from_secs(1));
+        }
+    }
+
+    eprintln!("muliosctl: unable to apply wallpaper using Plasma's available interfaces");
+    ExitCode::FAILURE
+}
+
+fn command_exists(command: &str) -> bool {
+    env::split_paths(&env::var_os("PATH").unwrap_or_default())
+        .any(|directory| directory.join(command).is_file())
+}
+
+fn write_wallpaper_marker(marker: &std::path::Path) -> ExitCode {
+    match fs::write(marker, b"applied\n") {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("muliosctl: wallpaper applied, but marker could not be written: {error}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 fn format_bytes(bytes: u64) -> String {
