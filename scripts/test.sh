@@ -702,6 +702,46 @@ else
     echo "[OK] Installer invokes canonical MUpdate with the profile subcommand"
 fi
 
+KERNEL_WORKER="$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"
+if ! grep -Fq 'Gaming profile selected; deferring kernel installation' "$KERNEL_WORKER" ||
+   ! grep -Fq 'linux-mulios-game' "$KERNEL_WORKER" ||
+   ! grep -Fq 'def verify_selected_kernel' "$KERNEL_WORKER" ||
+   ! grep -Fq 'self.verify_selected_kernel()' "$KERNEL_WORKER"; then
+    echo "[FAIL] Gaming installs must use and verify the profile kernel instead of the live generic kernel"
+    fail=1
+else
+    echo "[OK] Gaming installs defer to and verify the profile-specific kernel"
+fi
+
+if ! python - "$KERNEL_WORKER" <<'PY'
+import ast
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+source = path.read_text(encoding="utf-8")
+tree = ast.parse(source)
+run = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "run")
+calls = []
+for node in ast.walk(run):
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+        if isinstance(node.func.value, ast.Name) and node.func.value.id == "self":
+            calls.append((node.func.attr, node.lineno))
+positions = {name: next((line for call, line in calls if call == name), None)
+             for name in ("configure_mupdate", "generate_initramfs", "configure_bootloader")}
+if any(value is None for value in positions.values()) or not (
+    positions["configure_mupdate"] < positions["generate_initramfs"] < positions["configure_bootloader"]
+):
+    raise SystemExit(f"Profile kernel/initramfs/GRUB order is invalid: {positions}")
+print("Profile installation precedes initramfs generation and GRUB generation.")
+PY
+then
+    echo "[FAIL] Profile kernel must be installed before initramfs and GRUB generation"
+    fail=1
+else
+    echo "[OK] Profile kernel is installed before initramfs and GRUB generation"
+fi
+
 if ! grep -Fq 'optional sh/packages.sh' "$PROFILE/airootfs/usr/local/bin/mupdate" ||
    ! grep -Fq 'No bundled Arch package files were found' "$PROFILE/airootfs/usr/local/bin/mupdate" ||
    ! grep -Fq 'continuing profile installation' "$PROFILE/airootfs/usr/local/bin/mupdate"; then
