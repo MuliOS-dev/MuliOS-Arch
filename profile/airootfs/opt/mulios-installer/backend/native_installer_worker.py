@@ -2958,33 +2958,15 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             )
             return
 
-        candidates = [
-            # Prefer the current profile-aware MUpdate installed in the live ISO.
-            Path(
+        # Always use the canonical MUpdate shipped in the live system.
+        # Do not fall back to the installer's legacy private copy.
+        source = Path("/usr/local/bin/mupdate")
+
+        if not source.is_file():
+            raise InstallError(
+                "The canonical MUpdate executable is missing: "
                 "/usr/local/bin/mupdate"
-            ),
-            Path(
-                "/opt/mupdate"
-            ),
-            Path(
-                "/opt/mulios-installer/mupdate"
-            ),
-            Path(__file__).resolve().parent.parent /
-            "mupdate",
-        ]
-
-        source = None
-
-        for candidate in candidates:
-            if candidate.exists():
-                source = candidate
-                break
-
-        if source is None:
-            self.log(
-                "Bundled MUpdate executable was not found."
             )
-            return
 
         destination = (
             self.target /
@@ -3054,12 +3036,13 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
                 )
 
             self.log(
-                f"Installing the {profile} profile directly through MUpdate."
+                f"Running: sudo mupdate profile {profile} "
+                "(arch-chroot executes as root, so sudo is not used inside chroot)."
             )
             self.chroot(
                 ["/usr/local/bin/mupdate", "profile", profile],
             )
-            self.log(f"MUpdate installed the {profile} profile.")
+            self.log(f"MUpdate completed the {profile} profile workflow.")
         except Exception as exc:
             self.log(f"Profile installation failed: {type(exc).__name__}: {exc}")
             raise InstallError(
