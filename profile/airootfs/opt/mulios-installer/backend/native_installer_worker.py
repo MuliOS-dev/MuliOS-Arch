@@ -2473,6 +2473,15 @@ class InstallWorker(QThread):
         # in offline installs that package is skipped, leaving an initramfs
         # without its matching kernel. Install the bundled MuliOS kernel
         # directly from the live ISO instead.
+        profile = str(self.state.get("profile", "generic")).strip().lower()
+        if profile == "gaming":
+            self.log(
+                "Gaming profile selected; deferring kernel installation to "
+                "MUpdate instead of copying the live ISO generic kernel."
+            )
+            self.kernel_package = "linux-mulios-game"
+            return
+
         kernel = str(
             self.state.get(
                 "kernel",
@@ -2672,9 +2681,17 @@ class InstallWorker(QThread):
         )
 
         preset = self.target / "etc/mkinitcpio.d/linux-mulios-generic.preset"
-        self.write_file(
-            preset,
-            """# mkinitcpio preset file for linux-mulios-generic
+        if str(self.state.get("profile", "generic")).strip().lower() == "gaming":
+            if preset.exists() or preset.is_symlink():
+                preset.unlink()
+            self.log(
+                "Gaming profile selected; removed the live ISO generic mkinitcpio "
+                "preset so it cannot become the installed boot target."
+            )
+        else:
+            self.write_file(
+                preset,
+                """# mkinitcpio preset file for linux-mulios-generic
 
 ALL_config="/etc/mkinitcpio.conf"
 ALL_kver="/usr/lib/modules/7.2.3-mulios-generic/vmlinuz"
@@ -2683,7 +2700,7 @@ PRESETS=('default')
 
 default_image="/boot/initramfs-linux-mulios-generic.img"
 """,
-        )
+            )
 
         self.log(
             "Replaced ArchISO mkinitcpio configuration with the installed MuliOS configuration."
@@ -3615,8 +3632,47 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
 
         self.log("GRUB fallback loader and configuration verified.")
 
+    def verify_selected_kernel(self):
+        profile = str(self.state.get("profile", "generic")).strip().lower()
+        if profile == "gaming":
+            kernel = self.target / "boot/vmlinuz-linux-mulios-game"
+            initramfs = self.target / "boot/initramfs-linux-mulios-game.img"
+            modules_root = self.target / "usr/lib/modules"
+            game_modules = (
+                [path for path in modules_root.glob("*-mulios-game") if path.is_dir()]
+                if modules_root.is_dir()
+                else []
+            )
+            if not game_modules:
+                raise InstallError(
+                    "Gaming profile completed without installing a "
+                    "linux-mulios-game module directory."
+                )
+            if not kernel.is_file() or kernel.stat().st_size == 0:
+                raise InstallError(
+                    "Gaming profile did not install /boot/vmlinuz-linux-mulios-game."
+                )
+            if not initramfs.is_file() or initramfs.stat().st_size == 0:
+                raise InstallError(
+                    "Gaming profile did not generate "
+                    "/boot/initramfs-linux-mulios-game.img."
+                )
+            self.log(
+                "Verified gaming kernel, module directory, and initramfs; "
+                "GRUB will be generated from the selected profile kernel."
+            )
+        else:
+            kernel = self.target / "boot/vmlinuz-linux-mulios-generic"
+            initramfs = self.target / "boot/initramfs-linux-mulios-generic.img"
+            if not kernel.is_file() or kernel.stat().st_size == 0:
+                raise InstallError("The selected installation has no generic MuliOS kernel.")
+            if not initramfs.is_file() or initramfs.stat().st_size == 0:
+                raise InstallError("The generic MuliOS initramfs was not generated.")
+            self.log("Verified generic MuliOS kernel and initramfs.")
+
     def configure_bootloader(self):
         self.log("Bootloader is fixed to GRUB.")
+        self.verify_selected_kernel()
         self.configure_grub()
         self.progress.emit(90)
 
@@ -3966,12 +4022,14 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
             self.configure_swap()
             self.progress.emit(86)
 
-            self.configure_bootloader()
-
             self.enable_services()
             self.progress.emit(93)
 
+            # Generate initramfs for the profile-installed kernel before
+            # creating GRUB entries. GRUB must never be generated against a
+            # stale or incomplete kernel installation.
             self.generate_initramfs()
+            self.configure_bootloader()
 
             self.finalize()
             self.progress.emit(99)
