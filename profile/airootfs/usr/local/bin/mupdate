@@ -646,24 +646,29 @@ validate_profile_archive() {
     [[ -f "$extract_dir/sh/install.sh" ]] ||
         die "Profile archive is missing sh/install.sh"
 
-    [[ -f "$extract_dir/sh/packages.sh" ]] ||
-        die "Profile archive is missing sh/packages.sh"
-
-    chmod +x "$extract_dir/sh/install.sh" "$extract_dir/sh/packages.sh"
+    chmod +x "$extract_dir/sh/install.sh"
 
     bash -n "$extract_dir/sh/install.sh" ||
         die "Profile sh/install.sh failed shell syntax validation."
 
-    bash -n "$extract_dir/sh/packages.sh" ||
-        die "Profile sh/packages.sh failed shell syntax validation."
+    if [[ -f "$extract_dir/sh/packages.sh" ]]; then
+        chmod +x "$extract_dir/sh/packages.sh"
+        bash -n "$extract_dir/sh/packages.sh" ||
+            warn "Optional profile sh/packages.sh has a syntax error; it will be skipped."
+    else
+        warn "Profile archive has no optional sh/packages.sh; continuing."
+    fi
 
     local package_count
     package_count="$(find "$extract_dir" -maxdepth 1 -type f \
         \( -name '*.pkg.tar.zst' -o -name '*.pkg.tar.xz' -o -name '*.pkg.tar.gz' \) |
         wc -l)"
 
-    [[ "$package_count" -gt 0 ]] ||
-        die "Profile archive contains no Arch package files."
+    # Local package archives are optional. The profile's install.sh remains
+    # mandatory because it installs the selected kernel/profile foundation.
+    if [[ "$package_count" -eq 0 ]]; then
+        warn "No bundled Arch package files were found; continuing because profile packages are optional."
+    fi
 
     info "Profile archive is valid."
     echo "    install script : sh/install.sh"
@@ -759,9 +764,16 @@ cmd_profile() {
     info "Running sh/install.sh first..."
     ( cd "$extract_dir" && ./sh/install.sh ) || die "Profile kernel/image installation failed."
     ok "sh/install.sh completed."
-    info "Running sh/packages.sh second..."
-    ( cd "$extract_dir" && ./sh/packages.sh ) || die "Profile package installation failed."
-    ok "sh/packages.sh completed."
+    if [[ -f "$extract_dir/sh/packages.sh" ]]; then
+        info "Running optional sh/packages.sh second..."
+        if ( cd "$extract_dir" && ./sh/packages.sh ); then
+            ok "sh/packages.sh completed."
+        else
+            warn "sh/packages.sh reported missing or failed optional packages; continuing profile installation."
+        fi
+    else
+        warn "Optional sh/packages.sh is missing; continuing without optional packages."
+    fi
 
     mkdir -p "$STATE_DIR/profiles"
     printf '%s\n' "$profile" > "$STATE_DIR/profiles/active"
