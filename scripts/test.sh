@@ -693,6 +693,24 @@ else
     echo "[OK] Installer installs the kernel image before copying the live airootfs"
 fi
 
+if ! grep -Fq 'source = Path("/usr/local/bin/mupdate")' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py" ||
+   grep -Fq 'Path("/opt/mulios-installer/mupdate")' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py" ||
+   ! grep -Fq '["/usr/local/bin/mupdate", "profile", profile]' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"; then
+    echo "[FAIL] Installer must invoke the canonical /usr/local/bin/mupdate profile command"
+    fail=1
+else
+    echo "[OK] Installer invokes canonical MUpdate with the profile subcommand"
+fi
+
+if ! grep -Fq 'optional sh/packages.sh' "$PROFILE/airootfs/usr/local/bin/mupdate" ||
+   ! grep -Fq 'No bundled Arch package files were found' "$PROFILE/airootfs/usr/local/bin/mupdate" ||
+   ! grep -Fq 'continuing profile installation' "$PROFILE/airootfs/usr/local/bin/mupdate"; then
+    echo "[FAIL] MUpdate must treat profile package archives and package-script failures as optional"
+    fail=1
+else
+    echo "[OK] MUpdate continues when optional profile packages are missing or fail"
+fi
+
 if [[ "$fail" -ne 0 ]]; then
     echo "Static checks failed."
     exit 1
