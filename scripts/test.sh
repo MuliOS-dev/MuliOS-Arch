@@ -703,14 +703,20 @@ else
 fi
 
 KERNEL_WORKER="$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"
-if ! grep -Fq 'Gaming profile selected; deferring kernel installation' "$KERNEL_WORKER" ||
-   ! grep -Fq 'linux-mulios-game' "$KERNEL_WORKER" ||
+for profile_kernel in generic game ai code privacy server study; do
+    if ! grep -Fq "\"$profile_kernel\"" "$KERNEL_WORKER"; then
+        echo "[FAIL] Installer kernel mapping is missing: $profile_kernel"
+        fail=1
+    fi
+done
+if ! grep -Fq 'profile != "generic"' "$KERNEL_WORKER" ||
    ! grep -Fq 'def verify_selected_kernel' "$KERNEL_WORKER" ||
-   ! grep -Fq 'self.verify_selected_kernel()' "$KERNEL_WORKER"; then
-    echo "[FAIL] Gaming installs must use and verify the profile kernel instead of the live generic kernel"
+   ! grep -Fq 'self.verify_selected_kernel()' "$KERNEL_WORKER" ||
+   ! grep -Fq 'self.kernel_package = f"linux-mulios-{kernel_suffix}"' "$KERNEL_WORKER"; then
+    echo "[FAIL] Every non-generic profile must install and verify its own MuliOS kernel"
     fail=1
 else
-    echo "[OK] Gaming installs defer to and verify the profile-specific kernel"
+    echo "[OK] All profiles map to and verify their selected MuliOS kernel"
 fi
 
 if ! python - "$KERNEL_WORKER" <<'PY'
