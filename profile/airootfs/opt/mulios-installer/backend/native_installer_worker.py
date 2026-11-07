@@ -2474,12 +2474,26 @@ class InstallWorker(QThread):
         # without its matching kernel. Install the bundled MuliOS kernel
         # directly from the live ISO instead.
         profile = str(self.state.get("profile", "generic")).strip().lower()
-        if profile == "gaming":
+        kernel_suffixes = {
+            "generic": "generic",
+            "gaming": "game",
+            "ai": "ai",
+            "code": "code",
+            "privacy": "privacy",
+            "server": "server",
+            "study": "study",
+        }
+        kernel_suffix = kernel_suffixes.get(profile)
+        if kernel_suffix is None:
+            raise InstallError(f"Unsupported installation profile: {profile}")
+
+        self.kernel_package = f"linux-mulios-{kernel_suffix}"
+        if profile != "generic":
             self.log(
-                "Gaming profile selected; deferring kernel installation to "
-                "MUpdate instead of copying the live ISO generic kernel."
+                f"{profile.capitalize()} profile selected; deferring kernel "
+                f"installation to MUpdate ({self.kernel_package}) instead of "
+                "copying the live ISO generic kernel."
             )
-            self.kernel_package = "linux-mulios-game"
             return
 
         kernel = str(
@@ -2630,14 +2644,31 @@ class InstallWorker(QThread):
             packages.append("cryptsetup")
         self.pacman_install(packages)
 
-        self.log(
-            "Bundled MuliOS kernel installed successfully."
-        )
+        profile = str(self.state.get("profile", "generic")).strip().lower()
+        if profile == "generic":
+            self.log("Bundled generic MuliOS kernel installed successfully.")
+        else:
+            self.log(
+                f"{profile.capitalize()} kernel will be supplied by its MUpdate profile."
+            )
 
     def kernel_paths(self):
+        profile = str(self.state.get("profile", "generic")).strip().lower()
+        suffix = {
+            "generic": "generic",
+            "gaming": "game",
+            "ai": "ai",
+            "code": "code",
+            "privacy": "privacy",
+            "server": "server",
+            "study": "study",
+        }.get(profile)
+        if suffix is None:
+            raise InstallError(f"Unsupported installation profile: {profile}")
+        kernel = f"linux-mulios-{suffix}"
         return (
-            "vmlinuz-linux-mulios-generic",
-            "initramfs-linux-mulios-generic.img",
+            f"vmlinuz-{kernel}",
+            f"initramfs-{kernel}.img",
         )
 
     def configure_installed_mkinitcpio(self):
@@ -2681,12 +2712,13 @@ class InstallWorker(QThread):
         )
 
         preset = self.target / "etc/mkinitcpio.d/linux-mulios-generic.preset"
-        if str(self.state.get("profile", "generic")).strip().lower() == "gaming":
+        profile = str(self.state.get("profile", "generic")).strip().lower()
+        if profile != "generic":
             if preset.exists() or preset.is_symlink():
                 preset.unlink()
             self.log(
-                "Gaming profile selected; removed the live ISO generic mkinitcpio "
-                "preset so it cannot become the installed boot target."
+                f"{profile.capitalize()} profile selected; removed the live ISO "
+                "generic mkinitcpio preset so it cannot become the installed boot target."
             )
         else:
             self.write_file(
@@ -3634,41 +3666,39 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
 
     def verify_selected_kernel(self):
         profile = str(self.state.get("profile", "generic")).strip().lower()
-        if profile == "gaming":
-            kernel = self.target / "boot/vmlinuz-linux-mulios-game"
-            initramfs = self.target / "boot/initramfs-linux-mulios-game.img"
+        kernel_name, initramfs_name = self.kernel_paths()
+        kernel = self.target / "boot" / kernel_name
+        initramfs = self.target / "boot" / initramfs_name
+
+        if not kernel.is_file() or kernel.stat().st_size == 0:
+            raise InstallError(
+                f"{profile.capitalize()} profile did not install "
+                f"/boot/{kernel_name}."
+            )
+        if not initramfs.is_file() or initramfs.stat().st_size == 0:
+            raise InstallError(
+                f"{profile.capitalize()} profile did not generate "
+                f"/boot/{initramfs_name}."
+            )
+
+        if profile != "generic":
+            suffix = self.kernel_package.removeprefix("linux-mulios-")
             modules_root = self.target / "usr/lib/modules"
-            game_modules = (
-                [path for path in modules_root.glob("*-mulios-game") if path.is_dir()]
+            module_dirs = (
+                [path for path in modules_root.glob(f"*-mulios-{suffix}") if path.is_dir()]
                 if modules_root.is_dir()
                 else []
             )
-            if not game_modules:
+            if not module_dirs:
                 raise InstallError(
-                    "Gaming profile completed without installing a "
-                    "linux-mulios-game module directory."
+                    f"{profile.capitalize()} profile completed without installing "
+                    f"the {self.kernel_package} module directory."
                 )
-            if not kernel.is_file() or kernel.stat().st_size == 0:
-                raise InstallError(
-                    "Gaming profile did not install /boot/vmlinuz-linux-mulios-game."
-                )
-            if not initramfs.is_file() or initramfs.stat().st_size == 0:
-                raise InstallError(
-                    "Gaming profile did not generate "
-                    "/boot/initramfs-linux-mulios-game.img."
-                )
-            self.log(
-                "Verified gaming kernel, module directory, and initramfs; "
-                "GRUB will be generated from the selected profile kernel."
-            )
-        else:
-            kernel = self.target / "boot/vmlinuz-linux-mulios-generic"
-            initramfs = self.target / "boot/initramfs-linux-mulios-generic.img"
-            if not kernel.is_file() or kernel.stat().st_size == 0:
-                raise InstallError("The selected installation has no generic MuliOS kernel.")
-            if not initramfs.is_file() or initramfs.stat().st_size == 0:
-                raise InstallError("The generic MuliOS initramfs was not generated.")
-            self.log("Verified generic MuliOS kernel and initramfs.")
+
+        self.log(
+            f"Verified {profile} profile kernel, module directory (where applicable), "
+            "and initramfs. GRUB will be generated only after this verification."
+        )
 
     def configure_bootloader(self):
         self.log("Bootloader is fixed to GRUB.")
