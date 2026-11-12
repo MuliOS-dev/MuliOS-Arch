@@ -121,3 +121,14 @@ To remove generated build artifacts:
 ```bash
 bash scripts/test.sh --clean
 ```
+
+
+## Building the Glow Material variant
+
+To build a test ISO that uses the MuliOS Glow Material Aurorae window decoration instead of the legacy ROUNDED-DARK decoration, run:
+
+```bash
+./scripts/glowbuild.sh
+```
+
+The script uses the same dependency installation, version prompt, KWin effects build, Task Manager dependency bundling, validation, and ArchISO process as `build.sh`. It pins Glow Material to a reviewed commit and selects Breeze for the Plasma shell and SDDM login screen. The regular `build.sh` path remains available for comparison.
