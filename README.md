@@ -28,7 +28,7 @@ The project includes:
 * MuliOS Welcome and changelog
 * Built-in system tools
 * Custom Fastfetch integration
-* Custom SDDM login experience
+* KDE Breeze SDDM login screen
 * Profile infrastructure
 * Custom kernel and system configuration
 * Customized boot and UEFI configuration
@@ -107,7 +107,7 @@ Build the ISO:
 ./scripts/build.sh
 ```
 
-The generated ISO will be placed in:
+For a test ISO using the Glow Material window decoration, run `./scripts/glowbuild.sh` instead.\n\nThe generated ISO will be placed in:
 
 ```text
 output/
@@ -209,7 +209,7 @@ Displays project contributors and MuliOS project information.
 
 ### Desktop Integration
 
-MuliOS includes customized KDE Plasma configuration, themes, wallpapers, Fastfetch integration, SDDM configuration, and other desktop components.
+MuliOS includes KDE Plasma configuration, the Glow Material window decoration, Breeze shell styling and SDDM login screen, wallpapers, Fastfetch integration, and other desktop components.
 
 ---
 
