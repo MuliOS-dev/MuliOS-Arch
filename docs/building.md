@@ -54,10 +54,10 @@ This script performs any setup required before a build, such as verifying depend
 ### 2. Run the build
 
 ```bash
-bash ./scripts/build.sh
+bash ./scripts/glowbuild.sh
 ```
 
-This script wraps `mkarchiso`, pointing it at the `profile/` directory, and produces a bootable ISO image using the MuliOS-Arch ArchISO profile.
+This script selects Glow Material, then delegates to the same build pipeline used by `build.sh`: it wraps `mkarchiso`, points it at the `profile/` directory, and produces a bootable ISO image using the MuliOS-Arch ArchISO profile. The legacy `build.sh` entry point remains available for the ROUNDED-DARK comparison variant.
 
 A typical build performs the following steps internally:
 
