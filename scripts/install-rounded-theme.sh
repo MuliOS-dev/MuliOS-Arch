@@ -36,4 +36,34 @@ cp -a     "$THEME_ROOT/aurorae/themes/ROUNDED-DARK"     profile/airootfs/usr/sha
 
 install -m 0644     "$THEME_ROOT/plasma/desktoptheme/ROUNDED-DARK/colors"     profile/airootfs/usr/share/color-schemes/ROUNDEDDARK.colors
 
+AIROOTFS="profile/airootfs"
+install -d "$AIROOTFS/etc/mulios" "$AIROOTFS/etc/xdg" "$AIROOTFS/etc/skel/.config"
+cat > "$AIROOTFS/etc/xdg/kdeglobals" <<'EOF'
+[General]
+ColorScheme=ROUNDEDDARK
+Name=ROUNDED DARK
+
+[KDE]
+widgetStyle=Breeze
+
+[Icons]
+Theme=breeze-dark
+EOF
+cp "$AIROOTFS/etc/xdg/kdeglobals" "$AIROOTFS/etc/skel/.config/kdeglobals"
+cat > "$AIROOTFS/etc/xdg/plasmarc" <<'EOF'
+[Theme]
+name=ROUNDED-DARK
+EOF
+cp "$AIROOTFS/etc/xdg/plasmarc" "$AIROOTFS/etc/skel/.config/plasmarc"
+cat > "$AIROOTFS/etc/xdg/kwinrc" <<'EOF'
+[org.kde.kdecoration2]
+library=org.kde.kwin.aurorae
+theme=__aurorae__svg__ROUNDED-DARK
+
+[Compositing]
+AnimationSpeed=1
+EOF
+cp "$AIROOTFS/etc/xdg/kwinrc" "$AIROOTFS/etc/skel/.config/kwinrc"
+printf 'rounded\n' > "$AIROOTFS/etc/mulios/theme-variant"
+
 echo "[INFO]: ROUNDED KDE theme installed"
