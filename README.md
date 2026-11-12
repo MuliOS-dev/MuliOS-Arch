@@ -70,6 +70,7 @@ MuliOS-Arch/
 │
 ├── scripts/
 │   ├── build.sh
+│   ├── glowbuild.sh
 │   ├── prepare.sh
 │   └── test.sh
 │
@@ -101,11 +102,13 @@ git clone https://github.com/MuliOS-dev/MuliOS-Arch.git
 cd MuliOS-Arch
 ```
 
-Build the ISO:
+Build the default Glow Material ISO:
 
 ```bash
-./scripts/build.sh
+./scripts/glowbuild.sh
 ```
+
+The legacy `./scripts/build.sh` entry point remains available to build the ROUNDED-DARK comparison variant.
 
 For a test ISO using the Glow Material window decoration, run `./scripts/glowbuild.sh` instead.\n\nThe generated ISO will be placed in:
 
