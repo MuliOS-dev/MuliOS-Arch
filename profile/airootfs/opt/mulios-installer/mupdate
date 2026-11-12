@@ -785,6 +785,25 @@ cmd_profile() {
 }
 
 sync_glow_material() {
+    # Migrate only the previous MuliOS ROUNDED-DARK defaults. Leave any other
+    # user-selected window decoration and color scheme untouched.
+    local config_dir
+    for config_dir in /home/*/.config; do
+        [[ -d "$config_dir" ]] || continue
+        if [[ -f "$config_dir/kwinrc" ]] &&
+           grep -Fq 'theme=__aurorae__svg__ROUNDED-DARK' "$config_dir/kwinrc"; then
+            sed -i 's|^theme=__aurorae__svg__ROUNDED-DARK$|theme=__aurorae__svg__glow-material|' "$config_dir/kwinrc"
+        fi
+        if [[ -f "$config_dir/kdeglobals" ]] &&
+           grep -Fq 'ColorScheme=ROUNDEDDARK' "$config_dir/kdeglobals"; then
+            sed -i 's/^ColorScheme=ROUNDEDDARK$/ColorScheme=BreezeDark/; s/^Name=ROUNDED DARK$/Name=Breeze Dark/' "$config_dir/kdeglobals"
+        fi
+        if [[ -f "$config_dir/plasmarc" ]] &&
+           grep -Fq 'name=ROUNDED-DARK' "$config_dir/plasmarc"; then
+            sed -i 's/^name=ROUNDED-DARK$/name=default/' "$config_dir/plasmarc"
+        fi
+    done
+
     local installer_script="$WORKDIR/install-glow-material.sh"
     local commit
     if ! curl -fsSL --retry 3 --retry-all-errors -o "$installer_script" "$(raw_url scripts/install-glow-material.sh)"; then
