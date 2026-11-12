@@ -262,7 +262,7 @@ fi
 
 if ! grep -q 'BreezeDark' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py" ||
    ! grep -q 'org.kde.breeze' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"; then
-    echo "[FAIL] Custom blur effects do not replace ROUNDED-DARK with the Breeze appearance preset"
+    echo "[FAIL] Custom blur effects do not select the Breeze appearance preset"
     fail=1
 else
     echo "[OK] Custom blur effects select a Breeze appearance preset"
@@ -470,7 +470,7 @@ fi
 
 if ! grep -q 'BreezeDark' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py" ||
    ! grep -q 'org.kde.breeze' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"; then
-    echo "[FAIL] Custom blur effects do not replace ROUNDED-DARK with the Breeze appearance preset"
+    echo "[FAIL] Custom blur effects do not select the Breeze appearance preset"
     fail=1
 else
     echo "[OK] Custom blur effects select a Breeze appearance preset"
