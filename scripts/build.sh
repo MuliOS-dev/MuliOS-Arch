@@ -42,6 +42,7 @@ install_dependencies
 setup() {
     export WORK_DIR="$(pwd)"
     export PROFILE="$WORK_DIR/profile"
+    export MULIOS_THEME_VARIANT="${MULIOS_THEME_VARIANT:-rounded}"
     export OUTPUT="$WORK_DIR/output"
     export TEMP="$WORK_DIR/temp"
 
@@ -114,7 +115,12 @@ build() {
         exit 1
     fi
 
-    bash "$WORK_DIR/scripts/install-rounded-theme.sh"
+    local theme_builder="${MULIOS_THEME_BUILDER:-$WORK_DIR/scripts/install-rounded-theme.sh}"
+    if [[ ! -f "$theme_builder" ]]; then
+        echo "[ERROR]: theme installer not found: $theme_builder" >&2
+        exit 1
+    fi
+    bash "$theme_builder"
     bash "$WORK_DIR/scripts/build-kwin-effects.sh"
 
     # Bundle Task Manager's JavaScript dependencies into the live filesystem.
