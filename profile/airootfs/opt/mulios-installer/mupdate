@@ -785,24 +785,25 @@ cmd_profile() {
 }
 
 sync_glow_material() {
-    # Migrate only the previous MuliOS ROUNDED-DARK defaults. Leave any other
-    # user-selected window decoration and color scheme untouched.
-    local config_dir
-    for config_dir in /home/*/.config; do
-        [[ -d "$config_dir" ]] || continue
-        if [[ -f "$config_dir/kwinrc" ]] &&
-           grep -Fq 'theme=__aurorae__svg__ROUNDED-DARK' "$config_dir/kwinrc"; then
-            sed -i 's|^theme=__aurorae__svg__ROUNDED-DARK$|theme=__aurorae__svg__glow-material|' "$config_dir/kwinrc"
-        fi
-        if [[ -f "$config_dir/kdeglobals" ]] &&
-           grep -Fq 'ColorScheme=ROUNDEDDARK' "$config_dir/kdeglobals"; then
-            sed -i 's/^ColorScheme=ROUNDEDDARK$/ColorScheme=BreezeDark/; s/^Name=ROUNDED DARK$/Name=Breeze Dark/' "$config_dir/kdeglobals"
-        fi
-        if [[ -f "$config_dir/plasmarc" ]] &&
-           grep -Fq 'name=ROUNDED-DARK' "$config_dir/plasmarc"; then
-            sed -i 's/^name=ROUNDED-DARK$/name=default/' "$config_dir/plasmarc"
-        fi
-    done
+    migrate_rounded_user_configs() {
+        # Change only the previous MuliOS defaults; preserve unrelated user choices.
+        local config_dir
+        for config_dir in /home/*/.config; do
+            [[ -d "$config_dir" ]] || continue
+            if [[ -f "$config_dir/kwinrc" ]] &&
+               grep -Fq 'theme=__aurorae__svg__ROUNDED-DARK' "$config_dir/kwinrc"; then
+                sed -i 's|^theme=__aurorae__svg__ROUNDED-DARK$|theme=__aurorae__svg__glow-material|' "$config_dir/kwinrc"
+            fi
+            if [[ -f "$config_dir/kdeglobals" ]] &&
+               grep -Fq 'ColorScheme=ROUNDEDDARK' "$config_dir/kdeglobals"; then
+                sed -i 's/^ColorScheme=ROUNDEDDARK$/ColorScheme=BreezeDark/; s/^Name=ROUNDED DARK$/Name=Breeze Dark/' "$config_dir/kdeglobals"
+            fi
+            if [[ -f "$config_dir/plasmarc" ]] &&
+               grep -Fq 'name=ROUNDED-DARK' "$config_dir/plasmarc"; then
+                sed -i 's/^name=ROUNDED-DARK$/name=default/' "$config_dir/plasmarc"
+            fi
+        done
+    }
 
     local installer_script="$WORKDIR/install-glow-material.sh"
     local commit
@@ -822,6 +823,7 @@ sync_glow_material() {
           -f /usr/share/aurorae/themes/glow-material/metadata.desktop &&
           -f /usr/share/aurorae/themes/glow-material/glow-materialrc &&
           -f /usr/share/aurorae/themes/glow-material/decoration.svg ]]; then
+        migrate_rounded_user_configs
         info "Glow Material already matches pinned commit $commit."
         return 0
     fi
@@ -855,6 +857,7 @@ sync_glow_material() {
     install -d /usr/share/aurorae/themes /etc/mulios
     rm -rf /usr/share/aurorae/themes/glow-material
     cp -a "$root/aurorae/glow-material" /usr/share/aurorae/themes/
+    migrate_rounded_user_configs
     rm -rf \
         /usr/share/plasma/desktoptheme/ROUNDED-DARK \
         /usr/share/plasma/look-and-feel/com.github.varlesh.rounded-dark \
