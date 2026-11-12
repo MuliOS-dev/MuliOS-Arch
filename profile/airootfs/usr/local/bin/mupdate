@@ -792,15 +792,24 @@ sync_glow_material() {
             [[ -d "$config_dir" ]] || continue
             if [[ -f "$config_dir/kwinrc" ]] &&
                grep -Fq 'theme=__aurorae__svg__ROUNDED-DARK' "$config_dir/kwinrc"; then
+                local owner
+                owner="$(stat -c '%u:%g' "$config_dir/kwinrc")"
                 sed -i 's|^theme=__aurorae__svg__ROUNDED-DARK$|theme=__aurorae__svg__glow-material|' "$config_dir/kwinrc"
+                chown "$owner" "$config_dir/kwinrc"
             fi
             if [[ -f "$config_dir/kdeglobals" ]] &&
                grep -Fq 'ColorScheme=ROUNDEDDARK' "$config_dir/kdeglobals"; then
+                local owner
+                owner="$(stat -c '%u:%g' "$config_dir/kdeglobals")"
                 sed -i 's/^ColorScheme=ROUNDEDDARK$/ColorScheme=BreezeDark/; s/^Name=ROUNDED DARK$/Name=Breeze Dark/' "$config_dir/kdeglobals"
+                chown "$owner" "$config_dir/kdeglobals"
             fi
             if [[ -f "$config_dir/plasmarc" ]] &&
                grep -Fq 'name=ROUNDED-DARK' "$config_dir/plasmarc"; then
+                local owner
+                owner="$(stat -c '%u:%g' "$config_dir/plasmarc")"
                 sed -i 's/^name=ROUNDED-DARK$/name=default/' "$config_dir/plasmarc"
+                chown "$owner" "$config_dir/plasmarc"
             fi
         done
     }
