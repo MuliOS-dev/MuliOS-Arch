@@ -1,6 +1,6 @@
 [org.kde.kdecoration2]
 library=org.kde.kwin.aurorae
-theme=__aurorae__svg__ROUNDED-DARK
+theme=__aurorae__svg__glow-material
 
 [Compositing]
 AnimationSpeed=1
