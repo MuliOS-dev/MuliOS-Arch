@@ -6,7 +6,7 @@ A release of MuliOS-Arch consists of a built and verified ISO image, along with 
 
 ## Version Naming
 
-MuliOS OS versions use the date on which the ISO build is started, followed by a user-entered channel/suffix. At the start of `scripts/build.sh`, the builder prompts for this value and writes the generated version to `profile/version`.
+MuliOS OS versions use the date on which the ISO build is started, followed by a user-entered channel/suffix. At the start of `scripts/glowbuild.sh`, the builder prompts for this value and writes the generated version to `profile/version`.
 
 Examples:
 - Enter `stable` → `YY.MM.DD-stable`, for example `26.10.17-stable`.
@@ -36,7 +36,7 @@ Before a release is prepared, the current state of the `main` branch should be c
 
 During this phase:
 
-- Build the ISO from a clean environment using `scripts/build.sh`, following [`building.md`](building.md).
+- Build the ISO from a clean environment using `scripts/glowbuild.sh`, following [`building.md`](building.md).
 - Boot the resulting ISO in a virtual machine to confirm the live environment starts correctly, KDE Plasma loads as expected, and Plymouth displays correctly during boot.
 - Walk through the full MuliOS Installer flow to confirm the installer completes successfully and produces a bootable installed system.
 - Verify that MuliOS tools (`mulios-tools`) function correctly in the live environment and, where applicable, after installation.
