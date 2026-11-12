@@ -757,6 +757,43 @@ else
     echo "[OK] MUpdate continues when optional profile packages are missing or fail"
 fi
 
+if [[ ! -x "$ROOT/scripts/glowbuild.sh" || ! -x "$ROOT/scripts/install-glow-material.sh" ]]; then
+    echo "[FAIL] Glow Material build scripts are missing or not executable"
+    fail=1
+else
+    echo "[OK] Glow Material build scripts are executable"
+fi
+
+if ! grep -q '^Current=breeze
+    exit 1
+fi
+
+echo "All static checks passed." "$PROFILE/airootfs/etc/sddm.conf" ||
+   [[ -d "$PROFILE/airootfs/usr/share/sddm/themes/mulios" ]]; then
+    echo "[FAIL] SDDM must use the packaged Breeze greeter, not the retired custom QML theme"
+    fail=1
+else
+    echo "[OK] SDDM uses the packaged Breeze greeter"
+fi
+
+THEME_VARIANT="${MULIOS_THEME_VARIANT:-glow}"
+if [[ "$THEME_VARIANT" == "glow" ]]; then
+    if ! grep -q '__aurorae__svg__glow-material' "$PROFILE/airootfs/etc/xdg/kwinrc" ||
+       [[ ! -f "$PROFILE/airootfs/usr/share/aurorae/themes/glow-material/glow-materialrc" ]]; then
+        echo "[FAIL] Glow Material variant is missing its Aurorae package or KWin selection"
+        fail=1
+    else
+        echo "[OK] Glow Material is installed and selected"
+    fi
+elif [[ "$THEME_VARIANT" == "rounded" ]]; then
+    if ! grep -q '__aurorae__svg__ROUNDED-DARK' "$PROFILE/airootfs/etc/xdg/kwinrc"; then
+        echo "[FAIL] ROUNDED build variant is missing its matching KWin selection"
+        fail=1
+    else
+        echo "[OK] ROUNDED build variant is selected"
+    fi
+fi
+
 if [[ "$fail" -ne 0 ]]; then
     echo "Static checks failed."
     exit 1
