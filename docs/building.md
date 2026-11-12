@@ -123,12 +123,12 @@ bash scripts/test.sh --clean
 ```
 
 
-## Building the Glow Material variant
+## Legacy ROUNDED-DARK comparison build
 
-To build a test ISO that uses the MuliOS Glow Material Aurorae window decoration instead of the legacy ROUNDED-DARK decoration, run:
+The original ROUNDED-DARK build path is retained for comparison:
 
 ```bash
-./scripts/glowbuild.sh
+./scripts/build.sh
 ```
 
-The script uses the same dependency installation, version prompt, KWin effects build, Task Manager dependency bundling, validation, and ArchISO process as `build.sh`. It pins Glow Material to a reviewed commit and selects Breeze for the Plasma shell and SDDM login screen. The regular `build.sh` path remains available for comparison.
+The default MuliOS build is `./scripts/glowbuild.sh`, which pins Glow Material and selects Breeze for the Plasma shell and SDDM login screen.
