@@ -339,9 +339,9 @@ class MuliOSInstaller(QMainWindow):
             use_glow = theme_variant == "glow"
             decoration_library = "org.kde.kwin.aurorae" if not custom_effect else "org.kde.breeze"
             decoration_theme = (
-                "__aurorae__svg__glow-material" if use_glow
-                else "__aurorae__svg__ROUNDED-DARK" if not custom_effect
-                else ""
+                "" if custom_effect
+                else "__aurorae__svg__glow-material" if use_glow
+                else "__aurorae__svg__ROUNDED-DARK"
             )
             appearance_values = {
                 "kdeglobals": (
