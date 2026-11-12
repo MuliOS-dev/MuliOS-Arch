@@ -61,7 +61,7 @@ Fixes #58
 
 All changes must be tested locally before submitting a pull request. At minimum:
 
-1. Build the ISO using `scripts/build.sh` to confirm the profile still builds successfully.
+1. Build the ISO using `scripts/glowbuild.sh` to confirm the profile still builds successfully.
 2. Boot the resulting ISO in a virtual machine to confirm the live environment starts correctly.
 3. If your change affects the installer, run through the MuliOS Installer flow in a virtual machine.
 4. If your change affects packages, tools, or scripts, run `scripts/test.sh` if applicable, and manually verify the affected functionality.
