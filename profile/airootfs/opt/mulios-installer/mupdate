@@ -784,71 +784,67 @@ cmd_profile() {
     warn "Reboot if the profile installed a new kernel."
 }
 
-sync_rounded_theme() {
-    local installer_script="$WORKDIR/install-rounded-theme.sh"
+sync_glow_material() {
+    local installer_script="$WORKDIR/install-glow-material.sh"
     local commit
-    if ! curl -fsSL --retry 3 --retry-all-errors -o "$installer_script" "$(raw_url scripts/install-rounded-theme.sh)"; then
-        warn "Unable to read the pinned ROUNDED theme version; skipping ROUNDED theme update."
+    if ! curl -fsSL --retry 3 --retry-all-errors -o "$installer_script" "$(raw_url scripts/install-glow-material.sh)"; then
+        warn "Unable to read the pinned Glow Material version; skipping decoration update."
         return 0
     fi
 
-    commit="$(sed -n 's/^THEME_COMMIT="\([^"]*\)"/\1/p' "$installer_script" | head -n 1)"
+    commit="$(sed -n 's/^GLOW_MATERIAL_COMMIT="\([^"]*\)"/\1/p' "$installer_script" | head -n 1)"
     if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
-        warn "Invalid ROUNDED theme commit; skipping ROUNDED theme update."
+        warn "Invalid Glow Material commit; skipping decoration update."
         return 0
     fi
 
-    local state_file="$STATE_DIR/rounded-theme-commit"
+    local state_file="$STATE_DIR/glow-material-commit"
     if [[ -f "$state_file" && "$(cat "$state_file")" == "$commit" &&
-          -d /usr/share/plasma/desktoptheme/ROUNDED-DARK &&
-          -d /usr/share/plasma/look-and-feel/com.github.varlesh.rounded-dark &&
-          -d /usr/share/aurorae/themes/ROUNDED-DARK &&
-          -f /usr/share/color-schemes/ROUNDEDDARK.colors ]]; then
-        info "ROUNDED theme already matches pinned commit $commit."
+          -f /usr/share/aurorae/themes/glow-material/metadata.desktop &&
+          -f /usr/share/aurorae/themes/glow-material/glow-materialrc &&
+          -f /usr/share/aurorae/themes/glow-material/decoration.svg ]]; then
+        info "Glow Material already matches pinned commit $commit."
         return 0
     fi
 
     if [[ "$DRY_RUN" == "1" || "$SAFE_MODE" == "1" ]]; then
-        echo "THEME   ROUNDED-DARK @ $commit"
+        echo "THEME   Glow Material @ $commit"
         return 0
     fi
 
-    info "Downloading pinned ROUNDED KDE theme $commit..."
-    local archive="$WORKDIR/rounded.tar.gz"
-    if ! curl -fsSL --retry 3 --retry-all-errors -o "$archive" "https://github.com/varlesh/rounded/archive/$commit.tar.gz"; then
-        warn "Unable to download the ROUNDED theme archive; skipping."
+    info "Downloading pinned Glow Material decoration $commit..."
+    local archive="$WORKDIR/glow-material.tar.gz"
+    if ! curl -fsSL --retry 3 --retry-all-errors -o "$archive" "https://github.com/AxonShell/KDE-Glow-Material/archive/$commit.tar.gz"; then
+        warn "Unable to download Glow Material; skipping."
         return 0
     fi
     if ! tar -xzf "$archive" -C "$WORKDIR"; then
-        warn "Unable to extract the ROUNDED theme archive; skipping."
+        warn "Unable to extract Glow Material; skipping."
         return 0
     fi
 
-    local root="$WORKDIR/rounded-$commit"
-    if [[ ! -d "$root/plasma/desktoptheme/ROUNDED-DARK" ]]; then
-        warn "ROUNDED desktop theme is missing from archive; skipping."
-        return 0
-    fi
-    if [[ ! -d "$root/plasma/look-and-feel/com.github.varlesh.rounded-dark" ]]; then
-        warn "ROUNDED Look-and-Feel package is missing from archive; skipping."
-        return 0
-    fi
-    if [[ ! -d "$root/aurorae/themes/ROUNDED-DARK" ]]; then
-        warn "ROUNDED Aurorae decoration is missing from archive; skipping."
-        return 0
-    fi
-    if [[ ! -f "$root/plasma/desktoptheme/ROUNDED-DARK/colors" ]]; then
-        warn "ROUNDED color scheme is missing from archive; skipping."
+    local root
+    root="$(find "$WORKDIR" -mindepth 1 -maxdepth 1 -type d -name 'KDE-Glow-Material-*' -print -quit)"
+    if [[ ! -d "$root/aurorae/glow-material" ||
+          ! -f "$root/aurorae/glow-material/metadata.desktop" ||
+          ! -f "$root/aurorae/glow-material/glow-materialrc" ||
+          ! -f "$root/aurorae/glow-material/decoration.svg" ]]; then
+        warn "Glow Material Aurorae package is incomplete; skipping."
         return 0
     fi
 
-    install -d /usr/share/plasma/desktoptheme /usr/share/plasma/look-and-feel /usr/share/aurorae/themes /usr/share/color-schemes
-    cp -a "$root/plasma/desktoptheme/ROUNDED-DARK" /usr/share/plasma/desktoptheme/
-    cp -a "$root/plasma/look-and-feel/com.github.varlesh.rounded-dark" /usr/share/plasma/look-and-feel/
-    cp -a "$root/aurorae/themes/ROUNDED-DARK" /usr/share/aurorae/themes/
-    install -m 0644 "$root/plasma/desktoptheme/ROUNDED-DARK/colors" /usr/share/color-schemes/ROUNDEDDARK.colors
+    install -d /usr/share/aurorae/themes /etc/mulios
+    rm -rf /usr/share/aurorae/themes/glow-material
+    cp -a "$root/aurorae/glow-material" /usr/share/aurorae/themes/
+    rm -rf \
+        /usr/share/plasma/desktoptheme/ROUNDED-DARK \
+        /usr/share/plasma/look-and-feel/com.github.varlesh.rounded-dark \
+        /usr/share/aurorae/themes/ROUNDED-DARK \
+        /usr/share/sddm/themes/mulios
+    rm -f /usr/share/color-schemes/ROUNDEDDARK.colors
+    printf 'glow\n' > /etc/mulios/theme-variant
     printf "%s\n" "$commit" > "$state_file"
-    ok "ROUNDED theme merged at pinned commit $commit."
+    ok "Glow Material installed at pinned commit $commit."
 }
 
 cmd_update() {
@@ -879,7 +875,7 @@ cmd_update() {
     fi
 
     sync_repository
-    sync_rounded_theme
+    sync_glow_material
 
     if [[ "$DRY_RUN" == "0" && "$SAFE_MODE" == "0" ]]; then
         ok "MuliOS repository changes merged into the installed OS."
