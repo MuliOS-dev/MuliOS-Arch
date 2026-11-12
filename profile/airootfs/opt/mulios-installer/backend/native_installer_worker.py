@@ -2255,8 +2255,8 @@ class InstallWorker(QThread):
                     shutil.copy2(source, destination)
                     copied.append(name)
 
-        # Force the modern Plasma/Breeze lock-screen implementation while
-        # keeping the MuliOS ROUNDED-DARK color scheme.
+        # Force the modern Plasma/Breeze lock-screen implementation and keep
+        # shell styling independent from the selected window decoration.
         kdeglobals = config / "kdeglobals"
         kde_text = kdeglobals.read_text(encoding="utf-8", errors="replace") if kdeglobals.exists() else ""
         kde_lines = kde_text.splitlines()
@@ -2293,11 +2293,13 @@ class InstallWorker(QThread):
 
         kdeglobals.write_text("\n".join(kde_lines).rstrip() + "\n", encoding="utf-8")
 
-        # A custom blur/glass effect is paired with Breeze rather than leaving
-        # the ROUNDED-DARK window decoration in place. KWin effects are not
-        # full themes by themselves, so the appearance preset is changed too.
+        # Keep the selected build's window decoration while using Breeze for
+        # the Plasma shell and colors. Optional custom effects use Breeze KWin.
         effect = str(self.state.get("desktop_effect", "default")).strip().lower()
         custom_effect = effect in {"betterblur_dx", "glass"}
+        variant_file = self.target / "etc/mulios/theme-variant"
+        theme_variant = variant_file.read_text(encoding="utf-8").strip().lower() if variant_file.is_file() else "glow"
+        use_glow = theme_variant == "glow"
 
         def set_ini_values(path, values):
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -2331,11 +2333,12 @@ class InstallWorker(QThread):
                 ("org.kde.kdecoration2", "theme", ""),
             ])
         else:
-            set_ini_values(kdeglobals, [("General", "ColorScheme", "ROUNDEDDARK")])
-            set_ini_values(config / "plasmarc", [("Theme", "name", "ROUNDED-DARK")])
+            set_ini_values(kdeglobals, [("General", "ColorScheme", "BreezeDark")])
+            set_ini_values(config / "plasmarc", [("Theme", "name", "default")])
             set_ini_values(config / "kwinrc", [
                 ("org.kde.kdecoration2", "library", "org.kde.kwin.aurorae"),
-                ("org.kde.kdecoration2", "theme", "__aurorae__svg__ROUNDED-DARK"),
+                ("org.kde.kdecoration2", "theme",
+                 "__aurorae__svg__glow-material" if use_glow else "__aurorae__svg__ROUNDED-DARK"),
             ])
 
         # The live ISO does not need the installed-session splash. Disable
@@ -2770,9 +2773,22 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         sddm_conf.parent.mkdir(parents=True, exist_ok=True)
         sddm_conf.write_text(
             "[Theme]\n"
-            "Current=mulios\n",
+            "Current=breeze\n"
+            "\n"
+            "[Users]\n"
+            "MinimumUid=1000\n"
+            "MaximumUid=60000\n"
+            "HideUsers=\n"
+            "HideShells=/usr/bin/nologin,/bin/nologin\n"
+            "RememberLastUser=true\n"
+            "RememberLastSession=true\n",
             encoding="utf-8",
         )
+
+        # Retire the custom QML greeter in installed systems as well.
+        custom_greeter = self.target / "usr/share/sddm/themes/mulios"
+        if custom_greeter.exists():
+            shutil.rmtree(custom_greeter)
 
         # The live session must never be the installed login user.
         autologin = self.target / "etc/sddm.conf.d/autologin.conf"
