@@ -1,0 +1,29 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install desktop entry validator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y desktop-file-utils
+      - name: Validate shell scripts
+        run: |
+          bash -n scripts/*.sh
+          bash -n profile/airootfs/usr/local/bin/mupdate
+          bash -n profile/airootfs/opt/mulios-installer/mupdate
+      - name: Validate Python sources
+        run: python -m compileall -q profile/airootfs/opt/mulios-installer
+      - name: Run MuliOS static checks
+        run: bash scripts/test.sh
