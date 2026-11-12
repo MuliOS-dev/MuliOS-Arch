@@ -41,7 +41,7 @@ It protects machine-specific account databases, hostname, hosts file, machine ID
 
 New files are non-executable by default. Existing permissions are preserved, and known executable directories receive executable permissions for new files.
 
-The ROUNDED KDE theme is built from the pinned commit in `scripts/install-rounded-theme.sh`. MUpdate reads that pin and installs the theme assets directly when the installed theme is missing or out of date.
+MuliOS installs the pinned Glow Material Aurorae window decoration from `scripts/install-glow-material.sh`. MUpdate reads that pin and updates the decoration when the installed package is missing or out of date. Glow Material currently styles window borders and controls; Plasma panels, widgets, colors, and the SDDM greeter continue to use KDE Breeze.
 
 ## Important limitations
 
