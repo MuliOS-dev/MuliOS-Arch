@@ -823,7 +823,9 @@ sync_glow_material() {
           -f /usr/share/aurorae/themes/glow-material/metadata.desktop &&
           -f /usr/share/aurorae/themes/glow-material/glow-materialrc &&
           -f /usr/share/aurorae/themes/glow-material/decoration.svg ]]; then
-        migrate_rounded_user_configs
+        if [[ "$DRY_RUN" == "0" && "$SAFE_MODE" == "0" ]]; then
+            migrate_rounded_user_configs
+        fi
         info "Glow Material already matches pinned commit $commit."
         return 0
     fi
