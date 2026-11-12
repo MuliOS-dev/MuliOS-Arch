@@ -334,17 +334,26 @@ class MuliOSInstaller(QMainWindow):
             # Switch the surrounding Plasma/window appearance as well as the
             # compositor effect. A KWin blur plugin alone is not a complete theme.
             custom_effect = effect in {"betterblur_dx", "glass"}
+            variant_file = Path("/etc/mulios/theme-variant")
+            theme_variant = variant_file.read_text(encoding="utf-8").strip().lower() if variant_file.is_file() else "glow"
+            use_glow = theme_variant == "glow"
+            decoration_library = "org.kde.kwin.aurorae" if not custom_effect else "org.kde.breeze"
+            decoration_theme = (
+                "__aurorae__svg__glow-material" if use_glow
+                else "__aurorae__svg__ROUNDED-DARK" if not custom_effect
+                else ""
+            )
             appearance_values = {
                 "kdeglobals": (
-                    ("General", "ColorScheme", "BreezeDark" if custom_effect else "ROUNDEDDARK"),
+                    ("General", "ColorScheme", "BreezeDark"),
                     ("KDE", "widgetStyle", "Breeze"),
                 ),
                 "plasmarc": (
-                    ("Theme", "name", "default" if custom_effect else "ROUNDED-DARK"),
+                    ("Theme", "name", "default"),
                 ),
                 "kwinrc": (
-                    ("org.kde.kdecoration2", "library", "org.kde.breeze" if custom_effect else "org.kde.kwin.aurorae"),
-                    ("org.kde.kdecoration2", "theme", "" if custom_effect else "__aurorae__svg__ROUNDED-DARK"),
+                    ("org.kde.kdecoration2", "library", decoration_library),
+                    ("org.kde.kdecoration2", "theme", decoration_theme),
                 ),
             }
             for filename, values in appearance_values.items():
@@ -413,7 +422,7 @@ class MuliOSInstaller(QMainWindow):
             self,
             "Preview applied",
             f"{display_name} is loaded in the live KDE session and the "
-            f"{'Breeze Dark' if effect != 'default' else 'ROUNDED-DARK'} appearance preset was selected. "
+            f"{'Breeze Dark' if effect != 'default' else ('Glow Material' if theme_variant == 'glow' else 'ROUNDED-DARK')} appearance preset was selected. "
             "The effect changes compositor blur; it cannot make every application's "
             "opaque UI liquid glass unless that application/theme supports transparency.",
         )
