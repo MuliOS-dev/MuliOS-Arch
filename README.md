@@ -110,7 +110,7 @@ Build the default Glow Material ISO:
 
 The legacy `./scripts/build.sh` entry point remains available to build the ROUNDED-DARK comparison variant.
 
-For a test ISO using the Glow Material window decoration, run `./scripts/glowbuild.sh` instead.\n\nThe generated ISO will be placed in:
+The generated ISO will be placed in:
 
 ```text
 output/
