@@ -28,8 +28,7 @@ cleanup() { rm -rf "$WORK_DIR"; }
 trap cleanup EXIT
 
 echo "[INFO]: fetching KDE Liquid Glass theme at ${LIQUID_GLASS_COMMIT}"
-git clone --quiet --depth 1 --recurse-submodules --shallow-submodules \
-    --branch main "$LIQUID_GLASS_REPOSITORY" "$WORK_DIR/source"
+git clone --quiet "$LIQUID_GLASS_REPOSITORY" "$WORK_DIR/source"
 git -C "$WORK_DIR/source" checkout --quiet "$LIQUID_GLASS_COMMIT"
 git -C "$WORK_DIR/source" submodule update --init --recursive --depth 1
 
