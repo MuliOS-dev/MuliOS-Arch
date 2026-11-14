@@ -764,6 +764,13 @@ else
     echo "[OK] Glow Material build scripts are executable"
 fi
 
+if [[ ! -x "$ROOT/scripts/liquidbuild.sh" || ! -x "$ROOT/scripts/install-liquid-glass-theme.sh" ]]; then
+    echo "[FAIL] Liquid Glass build scripts are missing or not executable"
+    fail=1
+else
+    echo "[OK] Liquid Glass build scripts are executable"
+fi
+
 if ! grep -q '^Current=breeze$' "$PROFILE/airootfs/etc/sddm.conf" ||
    [[ -d "$PROFILE/airootfs/usr/share/sddm/themes/mulios" ]]; then
     echo "[FAIL] SDDM must use the packaged Breeze greeter, not the retired custom QML theme"
@@ -787,6 +794,58 @@ elif [[ "$THEME_VARIANT" == "rounded" ]]; then
         fail=1
     else
         echo "[OK] ROUNDED build variant is selected"
+    fi
+elif [[ "$THEME_VARIANT" == "liquid-glass" ]]; then
+    if ! grep -q 'library=org.kde.breezeenhanced' "$PROFILE/airootfs/etc/xdg/kwinrc" ||
+       ! grep -q '^name=Layan
+
+if [[ "$fail" -ne 0 ]]; then
+    echo "Static checks failed."
+    exit 1
+fi
+
+echo "All static checks passed."
+ "$PROFILE/airootfs/etc/xdg/plasmarc" ||
+       ! grep -q '^widgetStyle=Darkly
+
+if [[ "$fail" -ne 0 ]]; then
+    echo "Static checks failed."
+    exit 1
+fi
+
+echo "All static checks passed."
+ "$PROFILE/airootfs/etc/xdg/kdeglobals" ||
+       ! grep -q '^Theme=WhiteSur-dark
+
+if [[ "$fail" -ne 0 ]]; then
+    echo "Static checks failed."
+    exit 1
+fi
+
+echo "All static checks passed."
+ "$PROFILE/airootfs/etc/xdg/kdeglobals" ||
+       ! grep -q '^liquid-glass
+
+if [[ "$fail" -ne 0 ]]; then
+    echo "Static checks failed."
+    exit 1
+fi
+
+echo "All static checks passed."
+ "$PROFILE/airootfs/etc/mulios/theme-variant" ||
+       ! grep -q '^LIQUID_GLASS_COMMIT="[0-9a-f]\{40\}"
+
+if [[ "$fail" -ne 0 ]]; then
+    echo "Static checks failed."
+    exit 1
+fi
+
+echo "All static checks passed."
+ "$ROOT/scripts/install-liquid-glass-theme.sh"; then
+        echo "[FAIL] Liquid Glass variant is missing its pinned installer or desktop configuration"
+        fail=1
+    else
+        echo "[OK] Liquid Glass is selected with Layan, Darkly, WhiteSur and BreezeEnhanced"
     fi
 fi
 
