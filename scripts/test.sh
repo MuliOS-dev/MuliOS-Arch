@@ -801,7 +801,7 @@ elif [[ "$THEME_VARIANT" == "liquid-glass" ]]; then
        ! grep -q '^widgetStyle=Darkly$' "$PROFILE/airootfs/etc/xdg/kdeglobals" ||
        ! grep -q '^Theme=WhiteSur-dark$' "$PROFILE/airootfs/etc/xdg/kdeglobals" ||
        ! grep -q '^liquid-glass$' "$PROFILE/airootfs/etc/mulios/theme-variant" ||
-       ! grep -q '^LIQUID_GLASS_COMMIT="[0-9a-f]\\{40\\}"$' "$ROOT/scripts/install-liquid-glass-theme.sh"; then
+       ! grep -q '^LIQUID_GLASS_COMMIT="[0-9a-f]\{40\}"$' "$ROOT/scripts/install-liquid-glass-theme.sh"; then
         echo "[FAIL] Liquid Glass variant is missing its pinned installer or desktop configuration"
         fail=1
     else
