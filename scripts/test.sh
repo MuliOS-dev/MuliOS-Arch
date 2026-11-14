@@ -797,51 +797,11 @@ elif [[ "$THEME_VARIANT" == "rounded" ]]; then
     fi
 elif [[ "$THEME_VARIANT" == "liquid-glass" ]]; then
     if ! grep -q 'library=org.kde.breezeenhanced' "$PROFILE/airootfs/etc/xdg/kwinrc" ||
-       ! grep -q '^name=Layan
-
-if [[ "$fail" -ne 0 ]]; then
-    echo "Static checks failed."
-    exit 1
-fi
-
-echo "All static checks passed."
- "$PROFILE/airootfs/etc/xdg/plasmarc" ||
-       ! grep -q '^widgetStyle=Darkly
-
-if [[ "$fail" -ne 0 ]]; then
-    echo "Static checks failed."
-    exit 1
-fi
-
-echo "All static checks passed."
- "$PROFILE/airootfs/etc/xdg/kdeglobals" ||
-       ! grep -q '^Theme=WhiteSur-dark
-
-if [[ "$fail" -ne 0 ]]; then
-    echo "Static checks failed."
-    exit 1
-fi
-
-echo "All static checks passed."
- "$PROFILE/airootfs/etc/xdg/kdeglobals" ||
-       ! grep -q '^liquid-glass
-
-if [[ "$fail" -ne 0 ]]; then
-    echo "Static checks failed."
-    exit 1
-fi
-
-echo "All static checks passed."
- "$PROFILE/airootfs/etc/mulios/theme-variant" ||
-       ! grep -q '^LIQUID_GLASS_COMMIT="[0-9a-f]\{40\}"
-
-if [[ "$fail" -ne 0 ]]; then
-    echo "Static checks failed."
-    exit 1
-fi
-
-echo "All static checks passed."
- "$ROOT/scripts/install-liquid-glass-theme.sh"; then
+       ! grep -q '^name=Layan$' "$PROFILE/airootfs/etc/xdg/plasmarc" ||
+       ! grep -q '^widgetStyle=Darkly$' "$PROFILE/airootfs/etc/xdg/kdeglobals" ||
+       ! grep -q '^Theme=WhiteSur-dark$' "$PROFILE/airootfs/etc/xdg/kdeglobals" ||
+       ! grep -q '^liquid-glass$' "$PROFILE/airootfs/etc/mulios/theme-variant" ||
+       ! grep -q '^LIQUID_GLASS_COMMIT="[0-9a-f]\\{40\\}"$' "$ROOT/scripts/install-liquid-glass-theme.sh"; then
         echo "[FAIL] Liquid Glass variant is missing its pinned installer or desktop configuration"
         fail=1
     else
