@@ -31,6 +31,15 @@ install_dependencies() {
         sudo pacman -S --needed --noconfirm \
             archiso git base-devel squashfs-tools mtools dosfstools libisoburn curl \
             cmake extra-cmake-modules qt6-tools vulkan-headers kwin nodejs npm
+
+        if [[ "${MULIOS_THEME_VARIANT:-rounded}" == "liquid-glass" ]]; then
+            echo "[INFO]: installing KDE Liquid Glass build dependencies"
+            sudo pacman -S --needed --noconfirm \
+                qt6-base qt6-declarative qt6-svg kdecoration kconfig kconfigwidgets \
+                kcoreaddons kcolorscheme kcmutils kcrash kglobalaccel kguiaddons \
+                kiconthemes kio kirigami knotifications kpackage kservice ki18n \
+                kwindowsystem frameworkintegration libepoxy libdrm libxcb wayland
+        fi
     else
         echo "[ERROR]: not in an Arch Linux environment"
         exit 1
