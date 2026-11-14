@@ -89,7 +89,7 @@ build_component() {
         -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
         -DBUILD_TESTING=OFF \
         -Wno-dev "$@"
-    cmake --build "$build_dir" --parallel
+    cmake --build "$build_dir" --parallel "${MULIOS_BUILD_JOBS:-2}"
     DESTDIR="$AIROOTFS" cmake --install "$build_dir"
 }
 
@@ -174,8 +174,8 @@ printf 'liquid-glass\n' > "$AIROOTFS/etc/mulios/theme-variant"
 
 # Confirm that all selected desktop components landed in the image.
 for path in \
-    "$USR/share/plasma/desktoptheme/Layan/metadata.json" \
-    "$USR/share/plasma/look-and-feel/com.github.vinceliuice.Layan/metadata.json" \
+    "$USR/share/plasma/desktoptheme/Layan/metadata.desktop" \
+    "$USR/share/plasma/look-and-feel/com.github.vinceliuice.Layan/metadata.desktop" \
     "$USR/share/icons/WhiteSur-dark/index.theme"; do
     [[ -f "$path" ]] || {
         echo "[ERROR]: expected Liquid Glass asset was not staged: $path" >&2
