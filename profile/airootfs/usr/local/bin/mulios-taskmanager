@@ -1,54 +1,15 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-APP_DIR="/opt/taskmanager"
-LAUNCHER="$APP_DIR/launcher.py"
-STATE_ROOT="${XDG_STATE_HOME:-${HOME:+$HOME/.local/state}}"
-if [[ -z "$STATE_ROOT" ]]; then
-    STATE_ROOT="${TMPDIR:-/tmp}/mulios-state-${UID}"
-fi
-LOG_DIR="$STATE_ROOT/mulios"
-if ! mkdir -p "$LOG_DIR" 2>/dev/null || [[ ! -w "$LOG_DIR" ]]; then
-    LOG_DIR="${TMPDIR:-/tmp}/mulios-state-${UID}"
-    mkdir -p "$LOG_DIR" || {
-        printf '%s\n' "Cannot create a writable Task Manager log directory." >&2
-        exit 1
-    }
-fi
-LOG_FILE="$LOG_DIR/taskmanager.log"
-
-show_startup_error() {
-    local status="$1"
-    local details message
-    details="$(tail -n 20 "$LOG_FILE" 2>/dev/null || true)"
-    message="$(printf '%s could not start (exit code %s).\n\nLog: %s\n\nLast output:\n%s' "MuliOS Task Manager" "$status" "$LOG_FILE" "${details:-No application output was recorded.}")"
-
+APP=/usr/bin/mulios-taskmanager
+if [[ ! -x "$APP" ]]; then
+    message="MuliOS Task Manager is not installed: $APP"
     if command -v kdialog >/dev/null 2>&1 && [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
         kdialog --title "MuliOS Task Manager" --error "$message" || true
     else
-        printf '%s\n' "$message" >&2
+        printf "%s\n" "$message" >&2
     fi
-}
-
-if [[ ! -f "$LAUNCHER" ]]; then
-    printf '%s\n' "MuliOS Task Manager is not installed: $LAUNCHER" | tee -a "$LOG_FILE" >&2
-    show_startup_error 1
     exit 1
 fi
 
-if [[ ! -x /usr/bin/python3 ]]; then
-    printf '%s\n' "Python 3 is unavailable at /usr/bin/python3." | tee -a "$LOG_FILE" >&2
-    show_startup_error 1
-    exit 1
-fi
-
-cd "$APP_DIR"
-export PYTHONUNBUFFERED=1
-
-if /usr/bin/python3 "$LAUNCHER" >>"$LOG_FILE" 2>&1; then
-    exit 0
-else
-    status=$?
-    show_startup_error "$status"
-    exit "$status"
-fi
+exec "$APP" "$@"

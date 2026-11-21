@@ -59,6 +59,7 @@ sddm
 sddm-kcm
 
 # KDE apps
+webkit2gtk-4.1
 dolphin
 kdialog
 desktop-file-utils
