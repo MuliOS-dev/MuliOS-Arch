@@ -120,13 +120,11 @@ if command -v python3 >/dev/null 2>&1; then
     done < <(find "$PROFILE/airootfs/opt" -type f -name '*.py' -print0)
 fi
 
-if command -v node >/dev/null 2>&1; then
-    if node --check "$PROFILE/airootfs/opt/taskmanager/main.js"; then
-        echo "[OK] node syntax: task manager backend"
-    else
-        echo "[FAIL] node syntax: task manager backend"
-        fail=1
-    fi
+if [[ -s "$PROFILE/airootfs/usr/bin/mulios-taskmanager" && -x "$PROFILE/airootfs/usr/bin/mulios-taskmanager" ]]; then
+    echo "[OK] compiled Rust task manager binary is installed"
+else
+    echo "[FAIL] compiled Rust task manager binary is missing or not executable"
+    fail=1
 fi
 
 if command -v desktop-file-validate >/dev/null 2>&1; then
@@ -154,11 +152,11 @@ else
     echo "[OK] application desktop entries use MuliOS launch wrappers"
 fi
 
-if ! grep -q '^nodejs$' "$PROFILE/packages.x86_64"; then
-    echo "[FAIL] nodejs is missing from the live package set"
+if ! grep -q '^webkit2gtk-4.1$' "$PROFILE/packages.x86_64"; then
+    echo "[FAIL] WebKitGTK runtime for the Rust task manager is missing from the live package set"
     fail=1
 else
-    echo "[OK] nodejs is included"
+    echo "[OK] WebKitGTK runtime is included"
 fi
 
 if ! grep -q '^kdialog$' "$PROFILE/packages.x86_64"; then
@@ -175,30 +173,21 @@ check_desktop_launcher() {
     exec_value="$(sed -n 's/^Exec=//p' "$desktop_file" | head -n 1)"
     tryexec_value="$(sed -n 's/^TryExec=//p' "$desktop_file" | head -n 1)"
     if [[ "$exec_value" == "$expected" && "$tryexec_value" == "$expected" && -x "$PROFILE/airootfs$expected" ]]; then
-        echo "[OK] desktop entry launches executable wrapper: $desktop_file"
+        echo "[OK] desktop entry launches its executable: $desktop_file"
     else
-        echo "[FAIL] desktop entry does not point to its executable wrapper: $desktop_file"
+        echo "[FAIL] desktop entry does not point to its executable: $desktop_file"
         fail=1
     fi
 }
 
-check_desktop_launcher "$PROFILE/airootfs/usr/share/applications/taskmanager.desktop" "/usr/local/bin/mulios-taskmanager"
+check_desktop_launcher "$PROFILE/airootfs/usr/share/applications/taskmanager.desktop" "/usr/bin/mulios-taskmanager"
 check_desktop_launcher "$PROFILE/airootfs/usr/share/applications/mulios-credits.desktop" "/usr/local/bin/mulios-credits"
 
-if ! grep -q 'mulios-state-' "$PROFILE/airootfs/usr/local/bin/mulios-taskmanager" ||
-   ! grep -q 'gettempdir' "$PROFILE/airootfs/opt/taskmanager/launcher.py"; then
-    echo "[FAIL] Task Manager has no writable fallback for state/log directory"
-    fail=1
+if [[ -s "$PROFILE/airootfs/usr/bin/mulios-taskmanager" && -x "$PROFILE/airootfs/usr/bin/mulios-taskmanager" ]]; then
+    echo "[OK] Task Manager has a compiled executable for the KDE launcher"
 else
-    echo "[OK] Task Manager falls back when the user's state directory is not writable"
-fi
-
-if ! grep -q 'const PORT' "$PROFILE/airootfs/opt/taskmanager/main.js" ||
-   ! grep -q 'const URL' "$PROFILE/airootfs/opt/taskmanager/main.js"; then
-    echo "[FAIL] Task Manager backend is missing its host/port configuration"
+    echo "[FAIL] Task Manager compiled executable is missing"
     fail=1
-else
-    echo "[OK] Task Manager backend defines its listening host and port"
 fi
 
 for mupdate in \
@@ -275,34 +264,19 @@ else
     echo "[OK] Credits launcher falls back when the user's state directory is not writable"
 fi
 
-if ! grep -q 'backend_is_ready' "$PROFILE/airootfs/opt/taskmanager/launcher.py" ||
-   ! grep -q 'BACKEND_START_TIMEOUT' "$PROFILE/airootfs/opt/taskmanager/launcher.py"; then
-    echo "[FAIL] Task Manager does not wait for HTTP backend readiness"
-    fail=1
+if [[ -f "$PROFILE/airootfs/opt/taskmanager/src-tauri/tauri.conf.json" &&
+      -f "$PROFILE/airootfs/opt/taskmanager/Cargo.lock" ]]; then
+    echo "[OK] Rust task manager source and locked dependencies are present"
 else
-    echo "[OK] Task Manager waits for backend readiness before showing the window"
+    echo "[FAIL] Rust task manager source or Cargo.lock is missing"
+    fail=1
 fi
 
-if grep -qE 'openStandaloneWindow|execFileSync|xdg-open' "$PROFILE/airootfs/opt/taskmanager/main.js"; then
-    echo "[FAIL] Task Manager backend still tries to launch a second external browser"
+if grep -q 'npm install --prefix "$taskmanager_dir"' "$ROOT/scripts/build.sh"; then
+    echo "[FAIL] ISO build still runs the retired Node Task Manager install step"
     fail=1
 else
-    echo "[OK] Task Manager backend only serves the UI embedded by its Qt launcher"
-fi
-
-if ! grep -q '"express"' "$PROFILE/airootfs/opt/taskmanager/package.json" ||
-   ! grep -q '"systeminformation"' "$PROFILE/airootfs/opt/taskmanager/package.json"; then
-    echo "[FAIL] Task Manager runtime dependencies are missing from package.json"
-    fail=1
-else
-    echo "[OK] Task Manager runtime dependencies are declared"
-fi
-
-if ! grep -q 'npm install --prefix "$taskmanager_dir"' "$ROOT/scripts/build.sh"; then
-    echo "[FAIL] Task Manager npm dependencies are not bundled during ISO build"
-    fail=1
-else
-    echo "[OK] Task Manager dependencies are bundled during ISO build"
+    echo "[OK] ISO build does not require Node Task Manager dependencies"
 fi
 
 if ! grep -Fq 'shutil.which("qdbus6") or shutil.which("qdbus")' "$PROFILE/airootfs/opt/mulios-installer/main.py"; then
@@ -483,34 +457,19 @@ else
     echo "[OK] Credits launcher falls back when the user's state directory is not writable"
 fi
 
-if ! grep -q 'backend_is_ready' "$PROFILE/airootfs/opt/taskmanager/launcher.py" ||
-   ! grep -q 'BACKEND_START_TIMEOUT' "$PROFILE/airootfs/opt/taskmanager/launcher.py"; then
-    echo "[FAIL] Task Manager does not wait for HTTP backend readiness"
-    fail=1
+if [[ -f "$PROFILE/airootfs/opt/taskmanager/src-tauri/tauri.conf.json" &&
+      -f "$PROFILE/airootfs/opt/taskmanager/Cargo.lock" ]]; then
+    echo "[OK] Rust task manager source and locked dependencies are present"
 else
-    echo "[OK] Task Manager waits for backend readiness before showing the window"
+    echo "[FAIL] Rust task manager source or Cargo.lock is missing"
+    fail=1
 fi
 
-if grep -qE 'openStandaloneWindow|execFileSync|xdg-open' "$PROFILE/airootfs/opt/taskmanager/main.js"; then
-    echo "[FAIL] Task Manager backend still tries to launch a second external browser"
+if grep -q 'npm install --prefix "$taskmanager_dir"' "$ROOT/scripts/build.sh"; then
+    echo "[FAIL] ISO build still runs the retired Node Task Manager install step"
     fail=1
 else
-    echo "[OK] Task Manager backend only serves the UI embedded by its Qt launcher"
-fi
-
-if ! grep -q '"express"' "$PROFILE/airootfs/opt/taskmanager/package.json" ||
-   ! grep -q '"systeminformation"' "$PROFILE/airootfs/opt/taskmanager/package.json"; then
-    echo "[FAIL] Task Manager runtime dependencies are missing from package.json"
-    fail=1
-else
-    echo "[OK] Task Manager runtime dependencies are declared"
-fi
-
-if ! grep -q 'npm install --prefix "$taskmanager_dir"' "$ROOT/scripts/build.sh"; then
-    echo "[FAIL] Task Manager npm dependencies are not bundled during ISO build"
-    fail=1
-else
-    echo "[OK] Task Manager dependencies are bundled during ISO build"
+    echo "[OK] ISO build does not require Node Task Manager dependencies"
 fi
 
 if ! grep -q 'shutil.which("qdbus6") or shutil.which("qdbus")' "$PROFILE/airootfs/opt/mulios-installer/main.py"; then
@@ -779,7 +738,7 @@ else
     echo "[OK] SDDM uses the packaged Breeze greeter"
 fi
 
-THEME_VARIANT="${MULIOS_THEME_VARIANT:-glow}"
+THEME_VARIANT="${MULIOS_THEME_VARIANT:-rounded}"
 if [[ "$THEME_VARIANT" == "glow" ]]; then
     if ! grep -q '__aurorae__svg__glow-material' "$PROFILE/airootfs/etc/xdg/kwinrc" ||
        ! grep -q '^GLOW_MATERIAL_COMMIT="[0-9a-f]\{40\}"$' "$ROOT/scripts/install-glow-material.sh"; then
@@ -796,16 +755,18 @@ elif [[ "$THEME_VARIANT" == "rounded" ]]; then
         echo "[OK] ROUNDED build variant is selected"
     fi
 elif [[ "$THEME_VARIANT" == "liquid-glass" ]]; then
-    if ! grep -q 'library=org.kde.breezeenhanced' "$PROFILE/airootfs/etc/xdg/kwinrc" ||
+    if ! grep -q 'library=org.kde.breeze' "$PROFILE/airootfs/etc/xdg/kwinrc" ||
+       ! grep -q '^better_blur_dxEnabled=false$' "$PROFILE/airootfs/etc/xdg/kwinrc" ||
+       ! grep -q '^kwin4_effect_shapecornersEnabled=false$' "$PROFILE/airootfs/etc/xdg/kwinrc" ||
        ! grep -q '^name=Layan$' "$PROFILE/airootfs/etc/xdg/plasmarc" ||
        ! grep -q '^widgetStyle=Darkly$' "$PROFILE/airootfs/etc/xdg/kdeglobals" ||
        ! grep -q '^Theme=WhiteSur-dark$' "$PROFILE/airootfs/etc/xdg/kdeglobals" ||
        ! grep -q '^liquid-glass$' "$PROFILE/airootfs/etc/mulios/theme-variant" ||
        ! grep -q '^LIQUID_GLASS_COMMIT="[0-9a-f]\{40\}"$' "$ROOT/scripts/install-liquid-glass-theme.sh"; then
-        echo "[FAIL] Liquid Glass variant is missing its pinned installer or desktop configuration"
+        echo "[FAIL] Liquid Glass safe-boot configuration or pinned installer is missing"
         fail=1
     else
-        echo "[OK] Liquid Glass is selected with Layan, Darkly, WhiteSur and BreezeEnhanced"
+        echo "[OK] Liquid Glass safe-boot variant is selected with Layan, Darkly, WhiteSur and native Breeze"
     fi
 fi
 

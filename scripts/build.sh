@@ -35,7 +35,7 @@ install_dependencies() {
     if command -v pacman >/dev/null 2>&1; then
         sudo pacman -S --needed --noconfirm \
             archiso git base-devel squashfs-tools mtools dosfstools libisoburn curl \
-            cmake extra-cmake-modules qt6-tools vulkan-headers kwin nodejs npm
+            cmake extra-cmake-modules qt6-tools vulkan-headers kwin
 
         if [[ "${MULIOS_THEME_VARIANT:-rounded}" == "liquid-glass" ]]; then
             echo "[INFO]: installing KDE Liquid Glass build dependencies"
@@ -135,16 +135,18 @@ build() {
         exit 1
     fi
     bash "$theme_builder"
-    bash "$WORK_DIR/scripts/build-kwin-effects.sh"
+    if [[ "$MULIOS_THEME_VARIANT" == "liquid-glass" ]]; then
+        echo "[INFO]: skipping third-party KWin effects for Liquid Glass safe boot"
+    else
+        bash "$WORK_DIR/scripts/build-kwin-effects.sh"
+    fi
 
-    # Bundle Task Manager's JavaScript dependencies into the live filesystem.
-    # The live image includes Node.js, but npm dependencies are not Arch packages.
-    local taskmanager_dir="$PROFILE/airootfs/opt/taskmanager"
-    if [[ ! -f "$taskmanager_dir/package.json" ]]; then
-        echo "[ERROR] Task Manager package.json is missing: $taskmanager_dir" >&2
+    # The Rust task manager binary is built before packaging and included in airootfs.
+    local taskmanager_binary="$PROFILE/airootfs/usr/bin/mulios-taskmanager"
+    if [[ ! -x "$taskmanager_binary" ]]; then
+        echo "[ERROR] Compiled Rust Task Manager is missing or not executable: $taskmanager_binary" >&2
         exit 1
     fi
-    npm install --prefix "$taskmanager_dir" --omit=dev --no-audit --no-fund --package-lock=false
 
     prepare_version_templates
 
