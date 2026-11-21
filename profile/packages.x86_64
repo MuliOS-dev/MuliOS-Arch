@@ -57,6 +57,8 @@ plasma-desktop
 plasma-workspace
 sddm
 sddm-kcm
+cc
+zip
 
 # KDE apps
 webkit2gtk-4.1
