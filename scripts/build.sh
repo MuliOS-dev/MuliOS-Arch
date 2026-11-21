@@ -21,6 +21,11 @@ while true; do
 done
 
 mulios_version="${BUILD_DATE}-${release_channel}"
+release_branch="${release_channel%%.*}"
+case "$release_branch" in
+    stable|beta|indev) ;;
+    *) release_branch="unknown" ;;
+esac
 printf '%s\n' "$mulios_version" > "$PROFILE_VERSION_FILE"
 echo "[INFO]: building MuliOS version $mulios_version"
 
@@ -168,6 +173,7 @@ ANSI_COLOR="38;2;0;103;56"
 HOME_URL="https://github.com/MuliOS-dev"
 IMAGE_ID=MuliOS
 IMAGE_VERSION="$mulios_version"
+MULIOS_RELEASE_BRANCH="$release_branch"
 EOF
 
     sudo mkarchiso -v -w "$TEMP" -o "$OUTPUT" "$PROFILE"
