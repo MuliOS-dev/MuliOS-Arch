@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+NoDisplay=true
+X-KDE-AliasFor=systemsettings
+Exec=kcmshell6 kcm_breezeenhanced
+Icon=preferences-system-windows
+Name=BreezeEnhanced Window Decoration

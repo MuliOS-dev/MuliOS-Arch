@@ -97,9 +97,10 @@ build_component() {
 # environment, then stage their install tree into the ISO root filesystem.
 build_component "Darkly application style" "$SOURCE/Darkly" darkly \
     -DBUILD_QT5=OFF -DBUILD_QT6=ON
-build_component "BreezeEnhanced window decoration" "$SOURCE/BreezeEnhanced" breezeenhanced
-build_component "Better Blur DX" "$SOURCE/Better-Blur-DX" better-blur-dx
-build_component "KDE Rounded Corners" "$SOURCE/KDE-Rounded-Corners" rounded-corners
+# MuliOS: use KDE Rounded Corners v0.10.0 for newer KWin API
+git -C "$SOURCE/KDE-Rounded-Corners" fetch --depth 1 origin tag v0.10.0
+git -C "$SOURCE/KDE-Rounded-Corners" checkout --force v0.10.0
+
 
 # Retire the previous ROUNDED-DARK package from this image.
 rm -rf \
@@ -129,46 +130,24 @@ cp "$AIROOTFS/etc/xdg/plasmarc" "$AIROOTFS/etc/skel/.config/plasmarc"
 
 cat > "$AIROOTFS/etc/xdg/kwinrc" <<'EOF'
 [org.kde.kdecoration2]
-library=org.kde.breezeenhanced
-theme=BreezeEnhanced
+library=org.kde.breeze
+theme=Breeze
 
 [Plugins]
-better_blur_dxEnabled=true
-kwin4_effect_shapecornersEnabled=true
-
-[Effect-better-blur-dx]
-BlurStrength=20
-NoiseStrength=3
-Brightness=86
-Saturation=135
-Contrast=112
-ForceContrastParams=true
-CornerRadius=16
-WindowClasses=plasmashell,org.kde.plasmashell,krunner,yakuake,vesktop,discord
-BlurMatching=true
-BlurNonMatching=false
-BlurDecorations=true
-BlurMenus=true
-BlurDocks=true
-RefractionStrength=8
-RefractionMode=0
-RefractionEdgeSize=20
-RefractionCornerRadius=16
-RefractionRGBFringing=1
-
-[Round-Corners]
-Size=14
-InactiveCornerRadius=12
-AnimationDuration=180
-UseNativeDecorationShadows=true
-ShadowSize=55
-InactiveShadowSize=35
-ActiveShadowAlpha=120
-InactiveShadowAlpha=70
-OutlineThickness=1
-InactiveOutlineThickness=1
+better_blur_dxEnabled=false
+kwin4_effect_shapecornersEnabled=false
+kwin4_effect_glassEnabled=false
 EOF
 cp "$AIROOTFS/etc/xdg/kwinrc" "$AIROOTFS/etc/skel/.config/kwinrc"
+
+# Remove stale third-party KWin effect binaries from previous builds.
+for plugin_root in "$USR/lib/qt6/plugins/kwin/effects" "$USR/lib/kwin/effects"; do
+    if [[ -d "$plugin_root" ]]; then
+        find "$plugin_root" -type f \
+            \( -iname '*better*blur*' -o -iname '*shapecorners*' -o -iname '*glass*' \) \
+            -delete
+    fi
+done
 
 printf 'liquid-glass\n' > "$AIROOTFS/etc/mulios/theme-variant"
 

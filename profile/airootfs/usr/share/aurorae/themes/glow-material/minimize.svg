@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="64" height="64" viewBox="0 0 64 64">
+  <title>Glow Material minimize button</title>
+  <g id="active-center" opacity="1"><circle cx="32" cy="32" r="13" fill="none" stroke="none" stroke-width="1.5"/> <g fill="none" stroke="#A8B5AD" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 34 H41" /></g></g>
+  <g id="inactive-center" opacity="1"><circle cx="32" cy="32" r="13" fill="none" stroke="none" stroke-width="1.5"/> <g fill="none" stroke="#7E8A83" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 34 H41" /></g></g>
+  <g id="hover-center" opacity="1"><circle cx="32" cy="32" r="13" fill="#205A3A" stroke="#48C780" stroke-width="1.5"/> <g fill="none" stroke="#E8F0EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 34 H41" /></g></g>
+  <g id="hover-inactive-center" opacity="1"><circle cx="32" cy="32" r="13" fill="#1B422D" stroke="#347B51" stroke-width="1.5"/> <g fill="none" stroke="#E8F0EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 34 H41" /></g></g>
+  <g id="pressed-center" opacity="1"><circle cx="32" cy="32" r="13" fill="#17462D" stroke="#48C780" stroke-width="1.5"/> <g fill="none" stroke="#E8F0EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 34 H41" /></g></g>
+  <g id="pressed-inactive-center" opacity="1"><circle cx="32" cy="32" r="13" fill="#202723" stroke="#35433A" stroke-width="1.5"/> <g fill="none" stroke="#A8B5AD" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 34 H41" /></g></g>
+  <g id="deactivated-center" opacity="0.48"><circle cx="32" cy="32" r="13" fill="none" stroke="none" stroke-width="1.5"/> <g fill="none" stroke="#657169" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 34 H41" /></g></g>
+  <g id="deactivated-inactive-center" opacity="0.35"><circle cx="32" cy="32" r="13" fill="none" stroke="none" stroke-width="1.5"/> <g fill="none" stroke="#657169" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 34 H41" /></g></g>
+</svg>

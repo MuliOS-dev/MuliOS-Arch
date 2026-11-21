@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="64" height="64" viewBox="0 0 64 64">
+  <title>Glow Material close button</title>
+  <g id="active-center" opacity="1"><circle cx="32" cy="32" r="13" fill="none" stroke="none" stroke-width="1.5"/> <g fill="none" stroke="#B9C5BE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M24 24 L40 40 M40 24 L24 40" /></g></g>
+  <g id="inactive-center" opacity="1"><circle cx="32" cy="32" r="13" fill="none" stroke="none" stroke-width="1.5"/> <g fill="none" stroke="#7E8A83" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M24 24 L40 40 M40 24 L24 40" /></g></g>
+  <g id="hover-center" opacity="1"><circle cx="32" cy="32" r="13" fill="#D45D67" stroke="#D45D67" stroke-width="1.5"/> <g fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M24 24 L40 40 M40 24 L24 40" /></g></g>
+  <g id="hover-inactive-center" opacity="1"><circle cx="32" cy="32" r="13" fill="#7E3940" stroke="#A84A54" stroke-width="1.5"/> <g fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M24 24 L40 40 M40 24 L24 40" /></g></g>
+  <g id="pressed-center" opacity="1"><circle cx="32" cy="32" r="13" fill="#B94B56" stroke="#E47A83" stroke-width="1.5"/> <g fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M24 24 L40 40 M40 24 L24 40" /></g></g>
+  <g id="pressed-inactive-center" opacity="1"><circle cx="32" cy="32" r="13" fill="#202723" stroke="#35433A" stroke-width="1.5"/> <g fill="none" stroke="#A8B5AD" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M24 24 L40 40 M40 24 L24 40" /></g></g>
+  <g id="deactivated-center" opacity="0.48"><circle cx="32" cy="32" r="13" fill="none" stroke="none" stroke-width="1.5"/> <g fill="none" stroke="#657169" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M24 24 L40 40 M40 24 L24 40" /></g></g>
+  <g id="deactivated-inactive-center" opacity="0.35"><circle cx="32" cy="32" r="13" fill="none" stroke="none" stroke-width="1.5"/> <g fill="none" stroke="#657169" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M24 24 L40 40 M40 24 L24 40" /></g></g>
+</svg>

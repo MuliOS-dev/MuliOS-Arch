@@ -1,0 +1,22 @@
+[package]
+name = "mulios-taskmanager-ui"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+leptos = { version = "0.7", features = ["csr"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+gloo-timers = { version = "0.3", features = ["futures"] }
+web-sys = { version = "0.3", features = ["Window"] }
+shared = { path = "shared" }
+
+[workspace]
+members = ["src-tauri", "shared"]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1

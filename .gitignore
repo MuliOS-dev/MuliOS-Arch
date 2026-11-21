@@ -2,3 +2,12 @@
 # Local MuliOS binary package repository
 /profile/packages/
 profile/airootfs/opt/taskmanager/node_modules/
+
+# Build, test, and runtime artifacts
+__pycache__/
+*.py[cod]
+*.bak
+*.qcow2
+*.fd
+profile/airootfs/opt/taskmanager/target/
+profile/airootfs/opt/taskmanager/dist/

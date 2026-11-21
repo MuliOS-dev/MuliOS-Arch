@@ -1,0 +1,14 @@
+[package]
+name = "mulios-taskmanager"
+version = "1.0.0"
+edition = "2021"
+description = "MuliOS Task Manager - system monitor for Linux"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+sysinfo = "0.33"
+shared = { path = "../shared" }

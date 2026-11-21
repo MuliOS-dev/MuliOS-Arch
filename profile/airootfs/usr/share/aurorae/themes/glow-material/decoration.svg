@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="64" height="64" viewBox="0 0 64 64">
+  <title>Glow Material window frame</title>
+  <desc>Dark charcoal frame with a restrained emerald active outline and neutral inactive outline.</desc>
+
+  <!-- Active frame: titlebar surface and thin emerald edge. -->
+  <g id="decoration-top">
+    <rect x="0" y="0" width="64" height="40" fill="#171C19"/>
+    <rect x="0" y="0" width="64" height="1.5" fill="#48C780"/>
+    <rect x="0" y="39" width="64" height="1" fill="#35433A"/>
+  </g>
+  <g id="decoration-left">
+    <rect x="0" y="0" width="5" height="64" fill="#171C19"/>
+    <rect x="0" y="0" width="1.5" height="64" fill="#48C780" opacity="0.78"/>
+  </g>
+  <g id="decoration-right">
+    <rect x="59" y="0" width="5" height="64" fill="#171C19"/>
+    <rect x="62.5" y="0" width="1.5" height="64" fill="#48C780" opacity="0.58"/>
+  </g>
+  <g id="decoration-bottom">
+    <rect x="0" y="59" width="64" height="5" fill="#171C19"/>
+    <rect x="0" y="62.5" width="64" height="1.5" fill="#48C780" opacity="0.58"/>
+  </g>
+  <g id="decoration-topleft">
+    <rect x="0" y="0" width="5" height="40" fill="#171C19"/>
+    <rect x="0" y="0" width="5" height="1.5" fill="#48C780"/>
+    <rect x="0" y="0" width="1.5" height="40" fill="#48C780" opacity="0.78"/>
+  </g>
+  <g id="decoration-topright">
+    <rect x="59" y="0" width="5" height="40" fill="#171C19"/>
+    <rect x="59" y="0" width="5" height="1.5" fill="#48C780"/>
+    <rect x="62.5" y="0" width="1.5" height="40" fill="#48C780" opacity="0.58"/>
+  </g>
+  <g id="decoration-bottomleft">
+    <rect x="0" y="59" width="5" height="5" fill="#171C19"/>
+    <rect x="0" y="62.5" width="5" height="1.5" fill="#48C780" opacity="0.58"/>
+    <rect x="0" y="59" width="1.5" height="5" fill="#48C780" opacity="0.78"/>
+  </g>
+  <g id="decoration-bottomright">
+    <rect x="59" y="59" width="5" height="5" fill="#171C19"/>
+    <rect x="59" y="62.5" width="5" height="1.5" fill="#48C780" opacity="0.58"/>
+    <rect x="62.5" y="59" width="1.5" height="5" fill="#48C780" opacity="0.58"/>
+  </g>
+  <g id="decoration-center"><rect x="5" y="40" width="54" height="19" fill="#171C19" opacity="0"/></g>
+
+  <!-- Inactive frame: same geometry, neutral boundary, no green highlight. -->
+  <g id="decoration-inactive-top">
+    <rect x="0" y="0" width="64" height="40" fill="#171C19"/>
+    <rect x="0" y="0" width="64" height="1.5" fill="#35433A"/>
+    <rect x="0" y="39" width="64" height="1" fill="#29322D"/>
+  </g>
+  <g id="decoration-inactive-left">
+    <rect x="0" y="0" width="5" height="64" fill="#171C19"/>
+    <rect x="0" y="0" width="1" height="64" fill="#35433A"/>
+  </g>
+  <g id="decoration-inactive-right">
+    <rect x="59" y="0" width="5" height="64" fill="#171C19"/>
+    <rect x="63" y="0" width="1" height="64" fill="#35433A"/>
+  </g>
+  <g id="decoration-inactive-bottom">
+    <rect x="0" y="59" width="64" height="5" fill="#171C19"/>
+    <rect x="0" y="63" width="64" height="1" fill="#35433A"/>
+  </g>
+  <g id="decoration-inactive-topleft">
+    <rect x="0" y="0" width="5" height="40" fill="#171C19"/>
+    <rect x="0" y="0" width="5" height="1.5" fill="#35433A"/>
+    <rect x="0" y="0" width="1" height="40" fill="#35433A"/>
+  </g>
+  <g id="decoration-inactive-topright">
+    <rect x="59" y="0" width="5" height="40" fill="#171C19"/>
+    <rect x="59" y="0" width="5" height="1.5" fill="#35433A"/>
+    <rect x="63" y="0" width="1" height="40" fill="#35433A"/>
+  </g>
+  <g id="decoration-inactive-bottomleft">
+    <rect x="0" y="59" width="5" height="5" fill="#171C19"/>
+    <rect x="0" y="63" width="5" height="1" fill="#35433A"/>
+    <rect x="0" y="59" width="1" height="5" fill="#35433A"/>
+  </g>
+  <g id="decoration-inactive-bottomright">
+    <rect x="59" y="59" width="5" height="5" fill="#171C19"/>
+    <rect x="59" y="63" width="5" height="1" fill="#35433A"/>
+    <rect x="63" y="59" width="1" height="5" fill="#35433A"/>
+  </g>
+  <g id="decoration-inactive-center"><rect x="5" y="40" width="54" height="19" fill="#171C19" opacity="0"/></g>
+</svg>
