@@ -264,11 +264,12 @@ else
     echo "[OK] Credits launcher falls back when the user's state directory is not writable"
 fi
 
-if [[ -f "$PROFILE/airootfs/opt/taskmanager/src-tauri/tauri.conf.json" &&
-      -f "$PROFILE/airootfs/opt/taskmanager/Cargo.lock" ]]; then
-    echo "[OK] Rust task manager source and locked dependencies are present"
+if [[ -f "$ROOT/taskmanager/src-tauri/tauri.conf.json" &&
+      -f "$ROOT/taskmanager/Cargo.lock" &&
+      ! -e "$PROFILE/airootfs/opt/taskmanager" ]]; then
+    echo "[OK] Rust task manager source is retained outside the ISO filesystem"
 else
-    echo "[FAIL] Rust task manager source or Cargo.lock is missing"
+    echo "[FAIL] Rust task manager source is missing or is still included in the ISO filesystem"
     fail=1
 fi
 
@@ -457,11 +458,12 @@ else
     echo "[OK] Credits launcher falls back when the user's state directory is not writable"
 fi
 
-if [[ -f "$PROFILE/airootfs/opt/taskmanager/src-tauri/tauri.conf.json" &&
-      -f "$PROFILE/airootfs/opt/taskmanager/Cargo.lock" ]]; then
-    echo "[OK] Rust task manager source and locked dependencies are present"
+if [[ -f "$ROOT/taskmanager/src-tauri/tauri.conf.json" &&
+      -f "$ROOT/taskmanager/Cargo.lock" &&
+      ! -e "$PROFILE/airootfs/opt/taskmanager" ]]; then
+    echo "[OK] Rust task manager source is retained outside the ISO filesystem"
 else
-    echo "[FAIL] Rust task manager source or Cargo.lock is missing"
+    echo "[FAIL] Rust task manager source is missing or is still included in the ISO filesystem"
     fail=1
 fi
 
