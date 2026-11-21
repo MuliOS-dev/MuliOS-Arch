@@ -2,9 +2,9 @@
 Operation = Install
 Operation = Upgrade
 Type = Package
-Target = linux-mulios-generic
+Target = linux-mulios
 
 [Action]
 Description = Installing MuliOS kernel into /boot...
 When = PostTransaction
-Exec = /bin/bash -c 'set -e; moddir=$(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d -name "*-mulios-generic" -printf "%f\n" | sort -V | tail -n1); test -n "$moddir"; install -Dm644 "/usr/lib/modules/$moddir/vmlinuz" /boot/vmlinuz-linux-mulios-generic'
+Exec = /bin/bash -c 'set -e; moddir=$(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d -name "*-MULIOS" -printf "%f\n" | sort -V | tail -n1); test -n "$moddir"; install -Dm644 "/usr/lib/modules/$moddir/vmlinuz" /boot/vmlinuz-linux-mulios'

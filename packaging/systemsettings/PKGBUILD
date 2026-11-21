@@ -1,0 +1,24 @@
+# MuliOS System Settings, packaged from the staged KDE System Settings fork.
+pkgname=systemsettings
+pkgver=6.8.3
+pkgrel=2
+pkgdesc='MuliOS Settings, based on KDE System Settings'
+arch=(x86_64)
+url='https://kde.org/plasma-desktop/'
+license=(LGPL-2.0-or-later)
+depends=(
+  glibc plasma-activities kauth kcmutils kcolorscheme kconfig kconfigwidgets
+  kcoreaddons kcrash kdbusaddons ki18n kio kirigami kitemmodels kitemviews
+  kjobwidgets krunner kservice kwidgetsaddons kwindowsystem kxmlgui libstdc++
+  qt6-base qt6-declarative
+)
+
+package() {
+  local stage="${MULIOS_SETTINGS_STAGE:-/home/muliosbuild/mui-settings-stage}"
+  if [[ ! -x "$stage/usr/bin/systemsettings" ]]; then
+    echo "MuliOS Settings stage not found: $stage" >&2
+    return 1
+  fi
+  install -d "$pkgdir/usr"
+  cp -a "$stage/usr/." "$pkgdir/usr/"
+}

@@ -1,7 +1,7 @@
 # Base
 archlinux-keyring
-linux-mulios-generic-headers
-linux-mulios-generic
+linux-mulios-headers
+linux-mulios
 base
 linux-firmware
 amd-ucode
@@ -64,6 +64,7 @@ kdialog
 desktop-file-utils
 kservice
 kde-cli-tools
+systemsettings
 
 # Audio
 pipewire
@@ -101,3 +102,4 @@ qt6-tools
 jq
 unzip
 p7zip
+linux-mulios-profiles
