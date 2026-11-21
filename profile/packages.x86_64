@@ -57,7 +57,7 @@ plasma-desktop
 plasma-workspace
 sddm
 sddm-kcm
-cc
+gcc
 zip
 
 # KDE apps
