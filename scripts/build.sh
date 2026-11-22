@@ -150,6 +150,11 @@ build() {
 
     prepare_version_templates
 
+    # Add a trusted Task Manager shortcut to the live user's desktop.
+    install -D -m 0755 \
+        "$PROFILE/airootfs/usr/share/applications/taskmanager.desktop" \
+        "$PROFILE/airootfs/etc/skel/Desktop/taskmanager.desktop"
+
     # Desktop launchers must be executable for Plasma to treat them as trusted
     # launchable desktop entries in the live session.
     chmod 0755 "$PROFILE/airootfs/usr/local/bin/mulios-installer"
