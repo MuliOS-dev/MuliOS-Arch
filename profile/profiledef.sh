@@ -27,7 +27,9 @@ airootfs_image_tool_options=(
   '-comp' 'xz'
   '-Xbcj' 'x86'
   '-b' '1M'
-  '-Xdict-size' '100%'
+  '-Xdict-size' '50%'
+  '-processors' '12'
+  '-no-duplicates'
 )
 
 bootstrap_tarball_compression=(
@@ -47,6 +49,7 @@ file_permissions=(
   ["/usr/local/bin/livecd-sound"]="0:0:755"
   ["/usr/local/bin/mulios-installer"]="0:0:755"
   ["/usr/local/bin/mulios-taskmanager"]="0:0:755"
+  ["/usr/bin/mulios-taskmanager"]="0:0:755"
   ["/usr/local/bin/mulios-credits"]="0:0:755"
   ["/usr/local/bin/mulios-apply-wallpaper"]="0:0:755"
   ["/usr/local/bin/mulios-wallpaper-autostart"]="0:0:755"

@@ -51,7 +51,7 @@ chown -R liveuser:liveuser /home/liveuser/.config/fastfetch
 if id liveuser >/dev/null 2>&1 && command -v kbuildsycoca6 >/dev/null 2>&1; then
     install -d -o liveuser -g liveuser /home/liveuser/.cache
     rm -f /home/liveuser/.cache/ksycoca6_* 2>/dev/null || true
-    runuser -u liveuser -- env         XDG_MENU_PREFIX=plasma-         kbuildsycoca6 --noincremental --global || true
+    runuser -u liveuser -- env XDG_MENU_PREFIX=plasma- kbuildsycoca6 --noincremental || true
 fi
 
 install -d -m 0750 /etc/sudoers.d
@@ -72,5 +72,11 @@ do
         chmod 0755 "$launcher"
     fi
 done
+
+# The menu entry's TryExec points to the compiled application. Keep its
+# executable bit explicit in the final live filesystem as well.
+if [ -f /usr/bin/mulios-taskmanager ]; then
+    chmod 0755 /usr/bin/mulios-taskmanager
+fi
 
 chmod 0440 /etc/sudoers.d/mulios-installer

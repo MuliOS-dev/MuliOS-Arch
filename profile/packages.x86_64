@@ -19,6 +19,7 @@ syslinux
 grub
 efibootmgr
 
+
 # Filesystems / storage
 btrfs-progs
 e2fsprogs
@@ -68,6 +69,7 @@ desktop-file-utils
 kservice
 kde-cli-tools
 systemsettings
+radeontop
 
 # Audio
 pipewire

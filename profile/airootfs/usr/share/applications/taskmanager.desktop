@@ -8,4 +8,6 @@ TryExec=/usr/bin/mulios-taskmanager
 Icon=utilities-system-monitor
 Terminal=false
 Categories=System;Monitor;
+Keywords=processes;system monitor;resources;
+NoDisplay=false
 StartupNotify=true
