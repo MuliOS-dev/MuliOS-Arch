@@ -43,7 +43,9 @@ class InstallWorker(QThread):
         self.boot_partition = None
         self.root_partition = None
         self.root_device = None
-        self.kernel_package = "linux"
+        self.kernel_package = "linux-mulios"
+        self.kernel_release = None
+        self.kernel_image_name = None
         self.install_started_at = None
         self.install_finished_at = None
 
@@ -1352,7 +1354,7 @@ class InstallWorker(QThread):
                 output.append(locale)
                 locale_found = True
             else:
-                output.append(line)
+                output.append(line.rstrip())
 
         if not locale_found:
             raise InstallError(
@@ -2470,162 +2472,67 @@ class InstallWorker(QThread):
     # ------------------------------------------------------------------
 
     def install_kernel_image(self):
-        # MuliOS ships its own kernel in the ISO. The live kernel is outside
-        # the airootfs, so rsync cannot copy it into the installed /boot.
-        # The previous installer selected the generic Arch "linux" package;
-        # in offline installs that package is skipped, leaving an initramfs
-        # without its matching kernel. Install the bundled MuliOS kernel
-        # directly from the live ISO instead.
-        profile = str(self.state.get("profile", "generic")).strip().lower()
-        kernel_suffixes = {
-            "generic": "generic",
-            "gaming": "game",
-            "ai": "ai",
-            "code": "code",
-            "privacy": "privacy",
-            "server": "server",
-            "study": "study",
-        }
-        kernel_suffix = kernel_suffixes.get(profile)
-        if kernel_suffix is None:
-            raise InstallError(f"Unsupported installation profile: {profile}")
+        modules_dir = Path("/usr/lib/modules")
+        running_release = ""
+        try:
+            running_release = subprocess.run(
+                ["uname", "-r"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+        except (OSError, subprocess.CalledProcessError):
+            pass
 
-        self.kernel_package = f"linux-mulios-{kernel_suffix}"
-        if profile != "generic":
-            self.log(
-                f"{profile.capitalize()} profile selected; deferring kernel "
-                f"installation to MUpdate ({self.kernel_package}) instead of "
-                "copying the live ISO generic kernel."
-            )
-            return
-
-        kernel = str(
-            self.state.get(
-                "kernel",
-                "linux-mulios-generic",
-            )
-        ).strip().lower()
-
-        allowed = {
-            "linux": "linux-mulios-generic",
-            "linux-mulios-generic": "linux-mulios-generic",
-        }
-
-        package = allowed.get(kernel)
-
-        if package is None:
-            raise InstallError(
-                f"Unsupported kernel selection: {kernel}"
-            )
-
-        self.kernel_package = package
-        kernel_name = "vmlinuz-linux-mulios-generic"
-        kernel_destination = self.target / "boot" / kernel_name
-
-        # Depending on how the ISO was booted, the media mount can be
-        # exposed below bootmnt (sometimes through a symlink) or the kernel
-        # package image may be available directly in the live root filesystem.
-        # Check the known media paths first, then the package-owned kernel image.
-        candidates = [
-            Path("/run/archiso/boot/x86_64") / kernel_name,
-            Path("/run/archiso/boot/amd64") / kernel_name,
-            Path("/run/archiso/bootmnt/arch/boot/x86_64") / kernel_name,
-            Path("/run/archiso/bootmnt/arch/boot/amd64") / kernel_name,
-            Path("/run/live/boot/x86_64") / kernel_name,
-            Path("/run/live/boot/amd64") / kernel_name,
-            Path("/boot") / kernel_name,
-        ]
-
-        source = next(
-            (path for path in candidates if path.is_file()),
-            None,
-        )
-
-        if source is None:
-            # The MuliOS PKGBUILD installs the bootable image as
-            # /usr/lib/modules/<kernel-release>/vmlinuz in the live rootfs.
-            # Prefer the directory matching the running live kernel.
-            running_release = ""
-            try:
-                running_release = subprocess.run(
-                    ["uname", "-r"],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                ).stdout.strip()
-            except (OSError, subprocess.CalledProcessError):
-                pass
-
-            module_roots = [Path("/usr/lib/modules") / running_release / "vmlinuz"]
-            modules_dir = Path("/usr/lib/modules")
-            if modules_dir.is_dir():
-                module_roots.extend(
-                    directory / "vmlinuz"
-                    for directory in sorted(modules_dir.iterdir())
-                    if directory.is_dir()
-                    and "mulios-generic" in directory.name
-                    and directory.name != running_release
-                )
-
-            source = next(
-                (path for path in module_roots if path.is_file()),
-                None,
-            )
-
-        if source is None:
-            # Some live-media layouts expose the ISO tree through a mount
-            # that pathlib's recursive glob may not follow. Try explicit
-            # mount roots, then search the live-media trees for the exact name.
-            for root in (
-                Path("/run/archiso/bootmnt"),
-                Path("/run/archiso"),
-                Path("/run/live"),
-            ):
-                if not root.is_dir():
+        running_kernel = modules_dir / running_release / "vmlinuz"
+        module_images = []
+        if modules_dir.is_dir():
+            for module_dir in modules_dir.iterdir():
+                image = module_dir / "vmlinuz"
+                pkgbase_file = module_dir / "pkgbase"
+                if not module_dir.is_dir() or not image.is_file() or not os.access(image, os.R_OK):
                     continue
                 try:
-                    matches = list(root.glob("**/" + kernel_name))
+                    package = pkgbase_file.read_text(encoding="utf-8").strip()
                 except OSError:
-                    matches = []
-                if matches:
-                    source = matches[0]
-                    break
+                    continue
+                if package.startswith("linux-mulios"):
+                    module_images.append((module_dir.name, package, image))
 
-        if source is None:
-            searched = [
-                str(path) for path in candidates
-            ] + [
-                "/usr/lib/modules/<release>/vmlinuz",
-                "/run/archiso/bootmnt/**/" + kernel_name,
-                "/run/archiso/**/" + kernel_name,
-                "/run/live/**/" + kernel_name,
-            ]
-            self.log("Kernel search paths checked: " + "; ".join(searched))
-            module_dirs = (
-                sorted(path.name for path in Path("/usr/lib/modules").iterdir() if path.is_dir())
-                if Path("/usr/lib/modules").is_dir()
+        module_images.sort(key=lambda item: item[0] != running_release)
+        selected = next(
+            (item for item in module_images if item[2] == running_kernel),
+            module_images[0] if module_images else None,
+        )
+        if selected is None:
+            available = (
+                sorted(path.name for path in modules_dir.iterdir() if path.is_dir())
+                if modules_dir.is_dir()
                 else []
             )
-            self.log("Available module directories: " + (", ".join(module_dirs) or "(none)"))
+            self.log("Available module directories: " + (", ".join(available) or "(none)"))
             raise InstallError(
-                "Could not locate the bundled MuliOS kernel "
-                "vmlinuz-linux-mulios-generic. Checked the ISO boot paths "
-                "and /usr/lib/modules/*/vmlinuz; see the install log for "
-                "the exact search paths and available module directories."
+                "Could not locate a readable MuliOS kernel image and matching "
+                "module package metadata under /usr/lib/modules/*/vmlinuz."
             )
 
+        self.kernel_release, self.kernel_package, source = selected
+        self.kernel_image_name = f"vmlinuz-{self.kernel_package}"
+        kernel_destination = self.target / "boot" / self.kernel_image_name
         self.log(
-            f"Installing bundled MuliOS kernel from {source}"
+            f"Detected MuliOS kernel package {self.kernel_package}, "
+            f"release {self.kernel_release}, image {source}."
         )
-        kernel_destination.parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
+        kernel_destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, kernel_destination)
         os.chmod(kernel_destination, 0o644)
-        if not kernel_destination.is_file() or kernel_destination.stat().st_size == 0:
+        if (
+            not kernel_destination.is_file()
+            or kernel_destination.stat().st_size == 0
+            or not os.access(kernel_destination, os.R_OK)
+        ):
             raise InstallError(
-                "The bundled MuliOS kernel was not installed correctly at "
+                f"The bundled MuliOS kernel could not be installed at "
                 f"{kernel_destination}; refusing to copy the live airootfs."
             )
         self.log(
@@ -2648,31 +2555,15 @@ class InstallWorker(QThread):
         self.pacman_install(packages)
 
         profile = str(self.state.get("profile", "generic")).strip().lower()
-        if profile == "generic":
-            self.log("Bundled generic MuliOS kernel installed successfully.")
-        else:
-            self.log(
-                f"{profile.capitalize()} kernel will be supplied by its MUpdate profile."
-            )
+        self.log(
+            f"Universal MuliOS kernel ({self.kernel_package}, release "
+            f"{self.kernel_release}) installed for the {profile} profile."
+        )
 
     def kernel_paths(self):
-        profile = str(self.state.get("profile", "generic")).strip().lower()
-        suffix = {
-            "generic": "generic",
-            "gaming": "game",
-            "ai": "ai",
-            "code": "code",
-            "privacy": "privacy",
-            "server": "server",
-            "study": "study",
-        }.get(profile)
-        if suffix is None:
-            raise InstallError(f"Unsupported installation profile: {profile}")
-        kernel = f"linux-mulios-{suffix}"
-        return (
-            f"vmlinuz-{kernel}",
-            f"initramfs-{kernel}.img",
-        )
+        package = self.kernel_package or "linux-mulios"
+        kernel_name = self.kernel_image_name or f"vmlinuz-{package}"
+        return kernel_name, f"initramfs-{package}.img"
 
     def configure_installed_mkinitcpio(self):
         config_dir = self.target / "etc/mkinitcpio.conf.d"
@@ -2696,7 +2587,6 @@ class InstallWorker(QThread):
             "filesystems",
             "fsck",
         ]
-
         if self.encryption_enabled():
             hooks.insert(-2, "encrypt")
 
@@ -2714,37 +2604,40 @@ class InstallWorker(QThread):
             ]),
         )
 
-        preset = self.target / "etc/mkinitcpio.d/linux-mulios-generic.preset"
-        profile = str(self.state.get("profile", "generic")).strip().lower()
-        if profile != "generic":
-            if preset.exists() or preset.is_symlink():
-                preset.unlink()
-            self.log(
-                f"{profile.capitalize()} profile selected; removed the live ISO "
-                "generic mkinitcpio preset so it cannot become the installed boot target."
-            )
-        else:
-            self.write_file(
-                preset,
-                """# mkinitcpio preset file for linux-mulios-generic
+        preset_dir = self.target / "etc/mkinitcpio.d"
+        preset_dir.mkdir(parents=True, exist_ok=True)
+        for stale_preset in preset_dir.glob("*.preset"):
+            if stale_preset.is_file() or stale_preset.is_symlink():
+                stale_preset.unlink()
+                self.log(f"Removed inherited mkinitcpio preset: {stale_preset.name}")
+
+        kernel_name, initramfs_name = self.kernel_paths()
+        kernel_image = self.target / "boot" / kernel_name
+        if not kernel_image.is_file() or kernel_image.stat().st_size == 0:
+            raise InstallError(f"The detected kernel image is missing: {kernel_image}")
+
+        preset = preset_dir / f"{self.kernel_package}.preset"
+        self.write_file(
+            preset,
+            f"""# mkinitcpio preset generated for the detected MuliOS kernel
 
 ALL_config="/etc/mkinitcpio.conf"
-ALL_kver="/usr/lib/modules/7.2.3-mulios-generic/vmlinuz"
+ALL_kver="/boot/{kernel_name}"
 
 PRESETS=('default')
 
-default_image="/boot/initramfs-linux-mulios-generic.img"
+default_image="/boot/{initramfs_name}"
 """,
-            )
-
-        self.log(
-            "Replaced ArchISO mkinitcpio configuration with the installed MuliOS configuration."
-        )
-        self.log(
-            "Installed-system mkinitcpio hooks: " + " ".join(hooks)
         )
 
-    # ------------------------------------------------------------------
+        self.log(
+            f"Generated {preset.name} for kernel release {self.kernel_release}."
+        )
+        self.log(
+            "Replaced live-ISO mkinitcpio configuration with the installed-system configuration."
+        )
+        self.log("Installed-system mkinitcpio hooks: " + " ".join(hooks))
+
     # Desktop
     # ------------------------------------------------------------------
 
@@ -3681,39 +3574,31 @@ default_image="/boot/initramfs-linux-mulios-generic.img"
         self.log("GRUB fallback loader and configuration verified.")
 
     def verify_selected_kernel(self):
-        profile = str(self.state.get("profile", "generic")).strip().lower()
         kernel_name, initramfs_name = self.kernel_paths()
         kernel = self.target / "boot" / kernel_name
         initramfs = self.target / "boot" / initramfs_name
+        modules = self.target / "usr/lib/modules" / str(self.kernel_release or "")
 
-        if not kernel.is_file() or kernel.stat().st_size == 0:
-            raise InstallError(
-                f"{profile.capitalize()} profile did not install "
-                f"/boot/{kernel_name}."
-            )
-        if not initramfs.is_file() or initramfs.stat().st_size == 0:
-            raise InstallError(
-                f"{profile.capitalize()} profile did not generate "
-                f"/boot/{initramfs_name}."
-            )
-
-        if profile != "generic":
-            suffix = self.kernel_package.removeprefix("linux-mulios-")
-            modules_root = self.target / "usr/lib/modules"
-            module_dirs = (
-                [path for path in modules_root.glob(f"*-mulios-{suffix}") if path.is_dir()]
-                if modules_root.is_dir()
-                else []
-            )
-            if not module_dirs:
+        for path, description in (
+            (kernel, "kernel image"),
+            (initramfs, "initramfs"),
+            (modules / "vmlinuz", "matching kernel module image"),
+            (modules / "pkgbase", "kernel package metadata"),
+        ):
+            if not path.is_file() or path.stat().st_size == 0:
                 raise InstallError(
-                    f"{profile.capitalize()} profile completed without installing "
-                    f"the {self.kernel_package} module directory."
+                    f"Installed MuliOS {description} is missing or empty: {path}"
                 )
 
+        package = (modules / "pkgbase").read_text(encoding="utf-8").strip()
+        if package != self.kernel_package:
+            raise InstallError(
+                f"Kernel package mismatch: expected {self.kernel_package}, found {package}."
+            )
+
         self.log(
-            f"Verified {profile} profile kernel, module directory (where applicable), "
-            "and initramfs. GRUB will be generated only after this verification."
+            f"Verified kernel {self.kernel_release} ({self.kernel_package}), "
+            f"{kernel}, and {initramfs}."
         )
 
     def configure_bootloader(self):

@@ -352,12 +352,14 @@ else
 fi
 
 KERNEL_WORKER="$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"
-if ! grep -q 'Path("/usr/lib/modules") / running_release / "vmlinuz"' "$KERNEL_WORKER" ||
-   ! grep -q 'Kernel search paths checked:' "$KERNEL_WORKER"; then
-    echo "[FAIL] Installer kernel discovery fallback or diagnostics are missing"
+if ! grep -Fq 'module_dir / "pkgbase"' "$KERNEL_WORKER" ||
+   ! grep -Fq 'package.startswith("linux-mulios")' "$KERNEL_WORKER" ||
+   ! grep -Fq 'self.kernel_image_name = f"vmlinuz-{self.kernel_package}"' "$KERNEL_WORKER" ||
+   ! grep -Fq 'ALL_kver="/boot/{kernel_name}"' "$KERNEL_WORKER"; then
+    echo "[FAIL] Installer does not detect the MuliOS kernel release/package dynamically"
     fail=1
 else
-    echo "[OK] Installer checks the bundled kernel package image and logs search paths"
+    echo "[OK] Installer derives kernel image, release, and mkinitcpio preset from package metadata"
 fi
 
 if ! grep -q 'normalize_version_templates' "$ROOT/scripts/build.sh" ||
@@ -546,12 +548,14 @@ else
 fi
 
 KERNEL_WORKER="$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"
-if ! grep -q 'Path("/usr/lib/modules") / running_release / "vmlinuz"' "$KERNEL_WORKER" ||
-   ! grep -q 'Kernel search paths checked:' "$KERNEL_WORKER"; then
-    echo "[FAIL] Installer kernel discovery fallback or diagnostics are missing"
+if ! grep -Fq 'module_dir / "pkgbase"' "$KERNEL_WORKER" ||
+   ! grep -Fq 'package.startswith("linux-mulios")' "$KERNEL_WORKER" ||
+   ! grep -Fq 'self.kernel_image_name = f"vmlinuz-{self.kernel_package}"' "$KERNEL_WORKER" ||
+   ! grep -Fq 'ALL_kver="/boot/{kernel_name}"' "$KERNEL_WORKER"; then
+    echo "[FAIL] Installer does not detect the MuliOS kernel release/package dynamically"
     fail=1
 else
-    echo "[OK] Installer checks the bundled kernel package image and logs search paths"
+    echo "[OK] Installer derives kernel image, release, and mkinitcpio preset from package metadata"
 fi
 
 if ! grep -q 'normalize_version_templates' "$ROOT/scripts/build.sh" ||
@@ -664,20 +668,13 @@ else
 fi
 
 KERNEL_WORKER="$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"
-for profile_kernel in generic game ai code privacy server study; do
-    if ! grep -Fq "\"$profile_kernel\"" "$KERNEL_WORKER"; then
-        echo "[FAIL] Installer kernel mapping is missing: $profile_kernel"
-        fail=1
-    fi
-done
-if ! grep -Fq 'profile != "generic"' "$KERNEL_WORKER" ||
+if ! grep -Fq 'package.startswith("linux-mulios")' "$KERNEL_WORKER" ||
    ! grep -Fq 'def verify_selected_kernel' "$KERNEL_WORKER" ||
-   ! grep -Fq 'self.verify_selected_kernel()' "$KERNEL_WORKER" ||
-   ! grep -Fq 'self.kernel_package = f"linux-mulios-{kernel_suffix}"' "$KERNEL_WORKER"; then
-    echo "[FAIL] Every non-generic profile must install and verify its own MuliOS kernel"
+   ! grep -Fq 'self.verify_selected_kernel()' "$KERNEL_WORKER"; then
+    echo "[FAIL] Installer must detect and verify the universal MuliOS kernel for every profile"
     fail=1
 else
-    echo "[OK] All profiles map to and verify their selected MuliOS kernel"
+    echo "[OK] All profiles use and verify the detected universal MuliOS kernel"
 fi
 
 if ! python - "$KERNEL_WORKER" <<'PY'
