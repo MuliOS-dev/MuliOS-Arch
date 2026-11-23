@@ -622,33 +622,7 @@ do
 done
 
 KERNEL_WORKER="$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"
-if ! python - "$KERNEL_WORKER" <<'PY'
-import ast
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-tree = ast.parse(path.read_text(encoding="utf-8"))
-install = next((n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "run"), None)
-if install is None:
-    raise SystemExit("run() method not found")
-calls = []
-for node in ast.walk(install):
-    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-        if isinstance(node.func.value, ast.Name) and node.func.value.id == "self":
-            calls.append((node.func.attr, node.lineno))
-positions = {name: next((line for call, line in calls if call == name), None) for name in ("install_kernel_image", "copy_system", "configure_kernel")}
-if any(value is None for value in positions.values()) or not (positions["install_kernel_image"] < positions["copy_system"] < positions["configure_kernel"]):
-    raise SystemExit(f"Incorrect install order: {positions}")
-kernel_method = next((n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "install_kernel_image"), None)
-if kernel_method is None:
-    raise SystemExit("install_kernel_image() method not found")
-method_source = ast.get_source_segment(path.read_text(encoding="utf-8"), kernel_method) or ""
-if "kernel_destination.is_file()" not in method_source or "refusing to copy the live airootfs" not in method_source:
-    raise SystemExit("Kernel image must be verified before the airootfs copy can proceed")
-print("Kernel image installation is ordered first and verified before airootfs copy.")
-PY
-then
+if ! python3 "$ROOT/scripts/check-installer-order.py" "$KERNEL_WORKER" install; then
     echo "[FAIL] Installer must install the kernel image before copying the live airootfs"
     fail=1
 else
@@ -674,29 +648,7 @@ else
     echo "[OK] All profiles use and verify the detected universal MuliOS kernel"
 fi
 
-if ! python - "$KERNEL_WORKER" <<'PY'
-import ast
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-source = path.read_text(encoding="utf-8")
-tree = ast.parse(source)
-run = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "run")
-calls = []
-for node in ast.walk(run):
-    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-        if isinstance(node.func.value, ast.Name) and node.func.value.id == "self":
-            calls.append((node.func.attr, node.lineno))
-positions = {name: next((line for call, line in calls if call == name), None)
-             for name in ("configure_mupdate", "generate_initramfs", "configure_bootloader")}
-if any(value is None for value in positions.values()) or not (
-    positions["configure_mupdate"] < positions["generate_initramfs"] < positions["configure_bootloader"]
-):
-    raise SystemExit(f"Profile kernel/initramfs/GRUB order is invalid: {positions}")
-print("Profile installation precedes initramfs generation and GRUB generation.")
-PY
-then
+if ! python3 "$ROOT/scripts/check-installer-order.py" "$KERNEL_WORKER" profile; then
     echo "[FAIL] Profile kernel must be installed before initramfs and GRUB generation"
     fail=1
 else
@@ -1045,33 +997,7 @@ do
 done
 
 KERNEL_WORKER="$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"
-if ! python - "$KERNEL_WORKER" <<'PY'
-import ast
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-tree = ast.parse(path.read_text(encoding="utf-8"))
-install = next((n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "run"), None)
-if install is None:
-    raise SystemExit("run() method not found")
-calls = []
-for node in ast.walk(install):
-    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-        if isinstance(node.func.value, ast.Name) and node.func.value.id == "self":
-            calls.append((node.func.attr, node.lineno))
-positions = {name: next((line for call, line in calls if call == name), None) for name in ("install_kernel_image", "copy_system", "configure_kernel")}
-if any(value is None for value in positions.values()) or not (positions["install_kernel_image"] < positions["copy_system"] < positions["configure_kernel"]):
-    raise SystemExit(f"Incorrect install order: {positions}")
-kernel_method = next((n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "install_kernel_image"), None)
-if kernel_method is None:
-    raise SystemExit("install_kernel_image() method not found")
-method_source = ast.get_source_segment(path.read_text(encoding="utf-8"), kernel_method) or ""
-if "kernel_destination.is_file()" not in method_source or "refusing to copy the live airootfs" not in method_source:
-    raise SystemExit("Kernel image must be verified before the airootfs copy can proceed")
-print("Kernel image installation is ordered first and verified before airootfs copy.")
-PY
-then
+if ! python3 "$ROOT/scripts/check-installer-order.py" "$KERNEL_WORKER" install; then
     echo "[FAIL] Installer must install the kernel image before copying the live airootfs"
     fail=1
 else
@@ -1097,29 +1023,7 @@ else
     echo "[OK] All profiles use and verify the detected universal MuliOS kernel"
 fi
 
-if ! python - "$KERNEL_WORKER" <<'PY'
-import ast
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-source = path.read_text(encoding="utf-8")
-tree = ast.parse(source)
-run = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "run")
-calls = []
-for node in ast.walk(run):
-    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-        if isinstance(node.func.value, ast.Name) and node.func.value.id == "self":
-            calls.append((node.func.attr, node.lineno))
-positions = {name: next((line for call, line in calls if call == name), None)
-             for name in ("configure_mupdate", "generate_initramfs", "configure_bootloader")}
-if any(value is None for value in positions.values()) or not (
-    positions["configure_mupdate"] < positions["generate_initramfs"] < positions["configure_bootloader"]
-):
-    raise SystemExit(f"Profile kernel/initramfs/GRUB order is invalid: {positions}")
-print("Profile installation precedes initramfs generation and GRUB generation.")
-PY
-then
+if ! python3 "$ROOT/scripts/check-installer-order.py" "$KERNEL_WORKER" profile; then
     echo "[FAIL] Profile kernel must be installed before initramfs and GRUB generation"
     fail=1
 else
