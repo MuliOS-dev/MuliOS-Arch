@@ -7,7 +7,6 @@ mkdir -p "$REPO_DIR"
 
 command -v pacman >/dev/null || { printf 'ERROR: pacman is required.\n' >&2; exit 1; }
 command -v repo-add >/dev/null || { printf 'ERROR: repo-add is required.\n' >&2; exit 1; }
-command -v vercmp >/dev/null || { printf 'ERROR: vercmp is required.\n' >&2; exit 1; }
 
 python3 - "$REPO_DIR" <<'PY'
 import subprocess
