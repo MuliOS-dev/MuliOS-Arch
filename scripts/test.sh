@@ -363,8 +363,10 @@ else
 fi
 
 if ! grep -q 'normalize_version_templates' "$ROOT/scripts/build.sh" ||
-   ! grep -q 'trap finish EXIT' "$ROOT/scripts/build.sh" ||
-   ! grep -A3 '^finish()' "$ROOT/scripts/build.sh" | grep -q 'restore_version_templates'; then
+   { ! grep -q 'trap finish EXIT' "$ROOT/scripts/build.sh" &&
+     ! grep -q 'trap restore_version_templates EXIT' "$ROOT/scripts/build.sh"; } ||
+   { grep -q 'trap finish EXIT' "$ROOT/scripts/build.sh" &&
+     ! grep -A3 '^finish()' "$ROOT/scripts/build.sh" | grep -q 'restore_version_templates'; }; then
     echo "[FAIL] Build does not normalize and restore boot-menu version templates"
     fail=1
 else
