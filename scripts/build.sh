@@ -59,13 +59,32 @@ setup() {
     export MULIOS_THEME_VARIANT="${MULIOS_THEME_VARIANT:-rounded}"
     export OUTPUT="$WORK_DIR/output"
     export TEMP="$WORK_DIR/temp"
+    export PACKAGE_REPO="$PROFILE/packages"
+    export BUILD_DIR="$WORK_DIR/.build"
+    export PACMAN_CONFIG="$BUILD_DIR/pacman.conf"
 
     echo "[INFO]: Checking build directories"
 
-    mkdir -p "$OUTPUT" "$TEMP"
+    mkdir -p "$OUTPUT" "$TEMP" "$BUILD_DIR"
 }
 
 setup
+
+echo "[INFO]: refreshing local MuliOS package database"
+bash "$WORK_DIR/scripts/refresh-local-repo.sh" "$PACKAGE_REPO"
+
+PACKAGE_REPO="$PACKAGE_REPO" PACMAN_CONFIG="$PACMAN_CONFIG" SOURCE_CONFIG="$PROFILE/pacman.conf" python3 - <<'PY'
+import os
+from pathlib import Path
+
+source = Path(os.environ["SOURCE_CONFIG"]).read_text()
+repo = Path(os.environ["PACKAGE_REPO"]).resolve().as_posix()
+if "@MULIOS_PACKAGE_REPO@" not in source:
+    raise SystemExit("profile/pacman.conf is missing @MULIOS_PACKAGE_REPO@")
+Path(os.environ["PACMAN_CONFIG"]).write_text(
+    source.replace("@MULIOS_PACKAGE_REPO@", f"file://{repo}")
+)
+PY
 
 VERSION_TEMPLATE_FILES=(
     "$PROFILE/grub/grub.cfg"
@@ -184,7 +203,7 @@ IMAGE_VERSION="$mulios_version"
 MULIOS_RELEASE_BRANCH="$release_branch"
 EOF
 
-    sudo mkarchiso -v -w "$TEMP" -o "$OUTPUT" "$PROFILE"
+    sudo mkarchiso -v -C "$PACMAN_CONFIG" -w "$TEMP" -o "$OUTPUT" "$PROFILE"
 }
 
 build
