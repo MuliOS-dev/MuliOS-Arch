@@ -27,9 +27,8 @@ airootfs_image_tool_options=(
   '-comp' 'xz'
   '-Xbcj' 'x86'
   '-b' '1M'
-  '-Xdict-size' '50%'
+  '-Xdict-size' '100%'
   '-processors' '12'
-  '-no-duplicates'
 )
 
 bootstrap_tarball_compression=(
