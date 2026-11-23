@@ -406,9 +406,11 @@ else
     echo "[OK] Offline desktop effect fallback exists"
 fi
 
-if ! grep -Fq 'pacman_conf="${MULIOS_PACMAN_CONF:-pacman.conf}"' "$PROFILE/profiledef.sh" ||
-   ! grep -Fq 'sudo env MULIOS_PACMAN_CONF="$PACMAN_CONFIG" mkarchiso' "$ROOT/scripts/build.sh" ||
-   ! grep -Fq 'source.replace("@MULIOS_PACKAGE_REPO@", f"file://{repo}")' "$ROOT/scripts/build.sh"; then
+if ! grep -Fq 'pacman_conf="pacman.conf"' "$PROFILE/profiledef.sh" ||
+   ! grep -Fq 'sudo mkarchiso -v -C "$PACMAN_CONFIG"' "$ROOT/scripts/build.sh" ||
+   ! grep -Fq 'source.replace("@MULIOS_PACKAGE_REPO@", f"file://{repo}")' "$ROOT/scripts/build.sh" ||
+   ! grep -Fq "Server = file://$(realpath "$ROOT/profile/packages")" "$ROOT/.build/pacman.conf" ||
+   grep -Fq '@MULIOS_PACKAGE_REPO@' "$ROOT/.build/pacman.conf"; then
     echo "[FAIL] mkarchiso does not receive the generated local package repository configuration"
     fail=1
 else

@@ -86,6 +86,15 @@ Path(os.environ["PACMAN_CONFIG"]).write_text(
 )
 PY
 
+if grep -Fq '@MULIOS_PACKAGE_REPO@' "$PACMAN_CONFIG"; then
+    echo "[ERROR]: unresolved local package repository placeholder in $PACMAN_CONFIG" >&2
+    exit 1
+fi
+if ! grep -Fq "Server = file://$(realpath "$PACKAGE_REPO")" "$PACMAN_CONFIG"; then
+    echo "[ERROR]: generated pacman.conf does not point to $PACKAGE_REPO" >&2
+    exit 1
+fi
+
 VERSION_TEMPLATE_FILES=(
     "$PROFILE/grub/grub.cfg"
     "$PROFILE/efiboot/loader/entries/01-archiso-linux.conf"
@@ -203,7 +212,7 @@ IMAGE_VERSION="$mulios_version"
 MULIOS_RELEASE_BRANCH="$release_branch"
 EOF
 
-    sudo env MULIOS_PACMAN_CONF="$PACMAN_CONFIG" mkarchiso -v -w "$TEMP" -o "$OUTPUT" "$PROFILE"
+    sudo mkarchiso -v -C "$PACMAN_CONFIG" -w "$TEMP" -o "$OUTPUT" "$PROFILE"
 }
 
 build
