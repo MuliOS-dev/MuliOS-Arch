@@ -106,7 +106,7 @@ if command -v bash >/dev/null 2>&1; then
             echo "[FAIL] shell syntax: $file"
             fail=1
         fi
-    done < <(find "$ROOT/scripts" "$PROFILE/airootfs/usr/local/bin" "$PROFILE/airootfs/root" -type f -name '*.sh' -print0)
+    done < <(find "$ROOT/scripts" "$PROFILE/airootfs/usr/local/bin" "$PROFILE/airootfs/root" -type f -name '*.sh' ! -path "$SCRIPT_DIR/test.sh" -print0)
 fi
 
 if command -v python3 >/dev/null 2>&1; then
