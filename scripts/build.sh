@@ -20,6 +20,7 @@ mkdir -p "$LOG_DIR"
 touch "$LOG_FILE"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
+STEP=0
 CURRENT_STEP="initialization"
 VERSION_TEMPLATE_BACKUP_DIR=""
 VERSION_TEMPLATE_FILES=()
@@ -32,7 +33,12 @@ log() {
 info()    { log "$C_CYAN" INFO "$*"; }
 success() { log "$C_GREEN" OK "$*"; }
 error()   { log "$C_RED" ERROR "$*" >&2; }
-
+step() {
+    STEP=$((STEP + 1))
+    CURRENT_STEP="$*"
+    printf '\n%s%s[%02d] %s%s\n' "$C_BOLD" "$C_BLUE" "$STEP" "$CURRENT_STEP" "$C_RESET"
+    printf '%s────────────────────────────────────────────────────────%s\n' "$C_DIM" "$C_RESET"
+}
 run() {
     info "Running: $*"
     "$@"
@@ -104,7 +110,7 @@ VERSION_TEMPLATE_FILES=(
     "$ROOT/profile/syslinux/archiso_sys-linux.cfg"
 )
 
-CURRENT_STEP="Install build dependencies"; info "Install build dependencies"
+step "Install build dependencies"
 run sudo pacman -S --needed --noconfirm \
     archiso git base-devel squashfs-tools mtools dosfstools libisoburn curl \
     cmake extra-cmake-modules qt6-tools vulkan-headers kwin
@@ -117,10 +123,10 @@ if [[ "${MULIOS_THEME_VARIANT:-rounded}" == "liquid-glass" ]]; then
 fi
 success "Build dependencies are ready."
 
-CURRENT_STEP="Refresh local MuliOS package repository"; info "Refresh local MuliOS package repository"
+step "Refresh local MuliOS package repository"
 run bash "$ROOT/scripts/refresh-local-repo.sh" "$PACKAGE_REPO"
 
-CURRENT_STEP="Prepare build configuration"; info "Prepare build configuration"
+step "Prepare build configuration"
 printf '%s\n' "$MULIOS_VERSION" > "$ROOT/profile/version"
 PACMAN_CONFIG="$BUILD_DIR/pacman.conf"
 PACKAGE_REPO="$PACKAGE_REPO" PACMAN_CONFIG="$PACMAN_CONFIG" SOURCE_CONFIG="$ROOT/profile/pacman.conf" python3 - <<'PY'
@@ -138,7 +144,7 @@ PY
 success "Version: $MULIOS_VERSION"
 success "Pacman config: $PACMAN_CONFIG"
 
-CURRENT_STEP="Prepare desktop theme and effects"; info "Prepare desktop theme and effects"
+step "Prepare desktop theme and effects"
 THEME_BUILDER="${MULIOS_THEME_BUILDER:-$ROOT/scripts/install-rounded-theme.sh}"
 [[ -f "$THEME_BUILDER" ]] || { error "Theme installer not found: $THEME_BUILDER"; exit 1; }
 run bash "$THEME_BUILDER"
@@ -148,7 +154,7 @@ else
     run bash "$ROOT/scripts/build-kwin-effects.sh"
 fi
 
-CURRENT_STEP="Validate live image assets"; info "Validate live image assets"
+step "Validate live image assets"
 TASKMANAGER="$ROOT/profile/airootfs/usr/bin/mulios-taskmanager"
 [[ -x "$TASKMANAGER" ]] || { error "Rust Task Manager is missing or not executable: $TASKMANAGER"; exit 1; }
 install -D -m 0755 "$ROOT/profile/airootfs/usr/share/applications/taskmanager.desktop" \
@@ -165,11 +171,11 @@ chmod 0755 \
     "$ROOT/profile/airootfs/usr/share/applications/mulios-installer.desktop"
 success "Required launchers and binaries are present."
 
-CURRENT_STEP="Run project checks"; info "Run project checks"
+step "Run project checks"
 run env MULIOS_ROOT="$ROOT" bash "$ROOT/scripts/test.sh"
 success "Project checks passed."
 
-CURRENT_STEP="Apply release metadata"; info "Apply release metadata"
+step "Apply release metadata"
 normalize_version_templates() {
     local file
     for file in "${VERSION_TEMPLATE_FILES[@]}"; do
@@ -200,9 +206,9 @@ MULIOS_RELEASE_BRANCH="$RELEASE_BRANCH"
 EOF
 success "Release metadata prepared."
 
-CURRENT_STEP="Build bootable ISO"; info "Build bootable ISO"
+step "Build bootable ISO"
 run sudo mkarchiso -v -C "$PACMAN_CONFIG" -w "$TEMP" -o "$OUTPUT" "$ROOT/profile"
 
-CURRENT_STEP="Publish build artifacts"; info "Publish build artifacts"
+step "Publish build artifacts"
 find "$OUTPUT" -maxdepth 1 -type f -name '*.iso' -printf '%f  %k KB\n'
 success "Build artifacts are in $OUTPUT"
