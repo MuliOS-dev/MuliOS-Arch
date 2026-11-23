@@ -7,18 +7,17 @@ mkdir -p "$REPO_DIR"
 
 command -v pacman >/dev/null || { printf 'ERROR: pacman is required.\n' >&2; exit 1; }
 command -v repo-add >/dev/null || { printf 'ERROR: repo-add is required.\n' >&2; exit 1; }
+command -v vercmp >/dev/null || { printf 'ERROR: vercmp is required.\n' >&2; exit 1; }
 
 python3 - "$REPO_DIR" <<'PY'
-import glob
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 repo = Path(sys.argv[1]).resolve()
 packages = sorted(
-    Path(p) for p in glob.glob(str(repo / "*.pkg.tar.*"))
-    if not p.name.endswith(".sig")
+    package for package in repo.glob("*.pkg.tar.*")
+    if not package.name.endswith(".sig")
 )
 if not packages:
     raise SystemExit(f"ERROR: no built packages found in {repo}")
