@@ -4,6 +4,10 @@
 profile/airootfs/opt/taskmanager/node_modules/
 
 # Build, test, and runtime artifacts
+/.build/
+/logs/
+/output/
+/temp/
 __pycache__/
 *.py[cod]
 *.bak
