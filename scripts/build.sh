@@ -203,7 +203,7 @@ IMAGE_VERSION="$mulios_version"
 MULIOS_RELEASE_BRANCH="$release_branch"
 EOF
 
-    sudo mkarchiso -v -C "$PACMAN_CONFIG" -w "$TEMP" -o "$OUTPUT" "$PROFILE"
+    sudo env MULIOS_PACMAN_CONF="$PACMAN_CONFIG" mkarchiso -v -w "$TEMP" -o "$OUTPUT" "$PROFILE"
 }
 
 build

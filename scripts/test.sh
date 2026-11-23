@@ -406,7 +406,329 @@ else
     echo "[OK] Offline desktop effect fallback exists"
 fi
 
-if ! grep -q '^ParallelDownloads = 3$' "$PROFILE/airootfs/etc/pacman.conf"; then
+if ! grep -Fq 'pacman_conf="${MULIOS_PACMAN_CONF:-pacman.conf}"' "$PROFILE/profiledef.sh" ||
+   ! grep -Fq 'sudo env MULIOS_PACMAN_CONF="$PACMAN_CONFIG" mkarchiso' "$ROOT/scripts/build.sh" ||
+   ! grep -Fq 'source.replace("@MULIOS_PACKAGE_REPO@", f"file://{repo}")' "$ROOT/scripts/build.sh"; then
+    echo "[FAIL] mkarchiso does not receive the generated local package repository configuration"
+    fail=1
+else
+    echo "[OK] mkarchiso receives the generated local package repository configuration"
+fi
+
+if ! grep -q '^ParallelDownloads = 3
+    echo "[FAIL] Pacman parallel downloads are not limited to a conservative value"
+    fail=1
+else
+    echo "[OK] Pacman uses conservative parallel downloads"
+fi
+
+if ! grep -q 'prepare_profile_kernel_conflicts' "$PROFILE/airootfs/usr/local/bin/mupdate" ||
+   ! grep -q 'Refusing to move game-kernel header files' "$PROFILE/airootfs/usr/local/bin/mupdate" ||
+   ! grep -q 'prepare_profile_kernel_conflicts' "$PROFILE/airootfs/opt/mulios-installer/mupdate"; then
+    echo "[FAIL] MUpdate does not safely quarantine unowned game-kernel header conflicts"
+    fail=1
+else
+    echo "[OK] MUpdate guards and quarantines stale unowned game-kernel header conflicts"
+fi
+
+if ! grep -q 'See /var/log/mulios/install.log' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"; then
+    echo "[FAIL] Installer does not expose the underlying profile failure details"
+    fail=1
+else
+    echo "[OK] Installer profile errors include the underlying failure details"
+fi
+
+if ! grep -q 'media.githubusercontent.com/media' "$PROFILE/airootfs/usr/local/bin/mupdate" ||
+   ! grep -q 'Git LFS profile package integrity check failed' "$PROFILE/airootfs/usr/local/bin/mupdate"; then
+    echo "[FAIL] MUpdate does not verify and retrieve Git LFS profile archives"
+    fail=1
+else
+    echo "[OK] MUpdate verifies Git LFS profile archive payloads"
+fi
+
+if ! grep -q 'BreezeDark' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py" ||
+   ! grep -q 'org.kde.breeze' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"; then
+    echo "[FAIL] Custom blur effects do not select the Breeze appearance preset"
+    fail=1
+else
+    echo "[OK] Custom blur effects select a Breeze appearance preset"
+fi
+
+if ! grep -q 'mulios-state-' "$PROFILE/airootfs/usr/local/bin/mulios-credits"; then
+    echo "[FAIL] Credits launcher has no writable fallback for its log directory"
+    fail=1
+else
+    echo "[OK] Credits launcher falls back when the user's state directory is not writable"
+fi
+
+if [[ -f "$ROOT/taskmanager/src-tauri/tauri.conf.json" &&
+      -f "$ROOT/taskmanager/Cargo.lock" &&
+      ! -e "$PROFILE/airootfs/opt/taskmanager" ]]; then
+    echo "[OK] Rust task manager source is retained outside the ISO filesystem"
+else
+    echo "[FAIL] Rust task manager source is missing or is still included in the ISO filesystem"
+    fail=1
+fi
+
+if grep -q 'npm install --prefix "$taskmanager_dir"' "$ROOT/scripts/build.sh"; then
+    echo "[FAIL] ISO build still runs the retired Node Task Manager install step"
+    fail=1
+else
+    echo "[OK] ISO build does not require Node Task Manager dependencies"
+fi
+
+if ! grep -q 'shutil.which("qdbus6") or shutil.which("qdbus")' "$PROFILE/airootfs/opt/mulios-installer/main.py"; then
+    echo "[FAIL] Desktop effect preview does not support qdbus6"
+    fail=1
+else
+    echo "[OK] Desktop effect preview supports qdbus6 and qdbus"
+fi
+
+PROFILE_PAGE="$PROFILE/airootfs/opt/mulios-installer/pages/profile_page.py"
+if ! grep -q 'https://api.github.com/repos/MuliOS-dev/update/git/trees/main?recursive=1' "$PROFILE_PAGE" ||
+   ! grep -q 'class _ProfileFetchWorker' "$PROFILE_PAGE" ||
+   ! grep -q 'thread.started.connect(worker.run)' "$PROFILE_PAGE"; then
+    echo "[FAIL] Profile refresh must use MuliOS-dev/update asynchronously"
+    fail=1
+else
+    echo "[OK] Profile refresh uses the requested repository and runs asynchronously"
+fi
+
+INSTALLER_MAIN="$PROFILE/airootfs/opt/mulios-installer/main.py"
+if ! grep -q 'org.kde.kwin.Effects.loadEffect' "$INSTALLER_MAIN" ||
+   ! grep -q 'org.kde.kwin.Effects.isEffectLoaded' "$INSTALLER_MAIN"; then
+    echo "[FAIL] Desktop effect preview does not load and verify the effect through KWin D-Bus"
+    fail=1
+else
+    echo "[OK] Desktop effect preview loads and verifies KWin effects through D-Bus"
+fi
+
+if ! grep -q 'self.profile_refresh_button.setVisible(index == IDX_PROFILE)' "$INSTALLER_MAIN" ||
+   ! grep -q 'self.refresh_effects_button.setVisible(index == IDX_DESKTOP)' "$INSTALLER_MAIN"; then
+    echo "[FAIL] Profile and desktop refresh buttons are not placed in the navigation footer"
+    fail=1
+else
+    echo "[OK] Profile and desktop refresh buttons are shown in the navigation footer"
+fi
+
+KSPLASH="$PROFILE/airootfs/etc/skel/.config/ksplashrc"
+if ! grep -Fxq 'Engine=none' "$KSPLASH" || ! grep -Fxq 'Theme=None' "$KSPLASH"; then
+    echo "[FAIL] KDE splash animation is not disabled in the default user configuration"
+    fail=1
+else
+    echo "[OK] KDE splash animation defaults to None"
+fi
+
+if ! grep -Fq '"\n".join(lines) + "\n"' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"; then
+    echo "[FAIL] Installer worker does not join generated configuration lines with newline escapes"
+    fail=1
+else
+    echo "[OK] Installer worker joins generated configuration lines with newline escapes"
+fi
+
+if ! grep -q 'DBUS_SESSION_BUS_ADDRESS=unix:path=' "$PROFILE/airootfs/opt/mulios-installer/main.py" ||
+   ! grep -q 'runuser, "-u", desktop_user.pw_name' "$PROFILE/airootfs/opt/mulios-installer/main.py"; then
+    echo "[FAIL] KWin preview does not target the active desktop user's D-Bus session"
+    fail=1
+else
+    echo "[OK] KWin preview targets the active desktop user's D-Bus session"
+fi
+
+if ! head -n 1 "$PROFILE/airootfs/opt/credits/main.py" | grep -q '^#!/usr/bin/env python3$'; then
+    echo "[FAIL] Credits must declare its Python interpreter"
+    fail=1
+else
+    echo "[OK] Credits declares its Python interpreter"
+fi
+
+if ! grep -q 'def preview_desktop_effect' "$PROFILE/airootfs/opt/mulios-installer/main.py"; then
+    echo "[FAIL] Desktop effect preview handler is missing"
+    fail=1
+else
+    echo "[OK] Desktop effect preview handler exists"
+fi
+
+KERNEL_WORKER="$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"
+if ! grep -Fq 'module_dir / "pkgbase"' "$KERNEL_WORKER" ||
+   ! grep -Fq 'package.startswith("linux-mulios")' "$KERNEL_WORKER" ||
+   ! grep -Fq 'self.kernel_image_name = f"vmlinuz-{self.kernel_package}"' "$KERNEL_WORKER" ||
+   ! grep -Fq 'ALL_kver="/boot/{kernel_name}"' "$KERNEL_WORKER"; then
+    echo "[FAIL] Installer does not detect the MuliOS kernel release/package dynamically"
+    fail=1
+else
+    echo "[OK] Installer derives kernel image, release, and mkinitcpio preset from package metadata"
+fi
+
+if ! grep -q 'normalize_version_templates' "$ROOT/scripts/build.sh" ||
+   ! grep -q 'trap restore_version_templates EXIT' "$ROOT/scripts/build.sh"; then
+    echo "[FAIL] Build does not normalize and restore boot-menu version templates"
+    fail=1
+else
+    echo "[OK] Build normalizes version templates and restores them on exit"
+fi
+
+expected_version="$(cat "$ROOT/profile/version" 2>/dev/null || true)"
+for template in \
+    "$PROFILE/grub/grub.cfg" \
+    "$PROFILE/efiboot/loader/entries/01-archiso-linux.conf" \
+    "$PROFILE/efiboot/loader/entries/02-archiso-speech-linux.conf" \
+    "$PROFILE/syslinux/archiso_sys-linux.cfg"
+do
+    if grep -q '@MULIOS_VERSION@' "$template"; then
+        echo "[OK] dynamic version placeholder: $template"
+    elif [[ -n "$expected_version" ]] && grep -Fq "$expected_version" "$template"; then
+        # During a build, build.sh temporarily substitutes the version before
+        # running these checks, then restores the original source templates.
+        echo "[OK] substituted build version: $template"
+    else
+        echo "[FAIL] Boot menu template has neither the version placeholder nor the current build version: $template"
+        fail=1
+    fi
+done
+
+if grep -RIn '26\.10\.20-indev\.11' \
+    "$PROFILE/grub/grub.cfg" \
+    "$PROFILE/efiboot/loader/entries" \
+    "$PROFILE/syslinux/archiso_sys-linux.cfg" >/dev/null 2>&1; then
+    echo "[FAIL] hardcoded stale version found in a boot menu template"
+    fail=1
+else
+    echo "[OK] no hardcoded stale version in boot menu templates"
+fi
+
+if ! grep -q 'xarblu/kwin-effects-better-blur-dx' "$ROOT/scripts/build-kwin-effects.sh" ||
+   ! grep -q 'Better Blur DX' "$PROFILE/airootfs/opt/mulios-installer/pages/desktop_page.py"; then
+    echo "[FAIL] Better Blur DX build or installer selection is missing"
+    fail=1
+else
+    echo "[OK] Better Blur DX build and installer selection are configured"
+fi
+
+if ! grep -q 'Continuing with the default desktop effects' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"; then
+    echo "[FAIL] Offline desktop effect fallback is missing"
+    fail=1
+else
+    echo "[OK] Offline desktop effect fallback exists"
+fi
+
+for boot_config in \
+    "$PROFILE/grub/grub.cfg" \
+    "$PROFILE/efiboot/loader/entries/01-archiso-linux.conf" \
+    "$PROFILE/efiboot/loader/entries/02-archiso-speech-linux.conf" \
+    "$PROFILE/syslinux/archiso_sys-linux.cfg"
+do
+    if ! grep -q 'cow_spacesize=4G' "$boot_config"; then
+        echo "[FAIL] Live ISO writable overlay is not configured to 4 GiB: $boot_config"
+        fail=1
+    else
+        echo "[OK] Live ISO writable overlay is configured to 4 GiB: $boot_config"
+    fi
+done
+
+KERNEL_WORKER="$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"
+if ! python3 "$ROOT/scripts/check-installer-order.py" "$KERNEL_WORKER" install; then
+    echo "[FAIL] Installer must install the kernel image before copying the live airootfs"
+    fail=1
+else
+    echo "[OK] Installer installs the kernel image before copying the live airootfs"
+fi
+
+if ! grep -Fq 'source = Path("/usr/local/bin/mupdate")' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py" ||
+   grep -Fq 'Path("/opt/mulios-installer/mupdate")' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py" ||
+   ! grep -Fq '["/usr/local/bin/mupdate", "profile", profile]' "$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"; then
+    echo "[FAIL] Installer must invoke the canonical /usr/local/bin/mupdate profile command"
+    fail=1
+else
+    echo "[OK] Installer invokes canonical MUpdate with the profile subcommand"
+fi
+
+KERNEL_WORKER="$PROFILE/airootfs/opt/mulios-installer/backend/native_installer_worker.py"
+if ! grep -Fq 'package.startswith("linux-mulios")' "$KERNEL_WORKER" ||
+   ! grep -Fq 'def verify_selected_kernel' "$KERNEL_WORKER" ||
+   ! grep -Fq 'self.verify_selected_kernel()' "$KERNEL_WORKER"; then
+    echo "[FAIL] Installer must detect and verify the universal MuliOS kernel for every profile"
+    fail=1
+else
+    echo "[OK] All profiles use and verify the detected universal MuliOS kernel"
+fi
+
+if ! python3 "$ROOT/scripts/check-installer-order.py" "$KERNEL_WORKER" profile; then
+    echo "[FAIL] Profile kernel must be installed before initramfs and GRUB generation"
+    fail=1
+else
+    echo "[OK] Profile kernel is installed before initramfs and GRUB generation"
+fi
+
+if ! grep -Fq 'optional sh/packages.sh' "$PROFILE/airootfs/usr/local/bin/mupdate" ||
+   ! grep -Fq 'No bundled Arch package files were found' "$PROFILE/airootfs/usr/local/bin/mupdate" ||
+   ! grep -Fq 'continuing profile installation' "$PROFILE/airootfs/usr/local/bin/mupdate"; then
+    echo "[FAIL] MUpdate must treat profile package archives and package-script failures as optional"
+    fail=1
+else
+    echo "[OK] MUpdate continues when optional profile packages are missing or fail"
+fi
+
+if [[ ! -x "$ROOT/scripts/glowbuild.sh" || ! -x "$ROOT/scripts/install-glow-material.sh" ]]; then
+    echo "[FAIL] Glow Material build scripts are missing or not executable"
+    fail=1
+else
+    echo "[OK] Glow Material build scripts are executable"
+fi
+
+if [[ ! -x "$ROOT/scripts/liquidbuild.sh" || ! -x "$ROOT/scripts/install-liquid-glass-theme.sh" ]]; then
+    echo "[FAIL] Liquid Glass build scripts are missing or not executable"
+    fail=1
+else
+    echo "[OK] Liquid Glass build scripts are executable"
+fi
+
+if ! grep -q '^Current=breeze$' "$PROFILE/airootfs/etc/sddm.conf" ||
+   [[ -d "$PROFILE/airootfs/usr/share/sddm/themes/mulios" ]]; then
+    echo "[FAIL] SDDM must use the packaged Breeze greeter, not the retired custom QML theme"
+    fail=1
+else
+    echo "[OK] SDDM uses the packaged Breeze greeter"
+fi
+
+THEME_VARIANT="${MULIOS_THEME_VARIANT:-rounded}"
+if [[ "$THEME_VARIANT" == "glow" ]]; then
+    if ! grep -q '__aurorae__svg__glow-material' "$PROFILE/airootfs/etc/xdg/kwinrc" ||
+       ! grep -q '^GLOW_MATERIAL_COMMIT="[0-9a-f]\{40\}"$' "$ROOT/scripts/install-glow-material.sh"; then
+        echo "[FAIL] Glow Material variant is missing its pinned installer or KWin selection"
+        fail=1
+    else
+        echo "[OK] Glow Material is selected and its installer is pinned"
+    fi
+elif [[ "$THEME_VARIANT" == "rounded" ]]; then
+    if ! grep -q '__aurorae__svg__ROUNDED-DARK' "$PROFILE/airootfs/etc/xdg/kwinrc"; then
+        echo "[FAIL] ROUNDED build variant is missing its matching KWin selection"
+        fail=1
+    else
+        echo "[OK] ROUNDED build variant is selected"
+    fi
+elif [[ "$THEME_VARIANT" == "liquid-glass" ]]; then
+    if ! grep -q 'library=org.kde.breeze' "$PROFILE/airootfs/etc/xdg/kwinrc" ||
+       ! grep -q '^better_blur_dxEnabled=false$' "$PROFILE/airootfs/etc/xdg/kwinrc" ||
+       ! grep -q '^kwin4_effect_shapecornersEnabled=false$' "$PROFILE/airootfs/etc/xdg/kwinrc" ||
+       ! grep -q '^name=Layan$' "$PROFILE/airootfs/etc/xdg/plasmarc" ||
+       ! grep -q '^widgetStyle=Darkly$' "$PROFILE/airootfs/etc/xdg/kdeglobals" ||
+       ! grep -q '^Theme=WhiteSur-dark$' "$PROFILE/airootfs/etc/xdg/kdeglobals" ||
+       ! grep -q '^liquid-glass$' "$PROFILE/airootfs/etc/mulios/theme-variant" ||
+       ! grep -q '^LIQUID_GLASS_COMMIT="[0-9a-f]\{40\}"$' "$ROOT/scripts/install-liquid-glass-theme.sh"; then
+        echo "[FAIL] Liquid Glass safe-boot configuration or pinned installer is missing"
+        fail=1
+    else
+        echo "[OK] Liquid Glass safe-boot variant is selected with Layan, Darkly, WhiteSur and native Breeze"
+    fi
+fi
+
+if [[ "$fail" -ne 0 ]]; then
+    echo "Static checks failed."
+    exit 1
+fi
+
+echo "All static checks passed."
+ "$PROFILE/airootfs/etc/pacman.conf"; then
     echo "[FAIL] Pacman parallel downloads are not limited to a conservative value"
     fail=1
 else

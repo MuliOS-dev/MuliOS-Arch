@@ -19,7 +19,7 @@ bootmodes=(
   'uefi.grub'
 )
 
-pacman_conf="pacman.conf"
+pacman_conf="${MULIOS_PACMAN_CONF:-pacman.conf}"
 
 airootfs_image_type="squashfs"
 
