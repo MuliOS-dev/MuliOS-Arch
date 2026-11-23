@@ -52,6 +52,9 @@ mesa
 vulkan-radeon
 vulkan-intel
 libva
+nvidia-open-dkms
+nvidia-utils
+nvidia-settings
 
 # KDE Plasma
 plasma-desktop
