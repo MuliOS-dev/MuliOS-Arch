@@ -7,7 +7,6 @@ import shlex
 import shutil
 import subprocess
 import traceback
-import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -2883,10 +2882,10 @@ default_image="/boot/{initramfs_name}"
         if profile not in allowed:
             raise InstallError(f"Unknown MuliOS profile: {profile}")
 
-        output = self.run_command(["sudo", "mulios-profile", "list"])
+        output = self.run_command(["mulios-profile", "list"])
         available = {
             name for name in allowed
-            if re.search(rf"\\b{re.escape(name)}\\b", output, re.IGNORECASE)
+            if re.search(rf"\b{re.escape(name)}\b", output, re.IGNORECASE)
         }
         if profile not in available:
             raise InstallError(
