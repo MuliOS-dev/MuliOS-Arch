@@ -1,8 +1,5 @@
-import json
-import socket
-import time
-import urllib.error
-import urllib.request
+import re
+import subprocess
 
 from PySide6.QtCore import QObject, QThread, Signal
 from PySide6.QtWidgets import (
@@ -12,79 +9,28 @@ from PySide6.QtWidgets import (
 from widgets.select_card import ProfileCard
 from config.settings import PROFILE_DESCRIPTIONS, DEFAULT_PROFILE_SLUG
 
-PROFILE_TREE_URL = "https://api.github.com/repos/MuliOS-dev/update/git/trees/main?recursive=1"
-REQUEST_TIMEOUT = 8
-REQUEST_ATTEMPTS = 3
-
-
-def _profile_slug_from_path(path: str):
-    """Resolve profile ZIP paths from the official update repository."""
-    if not path.startswith("profiles/") or not path.endswith(".zip"):
-        return None
-
-    parts = path.split("/")
-    if len(parts) == 2:
-        filename = parts[1]
-        if not filename.startswith("latest-"):
-            return None
-        slug = filename[len("latest-"):-len(".zip")]
-        return "gaming" if slug == "game" else slug
-
-    if len(parts) >= 3:
-        slug = parts[1]
-        return "gaming" if slug == "game" else slug
-
-    return None
+PROFILE_ORDER = ("gaming", "code", "ai", "study", "privacy", "casual")
 
 
 def _available_profiles():
-    """Fetch the current profile ZIP listing from MuliOS-dev/update."""
-    request = urllib.request.Request(
-        PROFILE_TREE_URL,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "MuliOS-Installer",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "Cache-Control": "no-cache",
-        },
+    """Read available profiles from the local MuliOS profile manager."""
+    result = subprocess.run(
+        ["mulios-profile", "list"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=15,
     )
-    last_error = None
-
-    for attempt in range(REQUEST_ATTEMPTS):
-        try:
-            with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
-                data = json.loads(response.read().decode("utf-8"))
-
-            if data.get("truncated") or not isinstance(data.get("tree"), list):
-                raise ValueError("GitHub returned an incomplete profile listing.")
-
-            slugs = set()
-            for item in data["tree"]:
-                if item.get("type") != "blob":
-                    continue
-                slug = _profile_slug_from_path(item.get("path", ""))
-                if slug and slug.replace("-", "").replace("_", "").isalnum():
-                    slugs.add(slug)
-
-            # Generic is the installer's built-in fallback and needs no ZIP.
-            slugs.add(DEFAULT_PROFILE_SLUG)
-            return sorted(slugs)
-        except (urllib.error.URLError, TimeoutError, socket.timeout, OSError,
-                ValueError, json.JSONDecodeError) as exc:
-            last_error = exc
-            if attempt + 1 < REQUEST_ATTEMPTS:
-                time.sleep(0.35 * (attempt + 1))
-
-    reason = getattr(last_error, "reason", last_error)
-    if isinstance(reason, socket.gaierror):
-        detail = "DNS lookup failed. Check the connection or name resolution."
-    elif isinstance(last_error, (TimeoutError, socket.timeout)):
-        detail = "The request timed out. Check the connection or firewall."
-    elif isinstance(last_error, urllib.error.HTTPError):
-        detail = f"GitHub returned HTTP {last_error.code}."
-    else:
-        detail = f"{type(last_error).__name__}: {reason}"
-    raise RuntimeError(detail) from last_error
+    output = f"{result.stdout}\n{result.stderr}".lower()
+    available = [
+        slug for slug in PROFILE_ORDER
+        if re.search(rf"\b{re.escape(slug)}\b", output)
+    ]
+    if not available:
+        raise RuntimeError(
+            "mulios-profile list did not return any recognized profiles."
+        )
+    return available
 
 
 class _ProfileFetchWorker(QObject):
@@ -110,10 +56,7 @@ class ProfilePage(QWidget):
         title.setWordWrap(True)
         layout.addWidget(title)
 
-        self.subtitle = QLabel(
-            "Profiles are discovered from MuliOS-dev/update. Generic is available "
-            "as a built-in fallback."
-        )
+        self.subtitle = QLabel("Available profiles are read from mulios-profile.")
         self.subtitle.setObjectName("SubtitleLabel")
         self.subtitle.setWordWrap(True)
         layout.addWidget(self.subtitle)
@@ -121,6 +64,7 @@ class ProfilePage(QWidget):
         self.refresh_button = QPushButton("Refresh profiles")
         self.refresh_button.setObjectName("SecondaryButton")
         self.refresh_button.clicked.connect(self.refresh_profiles)
+        layout.addWidget(self.refresh_button)
 
         self.grid = QGridLayout()
         self.grid.setSpacing(14)
@@ -131,10 +75,9 @@ class ProfilePage(QWidget):
         self.button_group.setExclusive(True)
         self._slug_by_button = {}
         self._name_by_slug = {}
-        self._available_slugs = [DEFAULT_PROFILE_SLUG]
+        self._available_slugs = []
         self._refresh_thread = None
         self._refresh_worker = None
-        self._render_profiles(self._available_slugs)
         self.refresh_profiles(initial=True)
 
     def _render_profiles(self, slugs):
@@ -147,16 +90,10 @@ class ProfilePage(QWidget):
 
         self._slug_by_button = {}
         self._name_by_slug = {}
-        self._available_slugs = list(dict.fromkeys(slugs)) or [DEFAULT_PROFILE_SLUG]
-        if DEFAULT_PROFILE_SLUG not in self._available_slugs:
-            self._available_slugs.insert(0, DEFAULT_PROFILE_SLUG)
+        self._available_slugs = list(slugs)
 
         for i, slug in enumerate(self._available_slugs):
-            name, description = PROFILE_DESCRIPTIONS.get(
-                slug,
-                (slug.replace("-", " ").replace("_", " ").title(),
-                 f"Profile provided by MuliOS-dev/update ({slug})."),
-            )
+            name, description = PROFILE_DESCRIPTIONS[slug]
             card = ProfileCard("", name, description)
             row, col = divmod(i, 3)
             self.grid.addWidget(card, row, col)
@@ -164,7 +101,7 @@ class ProfilePage(QWidget):
             self._slug_by_button[card] = slug
             self._name_by_slug[slug] = name
 
-        selected = previous if previous in self._available_slugs else DEFAULT_PROFILE_SLUG
+        selected = previous if previous in self._available_slugs else self._available_slugs[0]
         for button, slug in self._slug_by_button.items():
             button.setChecked(slug == selected)
 
@@ -174,10 +111,7 @@ class ProfilePage(QWidget):
 
         self.refresh_button.setEnabled(False)
         self.refresh_button.setText("Checking..." if initial else "Refreshing...")
-        self.subtitle.setText(
-            "Fetching profiles from MuliOS-dev/update..."
-            if initial else "Refreshing profiles from MuliOS-dev/update..."
-        )
+        self.subtitle.setText("Running mulios-profile list...")
 
         thread = QThread(self)
         worker = _ProfileFetchWorker()
@@ -196,21 +130,13 @@ class ProfilePage(QWidget):
 
     def _profiles_loaded(self, discovered):
         self._render_profiles(discovered)
-        self.subtitle.setText(
-            f"Loaded {len(discovered)} profiles from MuliOS-dev/update."
-        )
+        self.subtitle.setText(f"Loaded {len(discovered)} profiles from mulios-profile.")
         self.refresh_button.setText("Refresh profiles")
         self.refresh_button.setEnabled(True)
 
     def _profiles_failed(self, error):
-        # Preserve existing choices when a refresh fails.
-        if not self._available_slugs:
-            self._render_profiles([DEFAULT_PROFILE_SLUG])
-        self.subtitle.setText(
-            "Could not refresh profiles from MuliOS-dev/update. "
-            f"Generic remains available. {error}"
-        )
-        self.refresh_button.setText("Refresh profiles")
+        self.subtitle.setText(f"Could not list MuliOS profiles: {error}")
+        self.refresh_button.setText("Retry profiles")
         self.refresh_button.setEnabled(True)
 
     def _refresh_finished(self):
@@ -223,9 +149,7 @@ class ProfilePage(QWidget):
 
     def selected_profile_name(self) -> str:
         slug = self.selected_profile()
-        return self._name_by_slug.get(
-            slug, PROFILE_DESCRIPTIONS[DEFAULT_PROFILE_SLUG][0]
-        )
+        return self._name_by_slug.get(slug, PROFILE_DESCRIPTIONS[DEFAULT_PROFILE_SLUG][0])
 
     def available_profiles(self):
         return list(self._available_slugs)

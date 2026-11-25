@@ -19,17 +19,14 @@ SETUP_LOG = os.path.join(LOG_DIR, "setup.log")
 INSTALL_MOUNTPOINT = "/mnt"
 RELEASE_NOTES_URL = "https://github.com/MuliOS-dev"
 
-# The installer discovers which of these profiles actually contain a ZIP
-# directly inside profiles/<slug>/ in MuliOS-dev/update. These descriptions
-# are deliberately local and do not depend on repository metadata.
+# Profile descriptions are kept locally; availability comes from mulios-profile.
 PROFILE_DESCRIPTIONS = {
     "ai": ("AI", "For AI development and machine-learning workloads."),
     "code": ("Code", "For programming, software development, and build tools."),
     "gaming": ("Gaming", "For gaming workloads and gaming-focused kernel packages."),
-    "generic": ("Generic", "A balanced default configuration for everyday use."),
-    "privacy": ("Privacy", "For users who prioritize privacy-focused configuration."),
-    "server": ("Server", "For server workloads and service-oriented systems."),
     "study": ("Study", "For studying, learning, and everyday schoolwork."),
+    "privacy": ("Privacy", "For users who prioritize privacy-focused configuration."),
+    "casual": ("Casual", "For everyday computing, browsing, and general use."),
 }
 
 PROFILES = [
@@ -37,7 +34,7 @@ PROFILES = [
     for slug, (name, description) in PROFILE_DESCRIPTIONS.items()
 ]
 
-DEFAULT_PROFILE_SLUG = "generic"
+DEFAULT_PROFILE_SLUG = "casual"
 
 # MuliOS uses KDE Plasma for installed systems.
 DESKTOP_ENVIRONMENTS = [
