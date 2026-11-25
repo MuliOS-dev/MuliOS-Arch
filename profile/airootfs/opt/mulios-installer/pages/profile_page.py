@@ -1,4 +1,3 @@
-import os
 import re
 import subprocess
 
@@ -15,11 +14,8 @@ PROFILE_ORDER = ("gaming", "code", "ai", "study", "privacy", "casual")
 
 def _available_profiles():
     """Read available profiles from the local MuliOS profile manager."""
-    if os.name != "posix":
-        return list(PROFILE_ORDER)
-
     result = subprocess.run(
-        ["sudo", "mulios-profile", "list"],
+        ["mulios-profile", "list"],
         check=True,
         capture_output=True,
         text=True,
@@ -28,7 +24,7 @@ def _available_profiles():
     output = f"{result.stdout}\n{result.stderr}".lower()
     available = [
         slug for slug in PROFILE_ORDER
-        if re.search(rf"\\b{re.escape(slug)}\\b", output)
+        if re.search(rf"\b{re.escape(slug)}\b", output)
     ]
     if not available:
         raise RuntimeError(
@@ -68,6 +64,7 @@ class ProfilePage(QWidget):
         self.refresh_button = QPushButton("Refresh profiles")
         self.refresh_button.setObjectName("SecondaryButton")
         self.refresh_button.clicked.connect(self.refresh_profiles)
+        layout.addWidget(self.refresh_button)
 
         self.grid = QGridLayout()
         self.grid.setSpacing(14)
@@ -114,7 +111,7 @@ class ProfilePage(QWidget):
 
         self.refresh_button.setEnabled(False)
         self.refresh_button.setText("Checking..." if initial else "Refreshing...")
-        self.subtitle.setText("Running sudo mulios-profile list...")
+        self.subtitle.setText("Running mulios-profile list...")
 
         thread = QThread(self)
         worker = _ProfileFetchWorker()
