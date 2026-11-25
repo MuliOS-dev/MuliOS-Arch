@@ -2877,28 +2877,26 @@ default_image="/boot/{initramfs_name}"
     # Profiles
     # ------------------------------------------------------------------
 
-    def profile_packages(self):
-        profile = str(self.state.get("profile", "generic")).strip().lower()
-        allowed = {"ai", "code", "gaming", "generic", "privacy", "server", "study"}
+    def apply_live_profile(self):
+        profile = str(self.state.get("profile", "casual")).strip().lower()
+        allowed = {"gaming", "code", "ai", "study", "privacy", "casual"}
         if profile not in allowed:
-            self.log(f"Unknown profile '{profile}'; falling back to Generic.")
-            profile = "generic"
-        return profile, []
+            raise InstallError(f"Unknown MuliOS profile: {profile}")
 
-    def configure_profile(self):
-        profile, _ = self.profile_packages()
-        self.log(f"Selected MuliOS profile: {profile}")
+        output = self.run_command(["sudo", "mulios-profile", "list"])
+        available = {
+            name for name in allowed
+            if re.search(rf"\\b{re.escape(name)}\\b", output, re.IGNORECASE)
+        }
+        if profile not in available:
+            raise InstallError(
+                f"The selected profile '{profile}' is not available according to "
+                "mulios-profile list."
+            )
 
-        # Specialized profile package installation is handled by MUpdate from
-        # MuliOS-dev/update. Do not install a second, stale set of local packages.
-        if profile == "gaming":
-            self.state["enable_multilib"] = True
-            self.configure_multilib()
-
-        self.write_file(
-            self.target / "var/lib/mupdate/initial-profile",
-            profile + "\n",
-        )
+        self.log(f"Applying selected MuliOS profile before copying: {profile}")
+        self.run_command(["sudo", "mulios-profile", "apply", profile])
+        self.log(f"Applied MuliOS profile: {profile}")
 
     # ------------------------------------------------------------------
     # MUpdate
@@ -2949,65 +2947,6 @@ default_image="/boot/{initramfs_name}"
         self.log(
             f"Installed MUpdate from {source}"
         )
-
-        self.install_selected_profile()
-
-    def install_selected_profile(self):
-        profile = str(self.state.get("profile", "generic")).strip().lower()
-        if profile == "generic":
-            self.log("Generic profile selected; keeping the default system configuration.")
-            return
-
-        # Do not infer connectivity from the Network page, Wi-Fi state, or
-        # an earlier DNS preflight. The live MuliOS session's direct request to
-        # the official profile API below is the source of truth. This also
-        # supports Ethernet and other working network connections.
-        try:
-            request = urllib.request.Request(
-                "https://api.github.com/repos/MuliOS-dev/update/git/trees/main?recursive=1",
-                headers={"Accept": "application/vnd.github+json",
-                         "User-Agent": "MuliOS-Installer"},
-            )
-            with urllib.request.urlopen(request, timeout=8) as response:
-                tree = json.loads(response.read().decode("utf-8"))
-            if tree.get("truncated") or not isinstance(tree.get("tree"), list):
-                raise InstallError("The MuliOS profile repository tree is incomplete.")
-
-            available = set()
-            for item in tree["tree"]:
-                path = item.get("path", "")
-                if item.get("type") != "blob" or not path.startswith("profiles/") or not path.endswith(".zip"):
-                    continue
-                parts = path.split("/")
-                if len(parts) >= 3:
-                    slug = parts[1]
-                    available.add("gaming" if slug == "game" else slug)
-                elif len(parts) == 2 and parts[1].startswith("latest-"):
-                    slug = parts[1][len("latest-"):-len(".zip")]
-                    available.add("gaming" if slug == "game" else slug)
-
-            ordered = sorted(available)
-            if profile not in ordered:
-                raise InstallError(
-                    f"The selected profile '{profile}' is not currently available "
-                    "in the MuliOS profile repository."
-                )
-
-            self.log(
-                f"Running: sudo mupdate profile {profile} "
-                "(arch-chroot executes as root, so sudo is not used inside chroot)."
-            )
-            self.chroot(
-                ["/usr/local/bin/mupdate", "profile", profile],
-            )
-            self.log(f"MUpdate completed the {profile} profile workflow.")
-        except Exception as exc:
-            self.log(f"Profile installation failed: {type(exc).__name__}: {exc}")
-            raise InstallError(
-                f"Could not install the selected MuliOS profile '{profile}': "
-                f"{type(exc).__name__}: {exc}. See /var/log/mulios/install.log "
-                "for the complete command output."
-            ) from exc
 
     # ------------------------------------------------------------------
     # Swap
@@ -3906,6 +3845,9 @@ default_image="/boot/{initramfs_name}"
                 mapped_root,
             )
 
+            # Apply the selected profile to the live system before it is copied.
+            self.apply_live_profile()
+
             # Install the kernel image before copying the live airootfs.
             # The kernel lives outside /run/archiso/airootfs, so rsync cannot
             # provide it as part of the copied root filesystem.
@@ -3944,7 +3886,6 @@ default_image="/boot/{initramfs_name}"
             self.install_desktop_effect()
             self.progress.emit(77)
 
-            self.configure_profile()
             self.progress.emit(81)
 
             self.configure_mupdate()
