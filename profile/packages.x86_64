@@ -19,7 +19,6 @@ syslinux
 grub
 efibootmgr
 
-
 # Filesystems / storage
 btrfs-progs
 e2fsprogs
@@ -52,9 +51,7 @@ mesa
 vulkan-radeon
 vulkan-intel
 libva
-nvidia-open-dkms
-nvidia-utils
-nvidia-settings
+xf86-video-nouveau
 
 # KDE Plasma
 plasma-desktop
@@ -112,4 +109,3 @@ p7zip
 linux-mulios-profiles
 plymouth
 linux-firmware-nvidia
-xf86-video-nouveau
