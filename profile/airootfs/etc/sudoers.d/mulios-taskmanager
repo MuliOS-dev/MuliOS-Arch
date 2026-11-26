@@ -1,0 +1,1 @@
+ALL ALL=(root) NOPASSWD: /usr/lib/mulios-taskmanager/mulios-taskmanager

@@ -16,7 +16,9 @@
         "label": "main",
         "title": "MuliOS Task Manager",
         "width": 1200,
-        "height": 800
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 560
       }
     ],
     "security": {

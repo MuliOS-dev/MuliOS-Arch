@@ -7,7 +7,7 @@ version="$(cat version)"
 iso_name="MuliOS"
 iso_label="MULIOS_${version}"
 iso_publisher="MuliOS Project"
-iso_application="MuliOS Arch Linux Live ISO"
+iso_application="MuliOS Arch Linux"
 iso_version="${version}"
 
 install_dir="arch"
@@ -41,16 +41,16 @@ bootstrap_tarball_compression=(
 )
 
 file_permissions=(
-  ["/etc/shadow"]="0:0:400"
-  ["/etc/sudoers.d/mulios-installer"]="0:0:440"
+  ["/etc/shadow"]="0:0:0400"
+  ["/etc/sudoers.d/mulios-installer"]="0:0:0440"
 
-  ["/usr/local/bin/mupdate"]="0:0:755"
-  ["/usr/local/bin/livecd-sound"]="0:0:755"
-  ["/usr/local/bin/mulios-installer"]="0:0:755"
-  ["/usr/local/bin/mulios-taskmanager"]="0:0:755"
-  ["/usr/bin/mulios-taskmanager"]="0:0:755"
-  ["/usr/local/bin/mulios-credits"]="0:0:755"
-  ["/usr/local/bin/mulios-apply-wallpaper"]="0:0:755"
-  ["/usr/local/bin/mulios-wallpaper-autostart"]="0:0:755"
-  ["/usr/share/backgrounds/mulios"]="0:0:755"
+  ["/usr/local/bin/mupdate"]="0:0:0755"
+  ["/usr/local/bin/livecd-sound"]="0:0:0755"
+  ["/usr/local/bin/mulios-installer"]="0:0:0755"
+  ["/usr/local/bin/mulios-taskmanager"]="0:0:0755"
+  ["/usr/bin/mulios-taskmanager"]="0:0:0755"
+  ["/usr/local/bin/mulios-credits"]="0:0:0755"
+  ["/usr/local/bin/mulios-apply-wallpaper"]="0:0:0755"
+  ["/usr/local/bin/mulios-wallpaper-autostart"]="0:0:0755"
+  ["/usr/share/backgrounds/mulios"]="0:0:0755"
 )

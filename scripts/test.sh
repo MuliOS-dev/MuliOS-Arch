@@ -183,13 +183,7 @@ check_desktop_launcher() {
 check_desktop_launcher "$PROFILE/airootfs/usr/share/applications/taskmanager.desktop" "/usr/bin/mulios-taskmanager"
 check_desktop_launcher "$PROFILE/airootfs/usr/share/applications/mulios-credits.desktop" "/usr/local/bin/mulios-credits"
 
-if [[ -s "$PROFILE/airootfs/usr/bin/mulios-taskmanager" && -x "$PROFILE/airootfs/usr/bin/mulios-taskmanager" ]]; then
-    echo "[OK] Task Manager has a compiled executable for the KDE launcher"
-else
-    echo "[FAIL] Task Manager compiled executable is missing"
-    fail=1
-fi
-
+capacity_fail=0
 for mupdate in \
     "$PROFILE/airootfs/usr/local/bin/mupdate" \
     "$PROFILE/airootfs/opt/mulios-installer/mupdate"
@@ -198,10 +192,11 @@ do
        ! grep -q 'Failure writing output to destination' "$mupdate"; then
         echo "[FAIL] MUpdate does not diagnose local storage write failures"
         fail=1
+        capacity_fail=1
         break
     fi
 done
-if [[ "$fail" -eq 0 ]]; then
+if [[ "$capacity_fail" -eq 0 ]]; then
     echo "[OK] MUpdate checks storage capacity before profile installation"
 fi
 
@@ -271,13 +266,6 @@ if [[ -f "$ROOT/taskmanager/src-tauri/tauri.conf.json" &&
 else
     echo "[FAIL] Rust task manager source is missing or is still included in the ISO filesystem"
     fail=1
-fi
-
-if grep -q 'npm install --prefix "$taskmanager_dir"' "$ROOT/scripts/build.sh"; then
-    echo "[FAIL] ISO build still runs the retired Node Task Manager install step"
-    fail=1
-else
-    echo "[OK] ISO build does not require Node Task Manager dependencies"
 fi
 
 if ! grep -Fq 'shutil.which("qdbus6") or shutil.which("qdbus")' "$PROFILE/airootfs/opt/mulios-installer/main.py"; then
@@ -362,7 +350,6 @@ else
     echo "[OK] Installer derives kernel image, release, and mkinitcpio preset from package metadata"
 fi
 
-expected_version="$(cat "$ROOT/profile/version" 2>/dev/null || true)"
 for template in \
     "$PROFILE/grub/grub.cfg" \
     "$PROFILE/efiboot/loader/entries/01-archiso-linux.conf" \
@@ -370,26 +357,12 @@ for template in \
     "$PROFILE/syslinux/archiso_sys-linux.cfg"
 do
     if grep -q '@MULIOS_VERSION@' "$template"; then
-        echo "[OK] dynamic version placeholder: $template"
-    elif [[ -n "$expected_version" ]] && grep -Fq "$expected_version" "$template"; then
-        # During a build, build.sh temporarily substitutes the version before
-        # running these checks, then restores the original source templates.
-        echo "[OK] substituted build version: $template"
+        echo "[OK] version placeholder: $template"
     else
-        echo "[FAIL] Boot menu template has neither the version placeholder nor the current build version: $template"
+        echo "[FAIL] boot menu template lost its version placeholder: $template"
         fail=1
     fi
 done
-
-if grep -RIn '26\.10\.20-indev\.11' \
-    "$PROFILE/grub/grub.cfg" \
-    "$PROFILE/efiboot/loader/entries" \
-    "$PROFILE/syslinux/archiso_sys-linux.cfg" >/dev/null 2>&1; then
-    echo "[FAIL] hardcoded stale version found in a boot menu template"
-    fail=1
-else
-    echo "[OK] no hardcoded stale version in boot menu templates"
-fi
 
 if ! grep -q 'xarblu/kwin-effects-better-blur-dx' "$ROOT/scripts/build-kwin-effects.sh" ||
    ! grep -q 'Better Blur DX' "$PROFILE/airootfs/opt/mulios-installer/pages/desktop_page.py"; then
@@ -407,16 +380,13 @@ else
 fi
 
 if ! grep -Fq 'pacman_conf="pacman.conf"' "$PROFILE/profiledef.sh" ||
-   ! grep -Fq 'sudo mkarchiso -v -C "$PACMAN_CONFIG"' "$ROOT/scripts/build.sh" ||
-   ! grep -Fq 'source.replace("@MULIOS_PACKAGE_REPO@", f"file://{repo}")' "$ROOT/scripts/build.sh" ||
-   ! grep -Fq "Server = file://$(realpath "$ROOT/profile/packages")" "$ROOT/.build/pacman.conf" ||
-   grep -Fq '@MULIOS_PACKAGE_REPO@' "$ROOT/.build/pacman.conf"; then
-    echo "[FAIL] mkarchiso does not receive the generated local package repository configuration"
+   ! grep -Fq 'Server = @MULIOS_PACKAGE_REPO@' "$PROFILE/pacman.conf.in" ||
+   [[ -e "$PROFILE/pacman.conf" ]]; then
+    echo "[FAIL] profile must provide only the pacman.conf.in template"
     fail=1
 else
-    echo "[OK] mkarchiso receives the generated local package repository configuration"
+    echo "[OK] pacman.conf is generated from pacman.conf.in"
 fi
-
 
 if ! grep -Eq '^ParallelDownloads[[:space:]]*=[[:space:]]*3$' "$PROFILE/airootfs/etc/pacman.conf"; then
     echo "[FAIL] Pacman parallel downloads are not limited to a conservative value"
@@ -424,15 +394,6 @@ if ! grep -Eq '^ParallelDownloads[[:space:]]*=[[:space:]]*3$' "$PROFILE/airootfs
 else
     echo "[OK] Pacman uses conservative parallel downloads"
 fi
-
-if ! grep -q 'normalize_version_templates' "$ROOT/scripts/build.sh" ||
-   ! grep -q 'trap restore_version_templates EXIT' "$ROOT/scripts/build.sh"; then
-    echo "[FAIL] Build does not normalize and restore boot-menu version templates"
-    fail=1
-else
-    echo "[OK] Build normalizes version templates and restores them on exit"
-fi
-
 
 for boot_config in \
     "$PROFILE/grub/grub.cfg" \

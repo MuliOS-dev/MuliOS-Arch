@@ -2,7 +2,7 @@
 Type=Application
 Name=MuliOS Installer
 Comment=Install MuliOS
-Exec=/usr/local/bin/mulios-installer
+Exec=sudo -E /usr/local/bin/mulios-installer
 Icon=system-software-install
 Terminal=false
 Categories=System;

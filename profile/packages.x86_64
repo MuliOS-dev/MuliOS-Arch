@@ -110,3 +110,6 @@ jq
 unzip
 p7zip
 linux-mulios-profiles
+plymouth
+linux-firmware-nvidia
+xf86-video-nouveau

@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=MuliOS
+Description=MuliOS Arch Bootsplash
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/mulios
+ScriptFile=/usr/share/plymouth/themes/mulios/mulios.script

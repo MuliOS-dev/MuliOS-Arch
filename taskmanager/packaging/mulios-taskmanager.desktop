@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=MuliOS Task Manager
+Comment=System monitor (administrator)
+Exec=mulios-taskmanager-root
+Icon=mulios-taskmanager
+Terminal=false
+Categories=System;Monitor;

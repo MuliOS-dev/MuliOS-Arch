@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=MuliOS Task Manager
+GenericName=Task Manager
+Comment=Monitor system resources and processes
+Exec=/usr/bin/mulios-taskmanager
+TryExec=/usr/bin/mulios-taskmanager
+Icon=utilities-system-monitor
+Terminal=false
+Categories=System;Monitor;
+Keywords=processes;system monitor;resources;
+NoDisplay=false
+StartupNotify=true

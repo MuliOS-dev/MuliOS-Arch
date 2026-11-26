@@ -1,0 +1,14 @@
+Window.SetBackgroundTopColor(0, 0, 0);
+Window.SetBackgroundBottomColor(0, 0, 0);
+
+logo.image = Image("logo.png");
+logo.sprite = Sprite(logo.image);
+
+fun refresh_callback () {
+    logo.sprite.SetX(Window.GetWidth()  / 2 - logo.image.GetWidth()  / 2);
+    logo.sprite.SetY(Window.GetHeight() / 2 - logo.image.GetHeight() / 2);
+    logo.sprite.SetOpacity(1);
+}
+
+Plymouth.SetRefreshFunction(refresh_callback);
+refresh_callback();

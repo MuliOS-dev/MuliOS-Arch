@@ -30,8 +30,13 @@ pub struct FsInfo {
     pub mount: String,
     pub fs: String,
     pub kind: String,
+    /// Backing device as reported by the OS, e.g. /dev/nvme0n1p2.
+    pub device: String,
+    /// Physical drive this filesystem lives on (e.g. nvme0n1); empty if unknown.
+    pub drive: String,
     pub size: u64,
     pub used: u64,
+    pub free: u64,
     pub use_pct: f32,
 }
 
@@ -46,6 +51,12 @@ pub struct DriveInfo {
     pub write_sec: f64,
     /// Percentage of time the device was busy, 0..100.
     pub active_pct: f32,
+    /// Average time per I/O request in milliseconds.
+    pub resp_ms: f32,
+    /// Space used / free / total over all mounted filesystems on this drive.
+    pub used: u64,
+    pub free: u64,
+    pub fs_total: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -103,16 +114,10 @@ pub struct GpuInfo {
     pub vram_total_mb: f32,
     pub vram_used_mb: f32,
     pub gfx: f32,
-    pub event: f32,
-    pub vgt: f32,
-    pub ta: f32,
-    pub sx: f32,
-    pub sci: f32,
-    pub si: f32,
-    pub sc: f32,
-    pub pa: f32,
-    pub db: f32,
-    pub cb: f32,
+    /// Vendor-specific utilization breakdown, (label, percent).
+    pub blocks: Vec<(String, f32)>,
+    pub temp: Option<f32>,
+    pub power_w: Option<f32>,
     pub mclk_ghz: f32,
     pub sclk_ghz: f32,
 }
